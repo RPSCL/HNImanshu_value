@@ -323,7 +323,7 @@ def calc_final_score(df: pd.DataFrame) -> pd.DataFrame:
     ).fillna(0).clip(-50, 100)
 
     val_norm  = ((mos + 50) / 150 * 10).clip(0, 10)
-    piot_norm = (df["PIOTROSKI_SCORE"] / 9 * 10).clip(0, 10)
+    piot_norm = df["PIOTROSKI_SCORE"].clip(1, 10)
     qual_norm = (df["QUALITY_SCORE"] / 13.4 * 10).clip(0, 10)
 
     df["FINAL_SCORE"] = (
@@ -513,14 +513,10 @@ def load_csv(path: Path, name_col: str, label: str, optional=False):
         df["LOW_PROMOTER_FLAG"] = False
 
     # ── Compute all scores ───────────────────────────────────────────────
+    df["PIOTROSKI_RAW"] = calc_piotroski_fscore(df)
+
     df["PIOTROSKI_SCORE"] = (
-        calc_piotroski_fscore(df)
-        .replace(0, 1)
-        .astype(float)
-    )
-    
-    df["PIOTROSKI_SCORE"] = (
-        1 + ((df["PIOTROSKI_SCORE"] - 1) / 8 * 9)
+        1 + (df["PIOTROSKI_RAW"] / 9 * 9)
     ).round(1)
     df["QUALITY_SCORE"]   = calc_quality_score(df)
     df["COMBINED_SCORE"]  = (df["PIOTROSKI_SCORE"] + df["QUALITY_SCORE"]).round(2)
