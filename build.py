@@ -244,8 +244,12 @@ def calc_piotroski_fscore(df: pd.DataFrame) -> pd.Series:
     # Sum ignoring NaNs (this is KEY FIX)
     score = signals.sum(axis=1, skipna=True)
 
-    # Optional: scale to 9 (since we removed 1 signal)
-    score = (score * (9 / 8)).clip(0, 9)
+    # Count how many signals were actually non-NaN per stock
+    available = signals.notna().sum(axis=1)
+
+    # Scale proportionally to 9: a stock with 4/4 valid signals → 9, not 4
+    score = (score / available.replace(0, np.nan) * 9).clip(0, 9)
+    score = score.fillna(0)
 
     return score.round(0).astype(int)
 
