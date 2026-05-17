@@ -4,7 +4,8 @@ build.py — HNImanshu Stock Screener Build Script
 =================================================
 Score Architecture:
   PIOTROSKI_SCORE  (0–9)     Fresh YoY-based 8-signal F-Score computed from
-                              the two most recent annual columns in the CSV.
+                              the two most recent annual columns for EACH ROW
+                              independently (per-row fiscal-year resolution).
                               Missing signals count as 0 (not skipped),
                               preserving the original Piotroski intent.
   QUALITY_SCORE    (0–13.4)  Absolute-level quality addon (profitability /
@@ -16,6 +17,18 @@ Score Architecture:
   FINAL_RANK                 Rank by FINAL_SCORE descending.
 
 F_SCORE from CSV is retained as a reference column only.
+
+Key fix vs prior version:
+  _resolve_prior_cols() previously found the two most-recent dated columns
+  GLOBALLY across all stocks, then read those same two columns for every row.
+  Since different companies have different fiscal year endings (MAR / DEC /
+  SEP / JUN), most rows had NaN in those columns → nearly all signals failed
+  → scores capped at 3.
+
+  The fix: for EACH ROW, scan all dated columns for a metric and pick the
+  two most-recent non-null values independently.  This is done once per
+  metric via _build_cur_pri(), which returns two Series (cur, pri) where
+  each cell is taken from that row's own most-recent fiscal column.
 
 News:
   Reads multi_stock_news.csv (columns: stockname, datetime, news, link)
@@ -90,7 +103,7 @@ KEY_COLS = [
     "SH_PROMOTER_PCT_LATEST", "NET_DEBT_CR", "INTEREST_COVERAGE",
     "CF_OPERATING_CR", "NET_DEBT_TO_EBITDA",
     "F_SCORE",           # 0–9    · CSV pre-computed Piotroski (reference only)
-    "PIOTROSKI_SCORE",   # 0–9    · Fresh YoY-based F-Score (primary)
+    "PIOTROSKI_SCORE",   # 0–9    · Fresh per-row F-Score (primary)
     "QUALITY_SCORE",     # 0–13.4 · Absolute-level quality addon
     "COMBINED_SCORE",    # 0–22.4 · PIOTROSKI + QUALITY
     "LOW_PROMOTER_FLAG",
@@ -126,58 +139,108 @@ def score_metric(value, thresholds, reverse=False, max_pts=1.4):
 
 
 # =========================
-# 🔍 PRIOR-YEAR RESOLVER
+# 🔍 PER-ROW FISCAL RESOLVER  ← THE CORE FIX
 # =========================
 
-def _resolve_prior_cols(df: pd.DataFrame) -> dict:
+# Month ordering used for sorting dated column keys
+_MONTH_ORDER = {"MAR": 3, "JUN": 6, "SEP": 9, "DEC": 12}
+
+def _dated_col_sort_key(col: str, prefix: str) -> int:
     """
-    Dynamically find the two most recent annual columns for each
-    Piotroski base metric. Supports MAR/DEC/SEP/JUN fiscal years.
-    Returns cur (most recent) and pri (one year prior) for each family.
+    Given a column name like 'A_PL_PAT_CR_MAR2025', return an integer
+    sort key (YYYY*100 + MM) so that more-recent columns sort higher.
+    Returns -1 if the column doesn't match the expected pattern.
     """
-    def _annual_cols(prefix):
-        pat = re.compile(rf"^{re.escape(prefix)}_(MAR|DEC|SEP|JUN)(\d{{4}})$")
-        hits = []
-        for c in df.columns:
-            m = pat.match(c)
-            if m:
-                month, year = m.group(1), int(m.group(2))
-                month_order = {"MAR": 3, "JUN": 6, "SEP": 9, "DEC": 12}
-                hits.append((year * 100 + month_order.get(month, 0), c))
-        hits.sort(key=lambda x: -x[0])
-        return [c for _, c in hits]
+    suffix = col[len(prefix) + 1:]   # e.g. "MAR2025"
+    m = re.match(r'^(MAR|DEC|SEP|JUN)(\d{4})$', suffix)
+    if not m:
+        return -1
+    month = _MONTH_ORDER.get(m.group(1), 0)
+    year  = int(m.group(2))
+    return year * 100 + month
 
-    families = {
-        "pat":  _annual_cols("A_PL_PAT_CR"),
-        "ta":   _annual_cols("B_BS_TOTAL_ASSETS_CR"),
-        "cfo":  _annual_cols("C_CF_OPERATING_CR"),
-        "opm":  _annual_cols("A_PL_OPM_PCT"),
-        "rev":  _annual_cols("A_PL_REVENUE_CR"),
-        "int_": _annual_cols("A_PL_INTEREST_CR"),
-        "res":  _annual_cols("B_BS_RESERVES_CR"),
-        "eps":  _annual_cols("A_PL_EPS_BASIC"),
-    }
 
-    result = {k: {"cur": pd.Series(np.nan, index=df.index),
-                  "pri": pd.Series(np.nan, index=df.index)}
-              for k in families}
+def _build_cur_pri(df: pd.DataFrame, prefix: str):
+    """
+    Per-row resolution of current-year and prior-year values for a metric.
 
-    for key, cols in families.items():
-        if len(cols) >= 1:
-            result[key]["cur"] = pd.to_numeric(df[cols[0]], errors="coerce")
-        if len(cols) >= 2:
-            result[key]["pri"] = pd.to_numeric(df[cols[1]], errors="coerce")
+    Instead of picking two global columns and reading them for all rows
+    (which breaks when companies have different fiscal year endings), this
+    function builds two output Series — cur and pri — where each cell is
+    the most-recent (or second-most-recent) non-null value for THAT ROW
+    across all dated columns for the given metric prefix.
 
-    # Debug: show null counts so column name mismatches are immediately visible
-    print("    [PIOT resolver] null counts per family:")
-    for key in families:
-        cur_nulls = result[key]["cur"].isna().sum()
-        pri_nulls = result[key]["pri"].isna().sum()
-        total     = len(df)
-        print(f"      {key:6s}  cur={total - cur_nulls}/{total} valid  "
-              f"pri={total - pri_nulls}/{total} valid")
+    Steps:
+    1. Find all columns matching <prefix>_(MAR|DEC|SEP|JUN)<YYYY>.
+       Filter out non-standard suffixes like MAR202315M, MAR20169M etc.
+    2. Sort them newest → oldest by date key.
+    3. For each row, iterate through sorted columns and pick:
+         cur = first non-null value found
+         pri = second non-null value found
 
-    return result
+    This handles mixed fiscal years (MAR, DEC, SEP, JUN) correctly because
+    each row independently finds its own two most-recent data points.
+
+    Parameters
+    ----------
+    df      : the full DataFrame
+    prefix  : e.g. 'A_PL_PAT_CR', 'B_BS_TOTAL_ASSETS_CR'
+
+    Returns
+    -------
+    cur, pri : pd.Series (float), aligned to df.index
+    """
+    # Match ONLY clean <MONTH><4-digit-YEAR> suffixes — exclude 15M, 9M etc.
+    pat = re.compile(
+        rf'^{re.escape(prefix)}_(MAR|DEC|SEP|JUN)(\d{{4}})$'
+    )
+    candidate_cols = [c for c in df.columns if pat.match(c)]
+
+    if not candidate_cols:
+        nan_series = pd.Series(np.nan, index=df.index)
+        return nan_series, nan_series
+
+    # Sort newest first
+    candidate_cols.sort(
+        key=lambda c: _dated_col_sort_key(c, prefix),
+        reverse=True
+    )
+
+    # Pre-convert all candidate columns to float numpy arrays for speed
+    arrays = [
+        pd.to_numeric(df[c], errors="coerce").to_numpy(dtype=float)
+        for c in candidate_cols
+    ]
+
+    n = len(df)
+    cur_arr = np.full(n, np.nan)
+    pri_arr = np.full(n, np.nan)
+
+    # found[i]: 0 = nothing yet, 1 = cur filled, 2 = both filled
+    found = np.zeros(n, dtype=int)
+
+    for arr in arrays:
+        has_val = ~np.isnan(arr)
+        # Snapshot BEFORE this column so a single column can't fill both cur
+        # and pri for the same row in the same iteration.
+        found_before = found.copy()
+
+        fill_cur = (found_before == 0) & has_val
+        cur_arr[fill_cur] = arr[fill_cur]
+        found[fill_cur] = 1
+
+        fill_pri = (found_before == 1) & has_val
+        pri_arr[fill_pri] = arr[fill_pri]
+        found[fill_pri] = 2
+
+        # Early exit when every row has both values
+        if (found >= 2).all():
+            break
+
+    return (
+        pd.Series(cur_arr, index=df.index),
+        pd.Series(pri_arr, index=df.index),
+    )
 
 
 # =========================
@@ -190,7 +253,8 @@ def calc_piotroski_fscore(df: pd.DataFrame) -> pd.Series:
 
     Design rules:
     ─────────────
-    1. All values come from _resolve_prior_cols (dated wide-format columns).
+    1. All values come from _build_cur_pri (per-row fiscal-year resolution).
+       Each row independently finds its own two most-recent annual values.
        Flat columns like PL_PAT_CR are NOT used — they don't exist in our CSVs.
 
     2. Missing data → signal = 0 (FAIL), NOT skipped.
@@ -198,53 +262,52 @@ def calc_piotroski_fscore(df: pd.DataFrame) -> pd.Series:
        a metric has not proven that metric is healthy.
 
     3. NO proportional rescaling. Raw integer sum 0–8 is scaled linearly
-       to 0–9 by multiplying by 9/8.  This keeps the distribution meaningful
-       (a stock needs to pass most signals to score high).
+       to 0–9 by multiplying by 9/8.
 
     4. The b() helper converts NaN comparisons to 0 (not NaN), ensuring
        missing operands count as failures rather than being silently ignored.
 
     Signals (8 total):
-      f1  ROA > 0                    (profitability)
-      f2  CFO > 0                    (cash generation)
-      f3  ROA improved YoY           (profitability trend)
-      f4  CFO > 80% of PAT           (earnings quality / accruals)
-      f5  Leverage (Net Debt/TA) fell YoY  (debt reduction)
-      f6  Equity ratio (Reserves/TA) rose YoY  (equity expansion)
-      f8  Operating margin improved YoY  (efficiency)
-      f9  Asset turnover improved YoY    (efficiency)
+      f1  ROA > 0                      (profitability)
+      f2  CFO > 0                      (cash generation)
+      f3  ROA improved YoY             (profitability trend)
+      f4  CFO > 80% of PAT             (earnings quality / accruals)
+      f5  Leverage (Net Debt / TA) fell YoY  (debt reduction)
+      f6  Equity ratio (Reserves / TA) rose YoY  (equity expansion)
+      f8  Operating margin improved YoY      (efficiency)
+      f9  Asset turnover improved YoY        (efficiency)
     """
 
-    def safe_div(a, b):
+    def safe_div(a: pd.Series, b: pd.Series) -> pd.Series:
         return a / b.replace(0, np.nan)
 
-    # ── Pull current & prior year from dated column families ──────────────
-    fam = _resolve_prior_cols(df)
+    # ── Pull per-row cur & pri from dated column families ──────────────────
+    print("    [PIOT] resolving per-row annual columns...")
+    pat_c, pat_p = _build_cur_pri(df, "A_PL_PAT_CR")
+    ta_c,  ta_p  = _build_cur_pri(df, "B_BS_TOTAL_ASSETS_CR")
+    cfo_c, _     = _build_cur_pri(df, "C_CF_OPERATING_CR")
+    opm_c, opm_p = _build_cur_pri(df, "A_PL_OPM_PCT")
+    rev_c, rev_p = _build_cur_pri(df, "A_PL_REVENUE_CR")
+    res_c, res_p = _build_cur_pri(df, "B_BS_RESERVES_CR")
 
-    pat_c = fam["pat"]["cur"]
-    pat_p = fam["pat"]["pri"]
-
-    ta_c  = fam["ta"]["cur"]
-    ta_p  = fam["ta"]["pri"]
-
-    cfo_c = fam["cfo"]["cur"]
-
-    opm_c = fam["opm"]["cur"]
-    opm_p = fam["opm"]["pri"]
-
-    rev_c = fam["rev"]["cur"]
-    rev_p = fam["rev"]["pri"]
-
-    res_c = fam["res"]["cur"]
-    res_p = fam["res"]["pri"]
-
-    # Net debt: prefer flat summary column (already computed), fallback to interest series
+    # Net debt: flat summary column (already computed), fallback to interest series
     if "NET_DEBT_CR" in df.columns:
         nd_c = pd.to_numeric(df["NET_DEBT_CR"], errors="coerce")
+        # For prior-year net debt we approximate with prior-year interest expense
+        _, nd_p = _build_cur_pri(df, "A_PL_INTEREST_CR")
     else:
-        nd_c = fam["int_"]["cur"]
+        nd_c, nd_p = _build_cur_pri(df, "A_PL_INTEREST_CR")
 
-    nd_p = fam["int_"]["pri"]
+    # Debug: null-rate summary
+    print("    [PIOT resolver] non-null counts per family:")
+    n = len(df)
+    for name, cur_s, pri_s in [
+        ("pat",  pat_c, pat_p), ("ta",   ta_c,  ta_p),
+        ("cfo",  cfo_c, cfo_c), ("opm",  opm_c, opm_p),
+        ("rev",  rev_c, rev_p), ("res",  res_c, res_p),
+        ("nd",   nd_c,  nd_p),
+    ]:
+        print(f"      {name:6s}  cur={cur_s.notna().sum()}/{n}  pri={pri_s.notna().sum()}/{n}")
 
     # ── Derived ratios ────────────────────────────────────────────────────
     roa_c = safe_div(pat_c, ta_c)
@@ -260,11 +323,8 @@ def calc_piotroski_fscore(df: pd.DataFrame) -> pd.Series:
     at_p  = safe_div(rev_p, ta_p)
 
     # ── Signal helper ─────────────────────────────────────────────────────
-    # CRITICAL: NaN comparisons in pandas return False, not NaN.
-    # We want missing data to score 0 (fail), so we leave that False as-is.
-    # We do NOT convert to NaN — that was the source of the "all 9s" bug.
-    def b(cond):
-        """Convert boolean Series to float 0/1. NaN input → 0 (fail)."""
+    def b(cond: pd.Series) -> pd.Series:
+        """Convert boolean Series to float 0/1. NaN comparison → False → 0."""
         return cond.fillna(False).astype(float)
 
     # ── 8 signals ─────────────────────────────────────────────────────────
@@ -285,9 +345,8 @@ def calc_piotroski_fscore(df: pd.DataFrame) -> pd.Series:
     })
 
     # ── Score: raw sum 0–8, scaled linearly to 0–9 ───────────────────────
-    # No proportional rescaling — missing signals are already 0.
-    raw   = signals.sum(axis=1)                      # 0–8
-    score = (raw * 9 / 8).clip(0, 9).round(0)        # 0–9
+    raw   = signals.sum(axis=1)                   # 0–8
+    score = (raw * 9 / 8).clip(0, 9).round(0)    # 0–9
 
     return score.astype(int)
 
@@ -554,7 +613,7 @@ def load_csv(path: Path, name_col: str, label: str, optional=False):
     df = calc_final_score(df)
 
     # ── Debug stats ──────────────────────────────────────────────────────
-    print(f"\n    {'Column':<22} {'Min':>6} {'Max':>6} {'Avg':>6}  Distribution")
+    print(f"\n    {'Column':<22} {'Min':>6} {'Max':>6} {'Avg':>6}")
     for col in ["PIOTROSKI_SCORE", "QUALITY_SCORE", "COMBINED_SCORE", "FINAL_SCORE"]:
         s = df[col].dropna()
         print(f"    {col:<22} {s.min():>6.2f} {s.max():>6.2f} {s.mean():>6.2f}")
@@ -566,7 +625,9 @@ def load_csv(path: Path, name_col: str, label: str, optional=False):
         bar = "█" * int(cnt / max(dist) * 30)
         print(f"      {val:>2}  {bar}  ({cnt})")
 
-    top5 = df.nsmallest(5, "FINAL_RANK")[["COMPANY_NAME", "FINAL_RANK", "FINAL_SCORE", "PIOTROSKI_SCORE", "GRADE"]]
+    top5 = df.nsmallest(5, "FINAL_RANK")[
+        ["COMPANY_NAME", "FINAL_RANK", "FINAL_SCORE", "PIOTROSKI_SCORE", "GRADE"]
+    ]
     print(f"\n    Top 5:\n{top5.to_string(index=False)}\n")
 
     # ── Trim to output columns ───────────────────────────────────────────
