@@ -3,8 +3,10 @@
 build.py — HNImanshu Stock Screener Build Script
 =================================================
 Score Architecture:
-  PIOTROSKI_SCORE  (0–9)     Fresh YoY-based 9-signal F-Score computed from
+  PIOTROSKI_SCORE  (0–9)     Fresh YoY-based 8-signal F-Score computed from
                               the two most recent annual columns in the CSV.
+                              Missing signals count as 0 (not skipped),
+                              preserving the original Piotroski intent.
   QUALITY_SCORE    (0–13.4)  Absolute-level quality addon (profitability /
                               growth / safety) with YoY direction bonuses.
   COMBINED_SCORE   (0–22.4)  Sum of both.
@@ -32,25 +34,26 @@ from datetime import datetime
 import zoneinfo
 import htmlmin
 import rcssmin
-import re
+
+# =========================
+# 🗜 MINIFIER
+# =========================
 
 def minify_html_css(html: str) -> str:
-    # Minify inline CSS inside <style>
     def minify_css(match):
         css = match.group(1)
         return "<style>" + rcssmin.cssmin(css) + "</style>"
 
     html = re.sub(r"<style>(.*?)</style>", minify_css, html, flags=re.DOTALL)
-
-    # Minify HTML
     html = htmlmin.minify(
         html,
         remove_comments=True,
         remove_empty_space=True,
         reduce_boolean_attributes=True
     )
-
     return html
+
+
 # =========================
 # 📁 PATHS
 # =========================
@@ -70,6 +73,7 @@ NEWS_PLACEHOLDER = "// ── NEWS DATA ──\nvar NEWS_DATA = {\n  '__default_
 N500_NAME_COL  = "COMPANY_NAME_x"
 SC250_NAME_COL = "COMPANY_NAME"
 MC250_NAME_COL = "COMPANY_NAME"
+
 
 # =========================
 # 📊 OUTPUT COLS
@@ -91,6 +95,7 @@ KEY_COLS = [
     "COMBINED_SCORE",    # 0–22.4 · PIOTROSKI + QUALITY
     "LOW_PROMOTER_FLAG",
 ]
+
 
 # =========================
 # 🔥 SCORING ENGINE
@@ -128,6 +133,7 @@ def _resolve_prior_cols(df: pd.DataFrame) -> dict:
     """
     Dynamically find the two most recent annual columns for each
     Piotroski base metric. Supports MAR/DEC/SEP/JUN fiscal years.
+    Returns cur (most recent) and pri (one year prior) for each family.
     """
     def _annual_cols(prefix):
         pat = re.compile(rf"^{re.escape(prefix)}_(MAR|DEC|SEP|JUN)(\d{{4}})$")
@@ -162,12 +168,14 @@ def _resolve_prior_cols(df: pd.DataFrame) -> dict:
         if len(cols) >= 2:
             result[key]["pri"] = pd.to_numeric(df[cols[1]], errors="coerce")
 
-    # Debug: print which families resolved columns successfully
-    for key, cols in families.items():
-        resolved = _annual_cols.__wrapped__(families[key]) if hasattr(_annual_cols, '__wrapped__') else []
+    # Debug: show null counts so column name mismatches are immediately visible
+    print("    [PIOT resolver] null counts per family:")
+    for key in families:
         cur_nulls = result[key]["cur"].isna().sum()
         pri_nulls = result[key]["pri"].isna().sum()
-        print(f"    [PIOT] {key:6s}  cur_nulls={cur_nulls}  pri_nulls={pri_nulls}")
+        total     = len(df)
+        print(f"      {key:6s}  cur={total - cur_nulls}/{total} valid  "
+              f"pri={total - pri_nulls}/{total} valid")
 
     return result
 
@@ -178,16 +186,39 @@ def _resolve_prior_cols(df: pd.DataFrame) -> dict:
 
 def calc_piotroski_fscore(df: pd.DataFrame) -> pd.Series:
     """
-    Robust Piotroski F-Score (0–9)
-    Uses _resolve_prior_cols for BOTH current AND prior year values
-    so it works correctly on wide-format CSVs with dated columns
-    like A_PL_PAT_CR_MAR2024 instead of flat PL_PAT_CR.
+    Piotroski F-Score (0–9), 8-signal variant.
+
+    Design rules:
+    ─────────────
+    1. All values come from _resolve_prior_cols (dated wide-format columns).
+       Flat columns like PL_PAT_CR are NOT used — they don't exist in our CSVs.
+
+    2. Missing data → signal = 0 (FAIL), NOT skipped.
+       This is the original Piotroski intent: a company that doesn't report
+       a metric has not proven that metric is healthy.
+
+    3. NO proportional rescaling. Raw integer sum 0–8 is scaled linearly
+       to 0–9 by multiplying by 9/8.  This keeps the distribution meaningful
+       (a stock needs to pass most signals to score high).
+
+    4. The b() helper converts NaN comparisons to 0 (not NaN), ensuring
+       missing operands count as failures rather than being silently ignored.
+
+    Signals (8 total):
+      f1  ROA > 0                    (profitability)
+      f2  CFO > 0                    (cash generation)
+      f3  ROA improved YoY           (profitability trend)
+      f4  CFO > 80% of PAT           (earnings quality / accruals)
+      f5  Leverage (Net Debt/TA) fell YoY  (debt reduction)
+      f6  Equity ratio (Reserves/TA) rose YoY  (equity expansion)
+      f8  Operating margin improved YoY  (efficiency)
+      f9  Asset turnover improved YoY    (efficiency)
     """
 
     def safe_div(a, b):
         return a / b.replace(0, np.nan)
 
-    # Pull current AND prior from the dated column families
+    # ── Pull current & prior year from dated column families ──────────────
     fam = _resolve_prior_cols(df)
 
     pat_c = fam["pat"]["cur"]
@@ -207,7 +238,7 @@ def calc_piotroski_fscore(df: pd.DataFrame) -> pd.Series:
     res_c = fam["res"]["cur"]
     res_p = fam["res"]["pri"]
 
-    # Net debt: use flat column for current year if available, else fallback
+    # Net debt: prefer flat summary column (already computed), fallback to interest series
     if "NET_DEBT_CR" in df.columns:
         nd_c = pd.to_numeric(df["NET_DEBT_CR"], errors="coerce")
     else:
@@ -215,7 +246,7 @@ def calc_piotroski_fscore(df: pd.DataFrame) -> pd.Series:
 
     nd_p = fam["int_"]["pri"]
 
-    # Ratios
+    # ── Derived ratios ────────────────────────────────────────────────────
     roa_c = safe_div(pat_c, ta_c)
     roa_p = safe_div(pat_p, ta_p)
 
@@ -228,40 +259,37 @@ def calc_piotroski_fscore(df: pd.DataFrame) -> pd.Series:
     at_c  = safe_div(rev_c, ta_c)
     at_p  = safe_div(rev_p, ta_p)
 
-    # Helper: if EITHER operand was NaN, result must be NaN not False
-    def b(cond, *operands):
-        result = cond.astype(float)
-        for op in operands:
-            if hasattr(op, '__iter__'):
-                result = result.where(pd.to_numeric(op, errors='coerce').notna(), np.nan)
-        return result
+    # ── Signal helper ─────────────────────────────────────────────────────
+    # CRITICAL: NaN comparisons in pandas return False, not NaN.
+    # We want missing data to score 0 (fail), so we leave that False as-is.
+    # We do NOT convert to NaN — that was the source of the "all 9s" bug.
+    def b(cond):
+        """Convert boolean Series to float 0/1. NaN input → 0 (fail)."""
+        return cond.fillna(False).astype(float)
 
+    # ── 8 signals ─────────────────────────────────────────────────────────
     signals = pd.DataFrame({
+        # Profitability
+        "f1": b(roa_c > 0),
+        "f2": b(cfo_c > 0),
+        "f3": b(roa_c > roa_p),
+        "f4": b(cfo_c > pat_c * 0.8),
 
-        # ── Profitability ──
-        "f1": b(roa_c > 0,          roa_c),
-        "f2": b(cfo_c > 0,          cfo_c),
-        "f3": b(roa_c > roa_p,      roa_c, roa_p),
-        "f4": b(cfo_c > pat_c * 0.8, cfo_c, pat_c),
+        # Leverage / Stability
+        "f5": b(lev_c < lev_p),
+        "f6": b(eq_c  > eq_p),
 
-        # ── Leverage / Stability ──
-        "f5": b(lev_c < lev_p,      lev_c, lev_p),
-        "f6": b(eq_c  > eq_p,       eq_c,  eq_p),
-
-        # ── Efficiency ──
-        "f8": b(opm_c > opm_p,      opm_c, opm_p),
-        "f9": b(at_c  > at_p,       at_c,  at_p),
+        # Efficiency
+        "f8": b(opm_c > opm_p),
+        "f9": b(at_c  > at_p),
     })
 
-    # Sum only available (non-NaN) signals
-    score     = signals.sum(axis=1, skipna=True)
-    available = signals.notna().sum(axis=1)
+    # ── Score: raw sum 0–8, scaled linearly to 0–9 ───────────────────────
+    # No proportional rescaling — missing signals are already 0.
+    raw   = signals.sum(axis=1)                      # 0–8
+    score = (raw * 9 / 8).clip(0, 9).round(0)        # 0–9
 
-    # Proportional rescale: 4 signals scored 4/4 → 9, not 4
-    score = (score / available.replace(0, np.nan) * 9).clip(0, 9)
-    score = score.fillna(0)
-
-    return score.round(0).astype(int)
+    return score.astype(int)
 
 
 # =========================
@@ -326,7 +354,7 @@ def calc_final_score(df: pd.DataFrame) -> pd.DataFrame:
 
     FINAL_SCORE: 0–10   FINAL_RANK: 1 = best
 
-    Grades (0–10 scale):
+    Grades (on FINAL_SCORE 0–10 scale):
       A ≥7.5  B+ ≥6.5  B ≥5.5  C ≥4.0  D ≥2.5  E <2.5
     """
     df = df.copy()
@@ -341,7 +369,7 @@ def calc_final_score(df: pd.DataFrame) -> pd.DataFrame:
     qual_norm = (df["QUALITY_SCORE"] / 13.4 * 10).clip(0, 10)
 
     df["FINAL_SCORE"] = (
-        val_norm  * 4 +
+        val_norm  * 4.0 +
         piot_norm * 3.5 +
         qual_norm * 2.5
     ).round(2)
@@ -354,11 +382,11 @@ def calc_final_score(df: pd.DataFrame) -> pd.DataFrame:
 
     def grade(s):
         if pd.isna(s): return "E"
-        if s >= 75:   return "A"
-        if s >= 65:   return "B+"
-        if s >= 55:   return "B"
-        if s >= 40:   return "C"
-        if s >= 25:   return "D"
+        if s >= 7.5:  return "A"
+        if s >= 6.5:  return "B+"
+        if s >= 5.5:  return "B"
+        if s >= 4.0:  return "C"
+        if s >= 2.5:  return "D"
         return "E"
 
     df["GRADE"] = df["FINAL_SCORE"].apply(grade)
@@ -372,11 +400,8 @@ def calc_final_score(df: pd.DataFrame) -> pd.DataFrame:
 def _extract_source(url: str) -> str:
     """Extract a short source name from a Google News or direct URL."""
     try:
-        # Try to get the source from URL parameters or domain
         import urllib.parse
         parsed = urllib.parse.urlparse(url)
-        # Google News RSS URLs encode the source in the path/params
-        # Fall back to the netloc, strip www.
         host = parsed.netloc.replace("www.", "")
         if host == "news.google.com":
             return "Google News"
@@ -404,7 +429,6 @@ def load_news(path: Path) -> dict:
         print(f"    ERROR reading news CSV: {e}")
         return {}
 
-    # Normalise column names (strip whitespace, lowercase check)
     df.columns = [c.strip() for c in df.columns]
     required = {"stockname", "datetime", "news", "link"}
     missing = required - set(df.columns)
@@ -423,15 +447,13 @@ def load_news(path: Path) -> dict:
         dt_raw   = str(row["datetime"]).strip()
         source   = _extract_source(link)
 
-        # Format datetime nicely: "28 Mar 2026, 10:02 IST"
         time_str = dt_raw
         try:
-            # Try parsing "2026-03-28 10:02 IST" style
             dt_clean = dt_raw.replace(" IST", "").strip()
             dt_obj   = datetime.strptime(dt_clean, "%Y-%m-%d %H:%M")
             time_str = dt_obj.strftime("%-d %b %Y, %I:%M %p")
         except Exception:
-            pass  # keep raw string if parse fails
+            pass
 
         item = {
             "headline": headline,
@@ -441,7 +463,6 @@ def load_news(path: Path) -> dict:
         }
         news_map.setdefault(sym, []).append(item)
 
-    # Sort each symbol's news newest-first (preserving original CSV order if parse fails)
     for sym in news_map:
         try:
             news_map[sym].sort(
@@ -453,7 +474,7 @@ def load_news(path: Path) -> dict:
                 reverse=True
             )
         except Exception:
-            pass  # original order is fine
+            pass
 
     total_items = sum(len(v) for v in news_map.values())
     print(f"    Loaded: {total_items} news items across {len(news_map)} symbols")
@@ -496,7 +517,7 @@ def load_csv(path: Path, name_col: str, label: str, optional=False):
     if name_col in df.columns:
         df = df.rename(columns={name_col: "COMPANY_NAME"})
     elif "COMPANY_NAME" not in df.columns:
-        print(df.columns)
+        print(df.columns.tolist())
         print("ERROR: Company name column missing")
         sys.exit(1)
 
@@ -510,7 +531,7 @@ def load_csv(path: Path, name_col: str, label: str, optional=False):
         if dupes:
             print(f"    Dropped {dupes} duplicate symbols")
 
-    # NET_DEBT_TO_EBITDA
+    # ── Derived: NET_DEBT_TO_EBITDA ──
     if "NET_DEBT_CR" in df.columns and "PL_EBITDA_CR" in df.columns:
         ebitda   = pd.to_numeric(df["PL_EBITDA_CR"], errors="coerce").replace(0, np.nan)
         net_debt = pd.to_numeric(df["NET_DEBT_CR"],  errors="coerce")
@@ -518,7 +539,7 @@ def load_csv(path: Path, name_col: str, label: str, optional=False):
     else:
         df["NET_DEBT_TO_EBITDA"] = np.nan
 
-    # Promoter flag
+    # ── Derived: LOW_PROMOTER_FLAG ──
     if "SH_PROMOTER_PCT_LATEST" in df.columns:
         df["LOW_PROMOTER_FLAG"] = (
             pd.to_numeric(df["SH_PROMOTER_PCT_LATEST"], errors="coerce") < 25
@@ -527,22 +548,28 @@ def load_csv(path: Path, name_col: str, label: str, optional=False):
         df["LOW_PROMOTER_FLAG"] = False
 
     # ── Compute all scores ───────────────────────────────────────────────
-    df["PIOTROSKI_RAW"] = calc_piotroski_fscore(df)
-
-    df["PIOTROSKI_SCORE"] = df["PIOTROSKI_RAW"].round(1)
-    df["QUALITY_SCORE"]   = calc_quality_score(df)
+    df["PIOTROSKI_SCORE"] = calc_piotroski_fscore(df)   # 0–9 integer
+    df["QUALITY_SCORE"]   = calc_quality_score(df)       # 0–13.4
     df["COMBINED_SCORE"]  = (df["PIOTROSKI_SCORE"] + df["QUALITY_SCORE"]).round(2)
     df = calc_final_score(df)
 
-    # Debug stats
+    # ── Debug stats ──────────────────────────────────────────────────────
+    print(f"\n    {'Column':<22} {'Min':>6} {'Max':>6} {'Avg':>6}  Distribution")
     for col in ["PIOTROSKI_SCORE", "QUALITY_SCORE", "COMBINED_SCORE", "FINAL_SCORE"]:
         s = df[col].dropna()
-        print(f"    {col:20s}  min={s.min():.2f}  max={s.max():.2f}  avg={s.mean():.2f}")
+        print(f"    {col:<22} {s.min():>6.2f} {s.max():>6.2f} {s.mean():>6.2f}")
 
-    top5 = df.nsmallest(5, "FINAL_RANK")[["COMPANY_NAME", "FINAL_RANK", "FINAL_SCORE", "GRADE"]]
-    print(f"    Top 5:\n{top5.to_string(index=False)}")
+    # Piotroski distribution (key sanity check)
+    dist = df["PIOTROSKI_SCORE"].value_counts().sort_index()
+    print(f"\n    PIOTROSKI_SCORE distribution:")
+    for val, cnt in dist.items():
+        bar = "█" * int(cnt / max(dist) * 30)
+        print(f"      {val:>2}  {bar}  ({cnt})")
 
-    # Trim to output columns
+    top5 = df.nsmallest(5, "FINAL_RANK")[["COMPANY_NAME", "FINAL_RANK", "FINAL_SCORE", "PIOTROSKI_SCORE", "GRADE"]]
+    print(f"\n    Top 5:\n{top5.to_string(index=False)}\n")
+
+    # ── Trim to output columns ───────────────────────────────────────────
     needed = ["COMPANY_NAME"] + KEY_COLS
     df = df[[c for c in needed if c in df.columns]]
 
@@ -557,28 +584,23 @@ def load_csv(path: Path, name_col: str, label: str, optional=False):
 
     return df.to_dict(orient="records")
 
-def inject_news_old(html: str, news_js: str) -> str:
-    # Always use regex — don't rely on exact string match
-    pattern = re.compile(
-        r"//\s*──\s*NEWS DATA\s*──.*?var\s+NEWS_DATA\s*=\s*\{.*?\};",
-        re.DOTALL
-    )
-    if pattern.search(html):
-        return pattern.sub(news_js, html)
-    else:
-        print("  [WARN] NEWS_DATA placeholder not found in template — news not injected")
-        return html
+
+# =========================
+# 📰 NEWS INJECTOR
+# =========================
+
 def inject_news(html: str, news_js: str) -> str:
-    """Always inject NEWS_DATA via regex — immune to whitespace/encoding mismatches."""
+    """Inject NEWS_DATA via regex — immune to whitespace/encoding mismatches."""
     pattern = re.compile(
         r'//\s*[─\-─]+\s*NEWS DATA\s*[─\-─]+.*?var\s+NEWS_DATA\s*=\s*\{.*?\};',
         re.DOTALL
     )
     if pattern.search(html):
         return pattern.sub(news_js, html)
-    # fallback: append before closing </script>
     print("  [WARN] NEWS_DATA block not found via regex — appending before </script>")
     return html.replace('</script>', news_js + '\n</script>', 1)
+
+
 # =========================
 # 🏗 BUILD
 # =========================
@@ -618,21 +640,9 @@ def build(deploy=False):
         "};"
     )
 
-    # ── Inject DATASETS ──
+    # ── Inject into template ──
     html = template.replace(PLACEHOLDER, datasets_js)
-
-    # ── Inject NEWS_DATA (replace the static placeholder block) ──
     html = html.replace(NEWS_PLACEHOLDER, news_js)
-
-    # If placeholder wasn't found (template variation), try simpler replacement
-    if news_js not in html and "var NEWS_DATA" in html:
-        # Replace whatever NEWS_DATA block exists using regex
-        html = re.sub(
-            r"// ── NEWS DATA ──\s*\nvar NEWS_DATA\s*=\s*\{[^;]*\};",
-            news_js,
-            html,
-            flags=re.DOTALL
-        )
     html = inject_news(html, news_js)
 
     # ── Timestamp ──
@@ -640,12 +650,12 @@ def build(deploy=False):
     html = html.replace("%%LAST_UPDATED_PLACEHOLDER%%", now)
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    
     html = minify_html_css(html)
     OUTPUT.write_text(html, encoding="utf-8")
 
     total = len(data_n500 or []) + len(data_sc250) + len(data_mc250)
-    print(f"\n✅ Build Complete  —  {total} total stocks, {sum(len(v) for v in news_map.values())} news items")
+    print(f"\n✅ Build Complete  —  {total} total stocks, "
+          f"{sum(len(v) for v in news_map.values())} news items")
     print(f"   Output: {OUTPUT}")
 
     if deploy:
