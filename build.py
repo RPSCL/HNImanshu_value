@@ -162,6 +162,13 @@ def _resolve_prior_cols(df: pd.DataFrame) -> dict:
         if len(cols) >= 2:
             result[key]["pri"] = pd.to_numeric(df[cols[1]], errors="coerce")
 
+    # Debug: print which families resolved columns successfully
+    for key, cols in families.items():
+        resolved = _annual_cols.__wrapped__(families[key]) if hasattr(_annual_cols, '__wrapped__') else []
+        cur_nulls = result[key]["cur"].isna().sum()
+        pri_nulls = result[key]["pri"].isna().sum()
+        print(f"    [PIOT] {key:6s}  cur_nulls={cur_nulls}  pri_nulls={pri_nulls}")
+
     return result
 
 
@@ -172,38 +179,41 @@ def _resolve_prior_cols(df: pd.DataFrame) -> dict:
 def calc_piotroski_fscore(df: pd.DataFrame) -> pd.Series:
     """
     Robust Piotroski F-Score (0–9)
-
-    Fixes:
-    - Missing data NOT treated as fail
-    - Adds tolerance buffer (2%)
-    - Uses Net Debt instead of Interest
-    - Relaxes CFO condition
-    - Removes unreliable dilution signal
+    Uses _resolve_prior_cols for BOTH current AND prior year values
+    so it works correctly on wide-format CSVs with dated columns
+    like A_PL_PAT_CR_MAR2024 instead of flat PL_PAT_CR.
     """
-
-    def s(col):
-        return pd.to_numeric(df[col], errors="coerce") if col in df.columns else pd.Series(np.nan, index=df.index)
 
     def safe_div(a, b):
         return a / b.replace(0, np.nan)
 
-    # Current values
-    pat_c = s("PL_PAT_CR")
-    ta_c  = s("BS_TOTAL_ASSETS_CR")
-    cfo_c = s("CF_OPERATING_CR")
-    opm_c = s("PL_OPM_PCT")
-    rev_c = s("PL_REVENUE_CR")
-    nd_c  = s("NET_DEBT_CR")
-    res_c = s("BS_RESERVES_CR")
+    # Pull current AND prior from the dated column families
+    fam = _resolve_prior_cols(df)
 
-    # Prior values
-    fam   = _resolve_prior_cols(df)
+    pat_c = fam["pat"]["cur"]
     pat_p = fam["pat"]["pri"]
+
+    ta_c  = fam["ta"]["cur"]
     ta_p  = fam["ta"]["pri"]
+
+    cfo_c = fam["cfo"]["cur"]
+
+    opm_c = fam["opm"]["cur"]
     opm_p = fam["opm"]["pri"]
+
+    rev_c = fam["rev"]["cur"]
     rev_p = fam["rev"]["pri"]
+
+    res_c = fam["res"]["cur"]
     res_p = fam["res"]["pri"]
-    nd_p  = fam["int_"]["pri"]  # fallback if net debt history missing
+
+    # Net debt: use flat column for current year if available, else fallback
+    if "NET_DEBT_CR" in df.columns:
+        nd_c = pd.to_numeric(df["NET_DEBT_CR"], errors="coerce")
+    else:
+        nd_c = fam["int_"]["cur"]
+
+    nd_p = fam["int_"]["pri"]
 
     # Ratios
     roa_c = safe_div(pat_c, ta_c)
@@ -218,7 +228,7 @@ def calc_piotroski_fscore(df: pd.DataFrame) -> pd.Series:
     at_c  = safe_div(rev_c, ta_c)
     at_p  = safe_div(rev_p, ta_p)
 
-    # Helper: DON'T penalize NaN
+    # Helper: NaN stays NaN — do NOT penalize missing data
     def b(cond):
         return cond.astype(float).where(cond.notna(), np.nan)
 
@@ -227,27 +237,23 @@ def calc_piotroski_fscore(df: pd.DataFrame) -> pd.Series:
         # ── Profitability ──
         "f1": b(roa_c > 0),
         "f2": b(cfo_c > 0),
-        "f3": b(roa_c > roa_p * 1.02),              # tolerance
-        "f4": b(cfo_c > pat_c * 0.8),               # relaxed
+        "f3": b(roa_c > roa_p * 1.02),
+        "f4": b(cfo_c > pat_c * 0.8),
 
         # ── Leverage / Stability ──
-        "f5": b(lev_c < lev_p * 0.98),              # improvement
+        "f5": b(lev_c < lev_p * 0.98),
         "f6": b(eq_c  > eq_p * 1.02),
-
-        # (f7 removed — dilution unreliable)
 
         # ── Efficiency ──
         "f8": b(opm_c > opm_p * 1.02),
         "f9": b(at_c  > at_p * 1.02),
     })
 
-    # Sum ignoring NaNs (this is KEY FIX)
-    score = signals.sum(axis=1, skipna=True)
-
-    # Count how many signals were actually non-NaN per stock
+    # Sum only available (non-NaN) signals
+    score     = signals.sum(axis=1, skipna=True)
     available = signals.notna().sum(axis=1)
 
-    # Scale proportionally to 9: a stock with 4/4 valid signals → 9, not 4
+    # Proportional rescale: 4 signals scored 4/4 → 9, not 4
     score = (score / available.replace(0, np.nan) * 9).clip(0, 9)
     score = score.fillna(0)
 
