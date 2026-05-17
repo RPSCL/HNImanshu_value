@@ -87,7 +87,7 @@ jobs:
       - name: "⚡ Light run"
         if: steps.mode.outputs.mode == 'light'
         run: |
-#          python -u fetch_news.py
+          python -u fetch_news.py
           python build.py
 
       # ───────────────────────────────────────────
