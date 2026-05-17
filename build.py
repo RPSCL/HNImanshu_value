@@ -228,25 +228,29 @@ def calc_piotroski_fscore(df: pd.DataFrame) -> pd.Series:
     at_c  = safe_div(rev_c, ta_c)
     at_p  = safe_div(rev_p, ta_p)
 
-    # Helper: NaN stays NaN — do NOT penalize missing data
-    def b(cond):
-        return cond.astype(float).where(cond.notna(), np.nan)
+    # Helper: if EITHER operand was NaN, result must be NaN not False
+    def b(cond, *operands):
+        result = cond.astype(float)
+        for op in operands:
+            if hasattr(op, '__iter__'):
+                result = result.where(pd.to_numeric(op, errors='coerce').notna(), np.nan)
+        return result
 
     signals = pd.DataFrame({
 
         # ── Profitability ──
-        "f1": b(roa_c > 0),
-        "f2": b(cfo_c > 0),
-        "f3": b(roa_c > roa_p * 1.02),
-        "f4": b(cfo_c > pat_c * 0.8),
+        "f1": b(roa_c > 0,          roa_c),
+        "f2": b(cfo_c > 0,          cfo_c),
+        "f3": b(roa_c > roa_p,      roa_c, roa_p),
+        "f4": b(cfo_c > pat_c * 0.8, cfo_c, pat_c),
 
         # ── Leverage / Stability ──
-        "f5": b(lev_c < lev_p * 0.98),
-        "f6": b(eq_c  > eq_p * 1.02),
+        "f5": b(lev_c < lev_p,      lev_c, lev_p),
+        "f6": b(eq_c  > eq_p,       eq_c,  eq_p),
 
         # ── Efficiency ──
-        "f8": b(opm_c > opm_p * 1.02),
-        "f9": b(at_c  > at_p * 1.02),
+        "f8": b(opm_c > opm_p,      opm_c, opm_p),
+        "f9": b(at_c  > at_p,       at_c,  at_p),
     })
 
     # Sum only available (non-NaN) signals
