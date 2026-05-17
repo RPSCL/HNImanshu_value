@@ -513,7 +513,15 @@ def load_csv(path: Path, name_col: str, label: str, optional=False):
         df["LOW_PROMOTER_FLAG"] = False
 
     # ── Compute all scores ───────────────────────────────────────────────
-    df["PIOTROSKI_SCORE"] = calc_piotroski_fscore(df)
+    df["PIOTROSKI_SCORE"] = (
+        calc_piotroski_fscore(df)
+        .replace(0, 1)
+        .astype(float)
+    )
+    
+    df["PIOTROSKI_SCORE"] = (
+        1 + ((df["PIOTROSKI_SCORE"] - 1) / 8 * 9)
+    ).round(1)
     df["QUALITY_SCORE"]   = calc_quality_score(df)
     df["COMBINED_SCORE"]  = (df["PIOTROSKI_SCORE"] + df["QUALITY_SCORE"]).round(2)
     df = calc_final_score(df)
