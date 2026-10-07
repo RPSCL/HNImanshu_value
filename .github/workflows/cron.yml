@@ -74,6 +74,7 @@ jobs:
 
       # ───────────────────────────────────────────
       # 3. RUN SCRIPTS
+      # build.py now also writes public/fundamentals.html (via fundamentals.py)
       # ───────────────────────────────────────────
       - name: "🚀 Full run"
         if: steps.mode.outputs.mode == 'full'
@@ -103,12 +104,13 @@ jobs:
           git pull origin main --rebase || true
           git stash pop || true
 
+          # public/ = index.html + fundamentals.html (folder path never fails if a file is missing)
           git add \
             nifty500_valuation.csv \
             niftymicrocap250_valuation.csv \
             niftysmallcap500_valuation.csv \
             multi_stock_news.csv \
-            public/index.html
+            public/
 
           git diff --cached --quiet || git commit -m "Auto update [skip ci]"
           git push origin main || true
