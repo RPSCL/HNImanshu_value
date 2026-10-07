@@ -79,16 +79,16 @@ jobs:
       - name: "🚀 Full run"
         if: steps.mode.outputs.mode == 'full'
         run: |
-          python -u fetch_news.py
-          python n500.py
-          python nm250.py
-          python ns500.py
+          #python -u fetch_news.py
+          #python n500.py
+          #python nm250.py
+          #python ns500.py
           python build.py
 
       - name: "⚡ Light run"
         if: steps.mode.outputs.mode == 'light'
         run: |
-          python -u fetch_news.py
+          #python -u fetch_news.py
           python build.py
 
       # ───────────────────────────────────────────
