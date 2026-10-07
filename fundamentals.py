@@ -558,6 +558,30 @@ body.day{
   --brass:#4c2e0a;--brassbg:rgba(76,46,10,.12);--good:#075e1a;--goodbg:rgba(7,94,26,.12);
   --bad:#781c00;--badbg:rgba(120,28,0,.12);--warn:#482c00;--warnbg:rgba(72,44,0,.13);--hover:#b5ae9f;--accent:#4c2e0a}
 *{box-sizing:border-box}
+/* theme on <html> too: the page scrollbar belongs to <html>, so it can't see body.day / body.night vars */
+:root{color-scheme:dark;--sdot:#4a4640;--sdot-hi:#d4b47a;--drop-shadow:0 10px 28px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.35)}
+:root[data-theme=day]{color-scheme:light;--sdot:#7a7062;--sdot-hi:#4c2e0a;--drop-shadow:0 10px 28px rgba(40,30,18,.20),0 2px 6px rgba(40,30,18,.12)}
+/* scrollbar = a single dot riding on an invisible thumb, track merged with the background */
+::-webkit-scrollbar{width:10px;height:10px;background:transparent}
+::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}
+::-webkit-scrollbar-button{display:none;width:0;height:0}
+::-webkit-scrollbar-thumb{background:radial-gradient(circle at center,var(--sdot) 0 2.5px,transparent 3px);border:0}
+::-webkit-scrollbar-thumb:hover,::-webkit-scrollbar-thumb:active{background:radial-gradient(circle at center,var(--sdot-hi) 0 3px,transparent 3.5px)}
+@supports (-moz-appearance:none){*{scrollbar-width:thin;scrollbar-color:var(--sdot) transparent}}   /* Firefox has no dot option: thinnest bar instead */
+
+/* custom dropdown: replaces the native <select> popup (which ignores the theme) */
+.fsel{position:relative;display:inline-flex;align-items:center}
+.fsel > select{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.fsel-btn{display:inline-flex;align-items:center;gap:8px;background:transparent;border:0;padding:0 2px;color:var(--ink);font:inherit;font-size:12.5px;cursor:pointer;line-height:1}
+.fsel-btn.boxed{border:1px solid var(--line);border-radius:6px;padding:6px 10px;background:var(--bg)}
+.fsel-btn.boxed:hover,.fsel.open .fsel-btn.boxed{border-color:var(--brass)}
+.fsel-btn svg{flex-shrink:0;opacity:.7;transition:transform .15s}
+.fsel.open .fsel-btn svg{transform:rotate(180deg)}
+.fsel-menu{display:none;position:absolute;top:calc(100% + 8px);left:-8px;min-width:calc(100% + 16px);z-index:60;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px;box-shadow:var(--drop-shadow)}
+.fsel.open .fsel-menu{display:block}
+.fsel-opt{display:block;width:100%;text-align:left;white-space:nowrap;padding:8px 12px;border:0;border-radius:5px;background:transparent;color:var(--mute);font:inherit;font-size:12.5px;cursor:pointer}
+.fsel-opt:hover,.fsel-opt:focus-visible{background:var(--hover);color:var(--ink);outline:none}
+.fsel-opt.on{color:var(--brass);background:var(--brassbg);font-weight:600}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans);font-variant-numeric:tabular-nums}
 a{color:inherit;text-decoration:none}
@@ -690,7 +714,9 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
 </head>
 <body class="night">
 <script>
-(function(){ try { if (localStorage.getItem('hnimanshu_theme') === 'day') { document.body.classList.remove('night'); document.body.classList.add('day'); } } catch(e){} })();
+(function(){ var t = 'night'; try { if (localStorage.getItem('hnimanshu_theme') === 'day') t = 'day'; } catch(e){}
+  document.body.classList.remove('night', 'day'); document.body.classList.add(t);
+  document.documentElement.dataset.theme = t;   /* scrollbar + dropdown shadow read this */ })();
 </script>
 <header class="top">
   <div class="brand">
@@ -701,7 +727,7 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
     <div class="sub" id="meta"></div>
   </div>
   <div class="global">
-    <a class="btn back" id="backBtn" href="index.html">&#8592; Screener</a>
+    <a class="btn back" id="backBtn" href="index.html">Back to Screener</a>
     <label class="chip">List <select id="uniSel"></select></label>
     <label class="chip"><input type="checkbox" id="hidePSU"> Hide PSU</label>
     <label class="chip"><input type="checkbox" id="hideSemi"> Hide semi-PSU</label>
@@ -1348,9 +1374,60 @@ GF.uni = us.value;                                          // drop an unknown l
 us.addEventListener('change', () => { GF.uni = us.value; saveGF(); route(); });
 
 /* day / night: same key as the screener, so both pages always match */
+/* ---------- themed dropdown: hides the native <select>, keeps it as the source of truth ---------- */
+const CHEV = '<svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const closeFsel = except => document.querySelectorAll('.fsel.open').forEach(w => { if (w !== except) w.classList.remove('open'); });
+function fancySelect(sel) {
+  if (sel.dataset.fancy) return;
+  sel.dataset.fancy = '1';
+  const wrap = document.createElement('span'); wrap.className = 'fsel';
+  sel.parentNode.insertBefore(wrap, sel); wrap.appendChild(sel);
+  const btn = document.createElement('button'); btn.type = 'button';
+  btn.className = 'fsel-btn' + (sel.closest('.chip') ? '' : ' boxed');   // header chip already draws the box
+  btn.setAttribute('aria-haspopup', 'listbox');
+  const menu = document.createElement('div'); menu.className = 'fsel-menu'; menu.setAttribute('role', 'listbox');
+  wrap.append(btn, menu);
+  const paint = () => {
+    const cur = sel.options[sel.selectedIndex];
+    btn.innerHTML = `<span>${esc(cur ? cur.text : '')}</span>${CHEV}`;
+    menu.innerHTML = [...sel.options].map((o, i) =>
+      `<button type="button" role="option" class="fsel-opt${i === sel.selectedIndex ? ' on' : ''}" data-i="${i}">${esc(o.text)}</button>`).join('');
+  };
+  paint();
+  btn.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    closeFsel(wrap);
+    const open = wrap.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open);
+    if (open) { const on = $('.fsel-opt.on', menu); if (on) on.focus(); }
+  });
+  menu.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    const o = e.target.closest('.fsel-opt'); if (!o) return;
+    wrap.classList.remove('open'); btn.focus();
+    if (+o.dataset.i !== sel.selectedIndex) {
+      sel.selectedIndex = +o.dataset.i;
+      paint();
+      sel.dispatchEvent(new Event('change', {bubbles:true}));   // existing listeners run unchanged
+    }
+  });
+  menu.addEventListener('keydown', e => {
+    const opts = [...menu.querySelectorAll('.fsel-opt')], i = opts.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); (opts[i + 1] || opts[0]).focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (opts[i - 1] || opts[opts.length - 1]).focus(); }
+    else if (e.key === 'Escape') { wrap.classList.remove('open'); btn.focus(); }
+  });
+}
+document.addEventListener('click', () => closeFsel());
+document.querySelectorAll('select').forEach(fancySelect);   // header List picker
+new MutationObserver(() => view.querySelectorAll('select:not([data-fancy])').forEach(fancySelect))
+  .observe(view, {childList:true, subtree:true});            // filter boxes re-render on every change, not only on route
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeFsel(); });
+
 $('#themeBtn').addEventListener('click', () => {
   const day = !document.body.classList.contains('day');
   document.body.classList.toggle('day', day); document.body.classList.toggle('night', !day);
+  document.documentElement.dataset.theme = day ? 'day' : 'night';   // scrollbar dot + dropdown shadow follow the theme
   try { localStorage.setItem('hnimanshu_theme', day ? 'day' : 'night'); } catch (e) {}
 });
 
