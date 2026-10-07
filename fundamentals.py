@@ -56,6 +56,11 @@ MAX_GAP_DAYS = 490        # a gap bigger than this between two annual points bre
 MAX_STALE_DAYS = 400      # latest annual figure must be newer than this vs the reference date
 JUMP_PP = 10              # a single-quarter holding move bigger than this = likely merger / OFS / listing
 BACK_DAYS = 365           # the "1Y back" snapshot date = download date minus this
+# Trend score (improving fundamentals) - separate from Value score and Magic Formula
+TREND_QTRS = 6            # quarterly checks look at the last 6 quarter-ends
+TREND_SHARE = 2 / 3       # "consistently green" = TTM up year-on-year in >= 2/3 of those quarters (4 of 6)
+TREND_MIN_CHECKS = 4      # a stock needs at least this many checks with data to get a Trend score
+TREND_MIN_CHECKS_FIN = 3  # financials only have 4 applicable checks (no OPM / ROCE / cash conversion)
 # what was already published on a snapshot date
 ANNUAL_LAG_DAYS = 60      # annual results out within ~60 days of year end
 QUARTER_LAG_DAYS = 45     # quarterly results within ~45 days
@@ -95,7 +100,7 @@ ANNUAL_FIELDS = ["A_PL_EPS_BASIC", "A_PL_PAT_CR", "A_PL_PBT_CR", "A_PL_INTEREST_
                  "A_PL_DIVIDEND_CR", "A_PL_OPM_PCT", "C_CF_OPERATING_CR", "C_CF_INVESTING_CR",
                  "B_BS_RESERVES_CR", "B_BS_TOTAL_ASSETS_CR"]
 ANNUAL_RE = re.compile(r"^(%s)_(%s)(\d{4})$" % ("|".join(ANNUAL_FIELDS), MONTHS))
-QTR_RE = re.compile(r"^(Q_EPS_GENERIC|Q_PL_PAT_CR|Q_PL_REVENUE_CR)_Q(%s)(\d{4})$" % MONTHS)
+QTR_RE = re.compile(r"^(Q_EPS_GENERIC|Q_PL_PAT_CR|Q_PL_REVENUE_CR|Q_PL_EBITDA_CR)_Q(%s)(\d{4})$" % MONTHS)   # EBITDA -> quarterly OPM
 SH_RE = re.compile(r"^SH_(PROMOTER|FII|DII|PUBLIC)_PCT_Q(%s)(\d{4})$" % MONTHS)
 SH_KEY = {"PROMOTER": "pro", "PUBLIC": "pub", "FII": "fii", "DII": "dii"}
 
@@ -337,12 +342,13 @@ def inputs_now(r, F, asof, fin):
         pb, pb_src = pe * roe / 100, "derived"
     opm_now = r["OPM_CALC_PCT"] if ok(r["OPM_CALC_PCT"]) else r["PL_OPM_PCT"]
     opm_t = (opm_now - r["OPM_AVG_5YR_PCT"]) if (not fin and ok(opm_now) and ok(r["OPM_AVG_5YR_PCT"])) else None
-    return {"ref": asof, "acut": None, "scut": None, "price": cmp_, "pe": pe, "ttm": ttm, "mcap": r["MARKET_CAP_CR"],
+    return {"trend": trend_checks(r, F, asof, fin, lag=False),        # today: everything in the CSV counts
+            "ref": asof, "acut": None, "scut": None, "price": cmp_, "pe": pe, "ttm": ttm, "mcap": r["MARKET_CAP_CR"],
             "pb": pb, "pbSrc": pb_src, "roe": roe, "roce": r["ROCE_PCT"], "dy": r["DIV_YIELD_PCT"],
             "oi": r["OTHER_INCOME_TO_PBT_PCT"], "icov": r["INTEREST_COVERAGE"], "opmT": opm_t, "hi52": r["HIGH_52W"]}
 
 
-def inputs_fund(r, F, cut, fin):
+def inputs_fund(r, F, cut, fin, with_trend=True):
     """Fundamentals as they stood on `cut`, using only what was published by then. No prices."""
     acut = cut - pd.Timedelta(days=ANNUAL_LAG_DAYS)
     qcut = cut - pd.Timedelta(days=QUARTER_LAG_DAYS)
@@ -364,11 +370,7 @@ def inputs_fund(r, F, cut, fin):
 
     pat, res, res0 = fy("A_PL_PAT_CR"), fy("B_BS_RESERVES_CR"), fy("B_BS_RESERVES_CR", -2)
     shares_now = r["SHARES_CR"] if ok(r["SHARES_CR"]) and r["SHARES_CR"] > 0 else None
-    cap = 0.0                                             # share capital ~ book equity - reserves (today)
-    if ok(r["BOOK_VALUE"]) and shares_now and ok(r["BS_RESERVES_CR"]):
-        eq_now = r["BOOK_VALUE"] * shares_now
-        if eq_now > 0 and 0 <= (eq_now - r["BS_RESERVES_CR"]) / eq_now <= 0.6:
-            cap = eq_now - r["BS_RESERVES_CR"]
+    cap = share_cap(r)                                    # share capital ~ book equity - reserves (today)
     eq = (res[2] + cap) if res else None
     eq0 = (res0[2] + cap) if res0 else None
     roe = None
@@ -394,12 +396,132 @@ def inputs_fund(r, F, cut, fin):
     opm_t = (opm[-1][2] - sum(p[2] for p in opm) / len(opm)) if (not fin and len(opm) >= 3) else None
     pro = series(r, F.get("pro", []), scut)
     ttm = ttm_eps if ttm_eps is not None else ((ttm_pat / shares_now) if (ttm_pat is not None and shares_now) else None)
-    return {"ref": cut, "acut": acut, "scut": scut, "price": None, "pe": None, "ttm": ttm, "mcap": None,
+    return {"trend": trend_checks(r, F, cut, fin, lag=True) if with_trend else None,
+            "ref": cut, "acut": acut, "scut": scut, "price": None, "pe": None, "ttm": ttm, "mcap": None,
             "pb": None, "pbSrc": None, "roe": roe, "roce": roce, "dy": None, "oi": oi, "icov": icov,
             "opmT": opm_t, "hi52": None,
             "fund": {"pat": ttm_pat, "rev": ttm_rev, "q": qlast[1] if qlast else None, "roe": roe, "roce": roce,
                      "opm": opm[-1][2] if opm else None, "fy": opm[-1][1] if opm else None,
                      "pro": pro[-1][2] if pro else None}}
+
+
+def share_cap(r):
+    """Share capital ~ today's book equity - reserves (0 if it doesn't look sane)."""
+    shares = r["SHARES_CR"] if ok(r["SHARES_CR"]) and r["SHARES_CR"] > 0 else None
+    if ok(r["BOOK_VALUE"]) and shares and ok(r["BS_RESERVES_CR"]):
+        eq_now = r["BOOK_VALUE"] * shares
+        if eq_now > 0 and 0 <= (eq_now - r["BS_RESERVES_CR"]) / eq_now <= 0.6:
+            return eq_now - r["BS_RESERVES_CR"]
+    return 0.0
+
+
+# ----------------------------------------------------------------------------
+# TREND SCORE: is the business getting better? (7 pass / fail checks)
+# ----------------------------------------------------------------------------
+def q_run(pts, ref):
+    """Latest unbroken run of quarterly points (gap <= ~1 quarter), empty if the newest is stale."""
+    if not pts or (ref - pts[-1][0]).days > 200:
+        return []
+    run = [pts[-1]]
+    for p in reversed(pts[:-1]):
+        if (run[0][0] - p[0]).days > 100:
+            break
+        run.insert(0, p)
+    return run
+
+
+def yoy_consistency(ttm):
+    """ttm = [(date, value)] consecutive quarter-ends. Compares each of the last TREND_QTRS points with
+    4 quarters earlier. Returns (passed?, ups, checked) or (None, 0, n) when fewer than 3 comparisons."""
+    diffs = [ttm[i][1] - ttm[i - 4][1] for i in range(4, len(ttm))][-TREND_QTRS:]
+    if len(diffs) < 3:
+        return None, 0, len(diffs)
+    ups = sum(1 for d in diffs if d >= 0)
+    return ups >= math.ceil(len(diffs) * TREND_SHARE - 1e-9), ups, len(diffs)
+
+
+def trend_checks(r, F, cut, fin, lag=True):
+    """Fundamentals trend as of `cut`. lag=True -> only results published by then (1Y back view)."""
+    acut = cut - pd.Timedelta(days=ANNUAL_LAG_DAYS if lag else 0)
+    qcut = cut - pd.Timedelta(days=QUARTER_LAG_DAYS if lag else 0)
+    scut = cut - pd.Timedelta(days=HOLDING_LAG_DAYS if lag else 0)
+    chk, det = {}, {}
+
+    def ttm_of(key):
+        run = q_run(series(r, F.get(key, []), qcut), cut)
+        return [(run[i][0], sum(p[2] for p in run[i - 3:i + 1])) for i in range(3, len(run))]
+
+    # 1-2. profit and revenue: TTM not lower than a year earlier, in most of the last 6 quarters
+    for k, key in (("pat", "Q_PL_PAT_CR"), ("rev", "Q_PL_REVENUE_CR")):
+        t = ttm_of(key)
+        res, ups, n = yoy_consistency(t)
+        chk[k] = res
+        if n >= 3:
+            det[k] = "%d/%d qtrs" % (ups, n)
+            a, b = t[-5][1], t[-1][1]
+            det[k + "G"] = round((b / a - 1) * 100, 1) if a > 0 else None   # latest TTM vs a year ago, %
+
+    # 3. operating margin (TTM EBITDA / TTM revenue), not for financials
+    chk["opm"] = None
+    if not fin:
+        e = {d: v for d, v in ttm_of("Q_PL_EBITDA_CR")}
+        rv = {d: v for d, v in ttm_of("Q_PL_REVENUE_CR")}
+        t = [(d, e[d] / rv[d] * 100) for d in sorted(set(e) & set(rv)) if rv[d] > 0]
+        t = q_run([(d, "", v) for d, v in t], cut)                       # keep consecutive quarters only
+        t = [(p[0], p[2]) for p in t]
+        res, ups, n = yoy_consistency(t)
+        chk["opm"] = res
+        if n >= 3:
+            det["opm"] = "%d/%d qtrs" % (ups, n)                         # same evidence format as profit / revenue
+        if len(t) >= 5:
+            det["opmD"] = round(t[-1][1] - t[-5][1], 2)
+
+    # 4. promoter holding: not lower than 6 quarters ago
+    pro = q_run(series(r, F.get("pro", []), scut), cut)
+    chk["pro"] = None
+    if len(pro) >= 4:
+        base = pro[-(TREND_QTRS + 1)] if len(pro) > TREND_QTRS else pro[0]
+        d = pro[-1][2] - base[2]
+        chk["pro"] = d >= -0.01
+        det["proD"] = round(d, 2)
+
+    # 5-6. ROE and ROCE proxy: latest FY vs 2 FY earlier (annual data only)
+    cap = share_cap(r)
+    pat = {p[0]: p[2] for p in series(r, F.get("A_PL_PAT_CR", []), acut)}
+    res_ = {p[0]: p[2] for p in series(r, F.get("B_BS_RESERVES_CR", []), acut)}
+    pbt = {p[0]: p[2] for p in series(r, F.get("A_PL_PBT_CR", []), acut)}
+    intr = {p[0]: p[2] for p in series(r, F.get("A_PL_INTEREST_CR", []), acut)}
+    ta = {p[0]: p[2] for p in series(r, F.get("B_BS_TOTAL_ASSETS_CR", []), acut)}
+    roe = sorted((d, "", pat[d] / (res_[d] + cap) * 100) for d in pat if d in res_ and res_[d] + cap > 0)
+    roce = sorted((d, "", (pbt[d] + intr[d]) / ta[d] * 100) for d in pbt if d in intr and d in ta and ta[d] > 0)
+    for k, pts, skip in (("roe", roe, False), ("roce", roce, fin)):
+        run = latest_run(pts, cut)
+        chk[k] = None
+        if not skip and len(run) >= 3:
+            d = run[-1][2] - run[-3][2]
+            chk[k] = d >= 0
+            det[k + "D"] = round(d, 2)
+
+    # 7. cash conversion: last 3 FY (CFO / PAT) vs the 3 FY before, not for financials
+    chk["cc"] = None
+    if not fin:
+        cfo = {p[0]: p[2] for p in series(r, F.get("C_CF_OPERATING_CR", []), acut)}
+        yrs = [p for p in latest_run(sorted((d, "", v) for d, v in pat.items()), cut) if p[0] in cfo]
+        w = min(3, len(yrs) // 2)
+        if w >= 2:
+            new, old = yrs[-w:], yrs[-2 * w:-w]
+            sn, so = sum(p[2] for p in new), sum(p[2] for p in old)
+            if sn > 0 and so > 0:
+                ccn, cco = sum(cfo[p[0]] for p in new) / sn, sum(cfo[p[0]] for p in old) / so
+                chk["cc"] = ccn >= cco
+                det["ccNow"], det["ccOld"] = round(ccn, 2), round(cco, 2)
+
+    done = [v for v in chk.values() if v is not None]
+    if len(done) < (TREND_MIN_CHECKS_FIN if fin else TREND_MIN_CHECKS):
+        return None
+    passed = sum(1 for v in done if v)
+    return {"pct": round(passed / len(done) * 100), "pass": passed, "of": len(done),
+            "c": {k: (None if v is None else int(v)) for k, v in chk.items()}, "d": det}
 
 
 def growth_pct(then, now):
@@ -489,6 +611,7 @@ def build_record(r, F, inp, fin):
         "divYrs": num(r["DIVIDEND_CONSECUTIVE_YRS"], 0), "fs": num(r["F_SCORE"], 0),
         "eps": [[p[1], round(p[2], 2)] for p in eps_run[-15:]] if len(eps_run) >= 2 else [],
         "h": h,
+        "tr": inp.get("trend"),
     }
 
 
@@ -502,7 +625,7 @@ def build_all(df, asof):
         inp = inputs_fund(r, F, back, fin)
         rec = build_record(r, F, inp, fin)
         rec["mcap"] = num(r["MARKET_CAP_CR"], 0)          # today's size, used only for the Mcap filters
-        a, b = inp["fund"], inputs_fund(r, F, asof, fin)["fund"]
+        a, b = inp["fund"], inputs_fund(r, F, asof, fin, with_trend=False)["fund"]   # trend not needed here
         patG, patL = growth_pct(a["pat"], b["pat"])
         revG, _ = growth_pct(a["rev"], b["rev"])
         d = lambda k: round(b[k] - a[k], 2) if (a[k] is not None and b[k] is not None) else None
@@ -568,6 +691,46 @@ body.day{
 ::-webkit-scrollbar-thumb{background:radial-gradient(circle at center,var(--sdot) 0 2.5px,transparent 3px);border:0}
 ::-webkit-scrollbar-thumb:hover,::-webkit-scrollbar-thumb:active{background:radial-gradient(circle at center,var(--sdot-hi) 0 3px,transparent 3.5px)}
 @supports (-moz-appearance:none){*{scrollbar-width:thin;scrollbar-color:var(--sdot) transparent}}   /* Firefox has no dot option: thinnest bar instead */
+
+/* smart filter box */
+.fbox{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:12px}
+.fbox .t{font:600 10.5px var(--mono);color:var(--brass);text-transform:uppercase;letter-spacing:1px;margin-right:2px}
+.presets{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid var(--line)}
+.preset{font:600 11.5px var(--mono);padding:5px 11px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--mute);cursor:pointer;letter-spacing:.2px}
+.preset:hover{border-color:var(--brass);color:var(--ink)}
+.preset.on{background:var(--brass);border-color:var(--brass);color:var(--bg)}
+.preset-custom{font:600 11px var(--mono);color:var(--faint);padding:0 6px;font-style:italic}
+.frow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px}
+.frow label,.fpanel label{color:var(--mute);font-size:12.5px;display:inline-flex;align-items:center;gap:6px}
+.fbtns{display:inline-flex;gap:6px;margin-left:auto}
+.btn.ghost{background:transparent;height:30px;font-size:11.5px}
+.btn.ghost.open{border-color:var(--brass);color:var(--brass)}
+.btn .car{display:inline-block;transition:transform .15s}
+.btn.open .car{transform:rotate(180deg)}
+.btn .cnt{background:var(--brass);color:var(--bg);border-radius:999px;padding:1px 6px;font-size:10px}
+.fpanel{display:none;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+.fpanel.open{display:flex}
+.fpanel .bar{margin:0}
+.fpanel .frow{width:100%}
+
+/* table card: 15-row window + footer with count and help text */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.card .wrap{border:0;border-radius:0;max-height:none}
+.tfoot{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;padding:8px 14px;border-top:1px solid var(--line);background:var(--panel2);font-size:11.5px;color:var(--mute);line-height:1.55}
+.tcount{font:600 11px var(--mono);color:var(--brass);white-space:nowrap}
+.thint{flex:1;min-width:260px}
+.thint a{color:var(--brass)}
+
+/* 1Y back note: small (i) popover instead of a banner */
+.backnote{position:relative}
+.info{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1px solid var(--brass);background:transparent;color:var(--brass);font:italic 700 10px Georgia,serif;cursor:pointer;vertical-align:1px;margin-left:2px;padding:0}
+.pop{display:none;position:absolute;top:calc(100% + 8px);left:0;z-index:70;width:min(420px,86vw);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;box-shadow:var(--drop-shadow);color:var(--mute);font-size:12px;line-height:1.55;white-space:normal}
+.pop b{display:block;color:var(--ink);font:600 12px var(--mono);margin-bottom:4px}
+.pop.open{display:block}
+
+/* desktop: theme lives on the screener (shared setting), so one button less here */
+@media (min-width:701px){#themeBtn{display:none}}
+@media (max-width:700px){.lg{display:none} .fbtns{margin-left:0} .thint{min-width:0} .pop{left:auto;right:-40px}}
 
 /* custom dropdown: replaces the native <select> popup (which ignores the theme) */
 .fsel{position:relative;display:inline-flex;align-items:center}
@@ -727,7 +890,7 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
     <div class="sub" id="meta"></div>
   </div>
   <div class="global">
-    <a class="btn back" id="backBtn" href="index.html">Back to Screener</a>
+    <a class="btn back" id="backBtn" href="index.html"><span class="lg">Back to </span>Screener</a>
     <label class="chip">List <select id="uniSel"></select></label>
     <label class="chip"><input type="checkbox" id="hidePSU"> Hide PSU</label>
     <label class="chip"><input type="checkbox" id="hideSemi"> Hide semi-PSU</label>
@@ -742,6 +905,7 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
   <a href="#/magic" data-t="magic">Magic Formula</a>
   <a href="#/promoter" data-t="promoter">Promoter holding</a>
   <a href="#/public" data-t="public">Public holding</a>
+  <a href="#/improving" data-t="improving">Improving</a>
   <a href="#/method" data-t="method">Methodology</a>
 </nav>
 <main id="view"></main>
@@ -884,6 +1048,7 @@ function perfStats(rows) {
 }
 /* in 1Y-back mode, price-based columns are dropped and the "since then" columns take the price column's place */
 const PRICE_KEYS = new Set(['cmp','pe','cpe','prem','indpe','pb','peg','gup','dy','ey','fcfy','from52','cheap','nPE','rEY']);
+const TABLE_ROWS = 15;                                    // visible rows per table, the rest scrolls
 function makeTable(id, cols, rows, opt={}) {
   if (BACK) {
     const add = opt.sinceCols || [C.patG, C.revG, C.roeD, C.opmD];
@@ -902,8 +1067,11 @@ function makeTable(id, cols, rows, opt={}) {
     inp.addEventListener('input', () => { searchState[id] = inp.value; draw(); });
     box.appendChild(bar);
   }
+  const card = document.createElement('div'); card.className = 'card';      // table + footer (count, help text)
   const wrap = document.createElement('div'); wrap.className='wrap';
-  const tbl = document.createElement('table'); wrap.appendChild(tbl); box.appendChild(wrap);
+  const tbl = document.createElement('table'); wrap.appendChild(tbl); card.appendChild(wrap);
+  const foot = document.createElement('div'); foot.className = 'tfoot';
+  foot.innerHTML = '<span class="tcount"></span>'; card.appendChild(foot); box.appendChild(card);
   const st = sortState[id] = sortState[id] || {k: opt.sortKey, dir: opt.sortDir || 1};
   function draw() {
     const q = (searchState[id]||'').toLowerCase();
@@ -925,6 +1093,11 @@ function makeTable(id, cols, rows, opt={}) {
     });
     if (!data.length) tb.innerHTML = `<tr><td class="l na" colspan="${cols.length+1}">No stocks match these filters. Loosen a filter or press Reset.</td></tr>`;
     tbl.appendChild(tb);
+    $('.tcount', foot).textContent = data.length + (data.length === 1 ? ' stock' : ' stocks') + (data.length > TABLE_ROWS ? ' · scroll for more' : '');
+    requestAnimationFrame(() => {                        // window = header + 15 rows, rest scrolls inside the card
+      const r = tb.rows[0];
+      if (r && r.offsetHeight) wrap.style.maxHeight = (tbl.tHead.offsetHeight + r.offsetHeight * TABLE_ROWS + 1) + 'px';
+    });
     tbl.querySelectorAll('th[data-k]').forEach(th => th.addEventListener('click', () => {
       const k = th.dataset.k; st.dir = (st.k===k) ? -st.dir : 1; st.k = k; draw();
     }));
@@ -957,6 +1130,30 @@ const scoreCell = s => {
   const tip = Object.entries(s.parts).map(([k,p]) => W_LABEL[k] + ': ' + Math.round(p*100)).join('\n');
   return `<span class="meter" title="${esc(tip)}"><span>${fmt(s.score,0)}</span><i><b style="width:${Math.max(3, s.score).toFixed(0)}%"></b></i></span>`;
 };
+/* ---------- trend score (improving fundamentals) ---------- */
+const TR_KEYS = ['pat','rev','opm','pro','roe','roce','cc'];
+const TR_LABEL = {pat:'Profit (TTM YoY)', rev:'Revenue (TTM YoY)', opm:'Operating margin', pro:'Promoter holding', roe:'ROE', roce:'ROCE (proxy)', cc:'Cash conversion'};
+const trD = (s, k) => s.tr && s.tr.d ? s.tr.d[k] : null;
+const sgn = (v, d=1, suf='') => v==null ? '' : (v>0?'+':'') + fmt(v, d) + suf;
+const TR_DETAIL = {                       // short evidence shown next to each ✓ / ✗
+  pat: s => trD(s,'pat') ? trD(s,'pat') + (trD(s,'patG')!=null ? ', ' + sgn(trD(s,'patG'),1,'%') : '') : '',
+  rev: s => trD(s,'rev') ? trD(s,'rev') + (trD(s,'revG')!=null ? ', ' + sgn(trD(s,'revG'),1,'%') : '') : '',
+  opm: s => [trD(s,'opm'), sgn(trD(s,'opmD'), 1, ' pp')].filter(Boolean).join(', '),
+  pro: s => sgn(trD(s,'proD'), 2, ' pp'),
+  roe: s => sgn(trD(s,'roeD'), 1, ' pp'),
+  roce: s => sgn(trD(s,'roceD'), 1, ' pp'),
+  cc: s => trD(s,'ccNow')!=null ? fmt(trD(s,'ccOld'),2) + 'x → ' + fmt(trD(s,'ccNow'),2) + 'x' : '',
+};
+const trendTip = s => TR_KEYS.map(k => {
+  const v = s.tr.c[k]; return (v==null ? '–' : v ? '✓' : '✗') + ' ' + TR_LABEL[k] + (v==null ? ': n/a' : ' ' + TR_DETAIL[k](s));
+}).join('\n');
+const trendCell = s => s.tr == null ? NA :
+  `<span class="meter" title="${esc(trendTip(s))}"><span>${s.tr.pass}/${s.tr.of}</span><i><b style="width:${Math.max(3, s.tr.pct)}%"></b></i></span>`;
+const trCheck = k => ({k:'tc_'+k, label:TR_LABEL[k], v:s=>s.tr && s.tr.c[k]!=null ? s.tr.c[k] : null,
+  f:s => { const v = s.tr ? s.tr.c[k] : null; if (v==null) return NA;
+           return `<span class="pill ${v?'disc':'prem'}">${v?'✓':'✗'} ${esc(TR_DETAIL[k](s))}</span>`; }});
+const trendOk = (s, min) => min === '' || min == null || (s.tr != null && s.tr.pct >= +min);
+
 const C = {
   sym: {k:'sym', label:'Symbol', l:1, v:s=>s.sym, f:symCell},
   name: {k:'name', label:'Company', l:1, v:s=>s.name, f:s=>`<span class="co" title="${esc(s.name)}">${esc(s.name)}</span>`},
@@ -997,6 +1194,7 @@ const C = {
   flags: {k:'flags', label:'Value-trap flags', l:1, v:s=>trapReasons(s).length, f:s=>{
     const r = trapReasons(s); return r.length ? `<span class="pill warn">${esc(r.join(' · '))}</span>` : '<span class="pill disc">clean</span>'; }},
   spark: {k:'spark', label:'EPS trend', v:s=>null, f:epsSpark},
+  trend: {k:'trend', label:'Trend', tip:'improving-fundamentals checks passed (see Improving tab)', v:s=>s.tr?s.tr.pct+s.tr.of/100:null, f:trendCell},
 };
 
 /* ---------- views ---------- */
@@ -1013,21 +1211,13 @@ function pePicker() {
   sel.addEventListener('change', () => { method = sel.value; lsSet('pemethod', method); route(); });
   return d;
 }
-function filterBox(title, key, def, html, rerender) {
-  const st = lsJson(key, def);
-  const f = document.createElement('div'); f.className = 'box bar';
-  f.innerHTML = `<span class="t">${title}</span>` + html(st) + ' <button class="btn" data-reset>Reset</button>';
-  f.querySelectorAll('[data-f]').forEach(el => el.addEventListener('change', () => {
-    st[el.dataset.f] = el.type === 'checkbox' ? el.checked : (el.tagName === 'SELECT' ? el.value : (el.value === '' ? '' : +el.value));
-    lsSet(key, JSON.stringify(st)); rerender();
-  }));
-  $('[data-reset]', f).addEventListener('click', () => { lsSet(key, '{}'); rerender(); });
-  view.appendChild(f);
-  return st;
-}
 const pageTitle = t => view.insertAdjacentHTML('beforeend', `<h2 class="page">${t}</h2>`);
 const stats = (arr, rows) => view.insertAdjacentHTML('beforeend', '<div class="stats">' + arr.concat(perfStats(rows)).map(([l,v]) => `<div class="stat"><span>${l}</span><b>${v}</b></div>`).join('') + '</div>');
-const hint = html => view.insertAdjacentHTML('beforeend', `<div class="hint">${html} <a href="#/method">Full methodology</a></div>`);
+const hint = html => {                                   // help text lives in the table footer, not under the page
+  const feet = view.querySelectorAll('.tfoot'), ft = feet[feet.length - 1];
+  const h = `<span class="thint">${html} <a href="#/method">Methodology</a></span>`;
+  if (ft) ft.insertAdjacentHTML('beforeend', h); else view.insertAdjacentHTML('beforeend', `<div class="hint">${h}</div>`);
+};
 
 const cheapest = g => g.stocks.filter(s=>s.pe!=null && vis(s)).reduce((a,b)=>!a||b.pe<a.pe?b:a, null);
 function homeView() {
@@ -1066,62 +1256,133 @@ function industryView(name) {
   hint('Sorted by PE, lowest first. Green = PE below industry PE (discount), red = above (premium).');
 }
 
+/* ---------- smart filter box: screen presets + main fields + collapsible "More filters" / extra panel ---------- */
+const PANEL_OPEN = {};                                    // which panels are expanded, remembered while the page is open
+const fNum = (st, k, label, o={}) => `<label>${label} <input type="number" data-f="${k}"${o.min!=null?` min="${o.min}"`:''}${o.max!=null?` max="${o.max}"`:''} step="${o.step||1}" value="${st[k]}"${o.w?` style="width:${o.w}px"`:''}></label>`;
+const fChk = (st, k, label) => `<label><input type="checkbox" data-f="${k}" ${st[k]?'checked':''}> ${label}</label>`;
+const fSel = (st, k, label, opts) => `<label>${label} <select data-f="${k}">${opts.map(([v,t]) => `<option value="${v}" ${st[k]===v?'selected':''}>${t}</option>`).join('')}</select></label>`;
+function filterBox(o, rerender) {
+  const {key, def} = o;
+  const st = lsJson(key, def);
+  const presets = (o.presets || []).filter(p => !BACK || !p.price);     // price-based screens make no sense 1Y back
+  const isOn = p => Object.entries(Object.assign({}, def, p.st)).every(([k, v]) => String(st[k]) === String(v));
+  const active = presets.find(isOn);
+  const moreHtml = o.more ? o.more(st) : '';
+  const nMore = (o.moreKeys || []).filter(k => String(st[k]) !== String(def[k])).length;
+  const f = document.createElement('div'); f.className = 'fbox';
+  f.innerHTML =
+      (presets.length ? `<div class="presets"><span class="t">Screens</span>` + presets.map((p, i) =>
+        `<button type="button" class="preset${p === active ? ' on' : ''}" data-p="${i}" title="${esc(p.tip || '')}">${esc(p.name)}</button>`).join('')
+        + (active ? '' : '<span class="preset-custom">Custom</span>') + '</div>' : '')
+    + `<div class="frow"><span class="t">Filters</span>${o.main(st)}<span class="fbtns">`
+    + (moreHtml ? `<button type="button" class="btn ghost" data-tog="more">More filters${nMore ? ` <b class="cnt">${nMore}</b>` : ''} <span class="car">▾</span></button>` : '')
+    + (o.extra ? `<button type="button" class="btn ghost" data-tog="extra">${o.extra.label} <span class="car">▾</span></button>` : '')
+    + `<button type="button" class="btn ghost" data-reset title="Back to defaults">Reset</button></span></div>`
+    + (moreHtml ? `<div class="fpanel" data-panel="more">${moreHtml}</div>` : '')
+    + (o.extra ? `<div class="fpanel" data-panel="extra"></div>` : '');
+  if (o.extra) o.extra.build($('[data-panel="extra"]', f));
+  f.querySelectorAll('[data-panel]').forEach(p => p.classList.toggle('open', !!PANEL_OPEN[key + p.dataset.panel]));
+  f.querySelectorAll('[data-tog]').forEach(b => {
+    const name = b.dataset.tog; b.classList.toggle('open', !!PANEL_OPEN[key + name]);
+    b.addEventListener('click', () => {
+      PANEL_OPEN[key + name] = !PANEL_OPEN[key + name];
+      $(`[data-panel="${name}"]`, f).classList.toggle('open', PANEL_OPEN[key + name]); b.classList.toggle('open', PANEL_OPEN[key + name]);
+    });
+  });
+  f.querySelectorAll('[data-f]').forEach(el => el.addEventListener('change', () => {
+    st[el.dataset.f] = el.type === 'checkbox' ? el.checked : (el.tagName === 'SELECT' ? el.value : (el.value === '' ? '' : +el.value));
+    lsSet(key, JSON.stringify(st)); rerender();
+  }));
+  f.querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => {
+    lsSet(key, JSON.stringify(Object.assign({}, def, presets[+b.dataset.p].st))); rerender();
+  }));
+  $('[data-reset]', f).addEventListener('click', () => { lsSet(key, '{}'); rerender(); });
+  view.appendChild(f);
+  return st;
+}
+
 /* ---------- VALUE SCREEN ---------- */
-const VF_DEF = {maxPE:'', maxPB:'', minQ:12, minScore:0, minFcf:'', minMcap:0, trap:true, graham:false};
+const VF_DEF = {maxPE:'', maxPB:'', minQ:12, minScore:0, minFcf:'', minMcap:0, trap:true, graham:false, minTrend:'',
+                maxPrem:'', maxPeg:'', minDy:'', minCc:''};
+const VF_PRESETS = [
+  {name:'Quality, fair price', tip:'ROCE (ROE for financials) ≥ 15%, Value score ≥ 60, no value-trap flags', st:{minQ:15, minScore:60}},
+  {name:'Deep value', price:1, tip:'PE ≤ 15, PB ≤ 2, ROCE ≥ 10%, no value traps', st:{maxPE:15, maxPB:2, minQ:10}},
+  {name:'Cheap vs peers', price:1, tip:'PE at least 30% below its industry PE, ROCE ≥ 12%, no value traps', st:{maxPrem:-30}},
+  {name:'GARP', price:1, tip:'Growth at a reasonable price: PEG ≤ 1, ROCE ≥ 15%, no value traps', st:{maxPeg:1, minQ:15}},
+  {name:'Cash machines', price:1, tip:'FCF yield ≥ 4%, cash conversion ≥ 0.9x, ROCE ≥ 15%, no value traps', st:{minFcf:4, minCc:0.9, minQ:15}},
+  {name:'Dividend', price:1, tip:'Dividend yield ≥ 3%, cash conversion ≥ 0.8x, no value traps', st:{minDy:3, minCc:0.8, minQ:''}},
+  {name:'Graham defensive', price:1, tip:'PE × PB ≤ 22.5, pays a dividend, no value traps', st:{graham:true, minDy:0.1, minQ:''}},
+  {name:'Cheap & improving', price:1, tip:'PE below industry PE and Trend ≥ 70%, no value traps', st:{maxPrem:0, minTrend:70, minQ:''}},
+  {name:'Improving quality', tip:'ROCE ≥ 15% and Trend ≥ 70%, no value traps', st:{minQ:15, minTrend:70}},
+];
 function valueView() {
   setNav('value'); view.innerHTML = '';
   pageTitle(BACK ? 'Quality screen, 1 year back' : 'Value screen');
-  view.appendChild(pePicker());
-  const vf = filterBox('Filters', 'vf', VF_DEF, st => (BACK ? '' : `
-    <label>Max PE <input type="number" data-f="maxPE" min="0" step="1" value="${st.maxPE}"></label>
-    <label>Max PB <input type="number" data-f="maxPB" min="0" step="0.5" value="${st.maxPB}"></label>`) + `
-    <label>Min ROCE / ROE % <input type="number" data-f="minQ" step="1" value="${st.minQ}"></label>` + (BACK ? '' : `
-    <label>Min FCF yield % <input type="number" data-f="minFcf" step="0.5" value="${st.minFcf}"></label>`) + `
-    <label>Min score <input type="number" data-f="minScore" min="0" max="100" step="5" value="${st.minScore}"></label>
-    <label>Min Mcap ₹ Cr <input type="number" data-f="minMcap" min="0" step="500" value="${st.minMcap}" style="width:90px"></label>
-    <label><input type="checkbox" data-f="trap" ${st.trap?'checked':''}> Hide value traps</label>
-    ` + (BACK ? '' : `<label><input type="checkbox" data-f="graham" ${st.graham?'checked':''}> Graham pass only (PE × PB ≤ 22.5)</label>`), valueView);
-
-  const W = lsJson('vw', W_DEF);
-  const w = document.createElement('div'); w.className = 'box bar';
-  w.innerHTML = `<span class="t">Score weights</span>` + Object.keys(W_DEF).filter(k => !BACK || BACK_KEYS.includes(k)).map(k =>
-    `<label>${W_LABEL[k]} <input type="number" data-w="${k}" min="0" max="100" step="5" value="${W[k]}" style="width:60px"></label>`).join('') + ' <button class="btn" data-wr>Reset</button>';
-  w.querySelectorAll('[data-w]').forEach(el => el.addEventListener('change', () => {
-    W[el.dataset.w] = Math.max(0, +el.value || 0); lsSet('vw', JSON.stringify(W)); route();
-  }));
-  $('[data-wr]', w).addEventListener('click', () => { lsSet('vw', '{}'); route(); });
-  view.appendChild(w);
+  const vf = filterBox({
+    key:'vf', def:VF_DEF, presets:VF_PRESETS,
+    main: st => (BACK ? '' : fNum(st,'maxPE','Max PE',{min:0})) + fNum(st,'minQ','Min ROCE / ROE %')
+      + fNum(st,'minScore','Min score',{min:0,max:100,step:5}) + fNum(st,'minTrend','Min Trend %',{min:0,max:100,step:10})
+      + fChk(st,'trap','Hide value traps'),
+    more: st => (BACK ? '' : fNum(st,'maxPB','Max PB',{min:0,step:0.5}) + fNum(st,'maxPrem','Max vs industry PE %',{step:5})
+      + fNum(st,'maxPeg','Max PEG',{min:0,step:0.25}) + fNum(st,'minFcf','Min FCF yield %',{step:0.5})
+      + fNum(st,'minDy','Min div yield %',{min:0,step:0.5}))
+      + fNum(st,'minCc','Min cash conv. x',{step:0.1}) + fNum(st,'minMcap','Min Mcap ₹ Cr',{min:0,step:500,w:90})
+      + (BACK ? '' : fChk(st,'graham','Graham pass (PE × PB ≤ 22.5)')),
+    moreKeys: BACK ? ['minCc','minMcap'] : ['maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','minMcap','graham'],
+    extra: {label:'Scoring', build: el => {                 // industry PE method + score weights, out of the way
+      const W = lsJson('vw', W_DEF);
+      el.appendChild(pePicker());
+      el.insertAdjacentHTML('beforeend', '<div class="frow"><span class="t">Weights</span>' + Object.keys(W_DEF).filter(k => !BACK || BACK_KEYS.includes(k)).map(k =>
+        `<label>${W_LABEL[k]} <input type="number" data-w="${k}" min="0" max="100" step="5" value="${W[k]}" style="width:60px"></label>`).join('')
+        + '<button type="button" class="btn ghost" data-wr>Reset weights</button></div>');
+      el.querySelectorAll('[data-w]').forEach(i => i.addEventListener('change', () => {
+        W[i.dataset.w] = Math.max(0, +i.value || 0); lsSet('vw', JSON.stringify(W)); route();
+      }));
+      $('[data-wr]', el).addEventListener('click', () => { lsSet('vw', '{}'); route(); });
+    }},
+  }, valueView);
 
   const rows = V().filter(s => s.score != null
     && (BACK || vf.maxPE === '' || s.pe <= vf.maxPE)
     && (BACK || vf.maxPB === '' || (s.pb != null && s.pb <= vf.maxPB))
+    && (BACK || vf.maxPrem === '' || (prem(s) != null && prem(s) <= vf.maxPrem))
+    && (BACK || vf.maxPeg === '' || (peg(s) != null && peg(s) <= vf.maxPeg))
+    && (BACK || vf.minDy === '' || (s.dy != null && s.dy >= vf.minDy))
     && (vf.minQ === '' || (qual(s) != null && qual(s) >= vf.minQ))
     && (BACK || vf.minFcf === '' || s.fin || (s.fcfy != null && s.fcfy >= vf.minFcf))
+    && (vf.minCc === '' || s.fin || (s.cc != null && s.cc >= vf.minCc))
     && s.score >= (+vf.minScore || 0)
     && (s.mcap || 0) >= (+vf.minMcap || 0)
     && (!vf.trap || !trapReasons(s).length)
-    && (BACK || !vf.graham || grahamPass(s)));
+    && (BACK || !vf.graham || grahamPass(s))
+    && trendOk(s, vf.minTrend));                                       // Trend is a filter here, never part of the score
   if (BACK) stats([['Stocks passing filters', rows.length], ['Stocks with a quality score', V().filter(s=>s.score!=null).length]], rows);
   else stats([['Stocks passing filters', rows.length], ['Stocks with a value score', V().filter(s=>s.score!=null).length],
          ['Median PE of list', fmt(median(rows.map(s=>s.pe)))], ['Median PB of list', fmt(median(rows.map(s=>s.pb)),2)],
          ['Graham pass in list', rows.filter(grahamPass).length]], rows);
   view.appendChild(makeTable('value',
-    [C.score, C.sym, C.name, C.ind, C.cmp, C.pe, C.cpe, C.prem, C.pb, C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
+    [C.score, C.trend, C.sym, C.name, C.ind, C.cmp, C.pe, C.cpe, C.prem, C.pb, C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
     rows, {sortKey:'score', sortDir:-1, search:true}));
-  if (BACK) hint('Without old prices a value screen cannot be rebuilt, so 1 year back the score uses only the quality metrics as they stood then: ROCE (ROE for financials), EPS growth and cash conversion, ranked within each industry. The green / red "since" columns show what the business did after that. Mcap filter uses today\'s market cap.');
-  else hint('Value score = weighted percentile rank within the stock\'s own industry (hover a score to see each part). FCF yield, cash conversion, core PE and OPM trend are not used for financials. Core PE in orange = more than 20% of profit is other income.');
+  if (BACK) hint('1 year back the score uses only the quality metrics as they stood then (ROCE / ROE, EPS growth, cash conversion), ranked within each industry. Green / red "since" columns show what the business did after that. Mcap filter uses today\'s market cap.');
+  else hint('Value score = weighted percentile rank within the stock\'s own industry (hover a score for each part). Screens are one-click presets; any change turns them into Custom. FCF yield, cash conversion and core PE are not used for financials. Orange core PE = over 20% of profit is other income.');
 }
 
 /* ---------- MAGIC FORMULA ---------- */
-const MF_DEF = {exFin:true, minMcap:1000, top:50, trap:false};
+const MF_DEF = {exFin:true, minMcap:1000, top:50, trap:false, minTrend:''};
+const MF_PRESETS = [
+  {name:'Classic', tip:'Greenblatt as published: ex-financials, Mcap ≥ ₹1,000 Cr, top 30, nothing else', st:{top:30}},
+  {name:'Magic + safety', tip:'Classic, then drop stocks with value-trap flags', st:{top:30, trap:true}},
+  {name:'Magic + improving', tip:'Classic + no value traps + Trend ≥ 70%', st:{top:30, trap:true, minTrend:70}},
+];
 function magicView() {
   setNav('magic'); view.innerHTML = '';
   pageTitle('Magic Formula');
-  const mf = filterBox('Filters', 'mf', MF_DEF, st => `
-    <label><input type="checkbox" data-f="exFin" ${st.exFin?'checked':''}> Exclude financials</label>
-    <label>Min Mcap ₹ Cr <input type="number" data-f="minMcap" min="0" step="500" value="${st.minMcap}" style="width:90px"></label>
-    <label>Show top <input type="number" data-f="top" min="5" max="500" step="5" value="${st.top}"></label>
-    <label><input type="checkbox" data-f="trap" ${st.trap?'checked':''}> Hide value traps</label>`, magicView);
+  const mf = filterBox({
+    key:'mf', def:MF_DEF, presets:MF_PRESETS,
+    main: st => fChk(st,'exFin','Exclude financials') + fNum(st,'top','Show top',{min:5,max:500,step:5}) + fNum(st,'minMcap','Min Mcap ₹ Cr',{min:0,step:500,w:90}),
+    more: st => fNum(st,'minTrend','Min Trend %',{min:0,max:100,step:10}) + fChk(st,'trap','Hide value traps'),
+    moreKeys: ['minTrend','trap'],
+  }, magicView);
   const u = V().filter(s => (BACK || s.pe != null) && s.roce != null && s.roce > 0 && (s.mcap || 0) >= (+mf.minMcap || 0) && !(mf.exFin && s.fin));
   [...u].sort((a,b) => b.roce - a.roce).forEach((s,i) => s.rQ = i+1);
   if (BACK) {                                            // no PE a year back: rank on the ROCE half only
@@ -1132,16 +1393,17 @@ function magicView() {
     u.forEach(s => s.mf = s.rEY + s.rQ);
     u.sort((a,b) => a.mf - b.mf || a.pe - b.pe).forEach((s,i) => s.mfRank = i+1);
   }
-  const rows = u.filter(s => !mf.trap || !trapReasons(s).length).slice(0, +mf.top || 50);
+  // ranks above stay pure Greenblatt; Trend / trap only filter the ranked list afterwards
+  const rows = u.filter(s => (!mf.trap || !trapReasons(s).length) && trendOk(s, mf.minTrend)).slice(0, +mf.top || 50);
   stats([['Stocks ranked', u.length], ...(BACK ? [] : [[`Median PE of top ${rows.length}`, fmt(median(rows.map(s=>s.pe)))]]),
          [`Median ROCE of top ${rows.length}`, fmt(median(rows.map(s=>s.roce))) + '%']], rows);
   view.appendChild(makeTable('magic', [
     {k:'mfRank', label:'Rank', l:1, v:s=>s.mfRank, f:s=>`<span class="rank ${s.mfRank<=10?'top':''}">${s.mfRank}</span>`},
     C.sym, C.name, C.ind, C.cmp, C.pe, C.ey, {k:'rEY', label:'EY rank', v:s=>s.rEY, f:s=>`<span class="na">${s.rEY}</span>`},
     C.roce, {k:'rQ', label:'ROCE rank', v:s=>s.rQ, f:s=>`<span class="na">${s.rQ}</span>`},
-    C.pb, C.dy, C.cagr, C.fcfy, C.score, C.mcap, C.flags, C.spark], rows, {sortKey:'mfRank', sortDir:1, search:true, noIndex:true}));
-  if (BACK) hint('The Magic Formula needs PE, which needs a price. 1 year back it is ranked on its quality half only: ROCE as it stood then (approximate). The "since" columns show how those businesses did afterwards.');
-  else hint('Rank by earnings yield (100 ÷ PE) + rank by ROCE, lowest total wins. Uses PE instead of EBIT/EV because the CSV has no debt data.');
+    C.pb, C.dy, C.cagr, C.fcfy, C.score, C.trend, C.mcap, C.flags, C.spark], rows, {sortKey:'mfRank', sortDir:1, search:true, noIndex:true}));
+  if (BACK) hint('1 year back the Magic Formula is ranked on its quality half only (ROCE as it stood then, approximate), since PE needs a price. "Since" columns show how those businesses did afterwards.');
+  else hint('Greenblatt: rank by earnings yield (100 ÷ PE) + rank by ROCE, lowest total wins. Uses PE instead of EBIT / EV because the CSV has no debt data. Trend and value-trap filters only remove stocks from the ranked list, they never change the ranks.');
 }
 
 /* ---------- SHAREHOLDING TABS ---------- */
@@ -1163,19 +1425,22 @@ const hasJump = s => jumpOf(s) > D.jumpPP;
 const dirOk = (c, dir, m) => dir==='up' ? c >= Math.max(m, 0.01) : dir==='down' ? c <= -Math.max(m, 0.01) : Math.abs(c) >= m;
 
 const PR_DEF = {dir:'up', minChg:1, hideJump:true, maxPE:'', minMcap:0, minNow:''};
+const PR_PRESETS = [
+  {name:'Insiders buying', tip:'Promoter holding up ≥ 1 pp, merger / OFS jumps hidden', st:{dir:'up', minChg:1}},
+  {name:'Buying + cheap', price:1, tip:'Promoter up ≥ 0.5 pp and PE ≤ 20', st:{dir:'up', minChg:0.5, maxPE:20}},
+  {name:'Insiders selling', tip:'Promoter holding down ≥ 2 pp', st:{dir:'down', minChg:2}},
+];
 function promoterView() {
   setNav('promoter'); view.innerHTML = '';
   pageTitle('Promoter holding');
-  const f = filterBox('Filters', 'pr', PR_DEF, st => `
-    <label>Direction <select data-f="dir">
-      <option value="up" ${st.dir==='up'?'selected':''}>Increasing</option>
-      <option value="down" ${st.dir==='down'?'selected':''}>Decreasing</option>
-      <option value="all" ${st.dir==='all'?'selected':''}>All</option></select></label>
-    <label>Min change pp <input type="number" data-f="minChg" min="0" step="0.5" value="${st.minChg}"></label>
-    <label>Min promoter % now <input type="number" data-f="minNow" min="0" step="5" value="${st.minNow}"></label>
-    <label>Max PE <input type="number" data-f="maxPE" min="0" step="1" value="${st.maxPE}"></label>
-    <label>Min Mcap ₹ Cr <input type="number" data-f="minMcap" min="0" step="500" value="${st.minMcap}" style="width:90px"></label>
-    <label><input type="checkbox" data-f="hideJump" ${st.hideJump?'checked':''}> Hide jumps > ${D.jumpPP} pp in one quarter</label>`, promoterView);
+  const f = filterBox({
+    key:'pr', def:PR_DEF, presets:PR_PRESETS,
+    main: st => fSel(st,'dir','Direction',[['up','Increasing'],['down','Decreasing'],['all','All']]) + fNum(st,'minChg','Min change pp',{min:0,step:0.5})
+      + (BACK ? '' : fNum(st,'maxPE','Max PE',{min:0})),
+    more: st => fNum(st,'minNow','Min promoter % now',{min:0,step:5}) + fNum(st,'minMcap','Min Mcap ₹ Cr',{min:0,step:500,w:90})
+      + fChk(st,'hideJump',`Hide jumps > ${D.jumpPP} pp in one quarter`),
+    moreKeys: ['minNow','minMcap','hideJump'],
+  }, promoterView);
   const P = holdCols('pro', true), F = holdCols('fii', true), Dd = holdCols('dii', true);
   const all = V().filter(s => s.h && s.h.pro);
   const rows = all.filter(s => dirOk(s.h.pro.chg, f.dir, +f.minChg || 0)
@@ -1189,25 +1454,27 @@ function promoterView() {
   const st = sortState['promoter'];
   if (st && st.k === 'prochg') st.dir = f.dir==='down' ? 1 : -1;      // keep the biggest movers on top
   view.appendChild(makeTable('promoter', [C.sym, C.name, C.ind, C.cmp, P.now, P.chg, P.chg1, P.ud, P.win, P.sp,
-      Object.assign({}, F.chg, {label:'FII Δ'}), Object.assign({}, Dd.chg, {label:'DII Δ'}), C.pe, C.pb, C.dy, C.score, C.mcap, jumpCell],
+      Object.assign({}, F.chg, {label:'FII Δ'}), Object.assign({}, Dd.chg, {label:'DII Δ'}), C.pe, C.pb, C.dy, C.score, C.trend, C.mcap, jumpCell],
     rows, {sortKey:'prochg', sortDir: f.dir==='down' ? 1 : -1, search:true, sinceCols:[C.proD, C.patG, C.roeD]}));
-  hint(`Δ = change in percentage points (pp) between the first and last quarter available for that stock. Most stocks cover ~${fmt(median(all.map(s=>s.h.pro.yrs)),2)} years; stocks with older quarters in the CSV use the longer period (see Period). Qtrs ↑ / ↓ counts quarter-on-quarter moves above 0.05 pp; steady creeping buying matters more than one jump.`);
+  hint(`Δ = change in percentage points between the first and last quarter available (most stocks ~${fmt(median(all.map(s=>s.h.pro.yrs)),2)} years, see Period). Qtrs ↑ / ↓ counts quarter-on-quarter moves above 0.05 pp; steady creeping buying matters more than one jump.`);
 }
 
 const PU_DEF = {dir:'down', minChg:1, smart:false, hideJump:true, maxPE:'', minMcap:0};
+const PU_PRESETS = [
+  {name:'Smart money absorbing', tip:'Public % falling ≥ 1 pp while FII + DII rise', st:{dir:'down', minChg:1, smart:true}},
+  {name:'Retail piling in', tip:'Public % rising ≥ 2 pp (often promoters or funds selling)', st:{dir:'up', minChg:2}},
+];
 function publicView() {
   setNav('public'); view.innerHTML = '';
   pageTitle('Public holding');
-  const f = filterBox('Filters', 'pu', PU_DEF, st => `
-    <label>Direction <select data-f="dir">
-      <option value="down" ${st.dir==='down'?'selected':''}>Falling (bigger hands absorbing)</option>
-      <option value="up" ${st.dir==='up'?'selected':''}>Rising (shares moving to retail)</option>
-      <option value="all" ${st.dir==='all'?'selected':''}>All</option></select></label>
-    <label>Min change pp <input type="number" data-f="minChg" min="0" step="0.5" value="${st.minChg}"></label>
-    <label><input type="checkbox" data-f="smart" ${st.smart?'checked':''}> FII + DII rising</label>
-    <label>Max PE <input type="number" data-f="maxPE" min="0" step="1" value="${st.maxPE}"></label>
-    <label>Min Mcap ₹ Cr <input type="number" data-f="minMcap" min="0" step="500" value="${st.minMcap}" style="width:90px"></label>
-    <label><input type="checkbox" data-f="hideJump" ${st.hideJump?'checked':''}> Hide jumps > ${D.jumpPP} pp in one quarter</label>`, publicView);
+  const f = filterBox({
+    key:'pu', def:PU_DEF, presets:PU_PRESETS,
+    main: st => fSel(st,'dir','Direction',[['down','Falling'],['up','Rising'],['all','All']]) + fNum(st,'minChg','Min change pp',{min:0,step:0.5})
+      + fChk(st,'smart','FII + DII rising'),
+    more: st => (BACK ? '' : fNum(st,'maxPE','Max PE',{min:0})) + fNum(st,'minMcap','Min Mcap ₹ Cr',{min:0,step:500,w:90})
+      + fChk(st,'hideJump',`Hide jumps > ${D.jumpPP} pp in one quarter`),
+    moreKeys: ['maxPE','minMcap','hideJump'],
+  }, publicView);
   const U = holdCols('pub', false), P = holdCols('pro', true);
   const all = V().filter(s => s.h && s.h.pub);
   const rows = all.filter(s => dirOk(s.h.pub.chg, f.dir, +f.minChg || 0)
@@ -1222,9 +1489,42 @@ function publicView() {
   if (st && st.k === 'pubchg') st.dir = f.dir==='up' ? -1 : 1;
   view.appendChild(makeTable('public', [C.sym, C.name, C.ind, C.cmp, U.now, U.chg, U.chg1, U.ud, U.win, U.sp,
       {k:'smart', label:'FII + DII Δ', tip:'smart money', v:smart, f:s=>ppPill(smart(s), true)},
-      Object.assign({}, P.chg, {label:'Promoter Δ'}), C.pe, C.pb, C.dy, C.score, C.mcap, jumpCell],
+      Object.assign({}, P.chg, {label:'Promoter Δ'}), C.pe, C.pb, C.dy, C.score, C.trend, C.mcap, jumpCell],
     rows, {sortKey:'pubchg', sortDir: f.dir==='up' ? -1 : 1, search:true, sinceCols:[C.patG, C.revG, C.roeD]}));
-  hint('Public = retail and other non-institutional holders. Falling public % (green) means promoters or institutions are absorbing shares; rising public % (red) means shares are moving to retail. Strongest signal: public falling while FII + DII rise.');
+  hint('Public = retail and other non-institutional holders. Falling public % (green) = promoters or institutions absorbing shares; rising (red) = shares moving to retail. Strongest signal: public falling while FII + DII rise.');
+}
+
+/* ---------- IMPROVING (trend score) ---------- */
+const IM_DEF = {minTrend:70, minMcap:0, maxPE:'', exFin:false, trap:false};
+const IM_PRESETS = [
+  {name:'All green', tip:'Every check with data passed', st:{minTrend:100}},
+  {name:'Mostly green', tip:'Trend ≥ 70%', st:{minTrend:70}},
+  {name:'Improving & cheap', price:1, tip:'Trend ≥ 70%, PE ≤ 20, no value traps', st:{minTrend:70, maxPE:20, trap:true}},
+  {name:'Improving, ex-fin', tip:'Trend ≥ 70%, all 7 checks apply (no financials)', st:{minTrend:70, exFin:true}},
+];
+function improvingView() {
+  setNav('improving'); view.innerHTML = '';
+  pageTitle(BACK ? 'Improving, 1 year back' : 'Improving fundamentals');
+  const f = filterBox({
+    key:'im', def:IM_DEF, presets:IM_PRESETS,
+    main: st => fNum(st,'minTrend','Min Trend %',{min:0,max:100,step:10}) + (BACK ? '' : fNum(st,'maxPE','Max PE',{min:0})) + fChk(st,'exFin','Exclude financials'),
+    more: st => fNum(st,'minMcap','Min Mcap ₹ Cr',{min:0,step:500,w:90}) + fChk(st,'trap','Hide value traps'),
+    moreKeys: ['minMcap','trap'],
+  }, improvingView);
+  const all = V().filter(s => s.tr);
+  const rows = all.filter(s => trendOk(s, f.minTrend)
+      && (BACK || f.maxPE === '' || (s.pe != null && s.pe <= f.maxPE))
+      && (s.mcap || 0) >= (+f.minMcap || 0)
+      && !(f.exFin && s.fin)
+      && (!f.trap || !trapReasons(s).length));
+  stats([['Stocks shown', rows.length], ['With a Trend score', all.length],
+         ['All checks passed', all.filter(s => s.tr.pass === s.tr.of).length],
+         ...(BACK ? [] : [['Median PE of list', fmt(median(rows.map(s=>s.pe)))]]),
+         ['Median Value score of list', fmt(median(rows.map(s=>s.score)),0)]], rows);
+  view.appendChild(makeTable('improving', [C.trend, C.sym, C.name, C.ind, C.cmp, ...TR_KEYS.map(trCheck), C.pe, C.score, C.mcap, C.flags],
+    rows, {sortKey:'trend', sortDir:-1, search:true, sinceCols:[C.patG, C.revG, C.roeD]}));
+  hint(BACK ? 'Trend checks as they stood 1 year back, using only results published by then. "Since" columns show whether the improving businesses kept delivering.'
+            : 'Trend = share of 7 pass / fail checks that are green (financials: 4). Each ✓ / ✗ shows its evidence; hover the Trend bar for all of them. Improving is not cheap: pair it with Value screen or Magic Formula. Cyclicals look best here right at a peak.');
 }
 
 /* ---------- METHODOLOGY ---------- */
@@ -1317,6 +1617,22 @@ function methodView() {
   <tr><td>Promoter Δ since</td><td>promoter % now minus promoter % then</td></tr></table></div>
   <p>Each page shows the median profit growth of the list it produced against all stocks. This answers "did the businesses these screens liked a year ago keep delivering?", not "did the share price go up?". Only stocks in today's lists are included.</p>
 
+  <h2>Trend score (Improving tab)</h2>
+  <p>Answers "is the business getting better?", separately from "is it cheap?". It is <b>not</b> part of the Value score or the Magic Formula ranks; on those tabs it is only a filter (Min Trend %).
+  Each check is pass / fail. Ratios (margins, ROE, holding %) are compared in percentage points, never as a CAGR, because a CAGR on a percentage explodes on small bases.</p>
+  <div class="wrap"><table><tr><th>Check</th><th>Green when</th><th>Data</th></tr>
+  <tr><td>Profit</td><td>TTM PAT ≥ TTM PAT four quarters earlier, in at least 4 of the last 6 quarter-ends</td><td>quarterly</td></tr>
+  <tr><td>Revenue</td><td>same test on TTM revenue</td><td>quarterly</td></tr>
+  <tr><td>Operating margin</td><td>TTM OPM (TTM EBITDA ÷ TTM revenue) ≥ a year earlier, in at least 4 of the last 6 quarter-ends. Not for financials</td><td>quarterly</td></tr>
+  <tr><td>Promoter holding</td><td>promoter % now ≥ 6 quarters ago (stocks with no promoter: n/a)</td><td>quarterly</td></tr>
+  <tr><td>ROE</td><td>latest FY ROE ≥ ROE two FY earlier (PAT ÷ (reserves + share capital))</td><td>annual</td></tr>
+  <tr><td>ROCE (proxy)</td><td>latest FY EBIT ÷ total assets ≥ two FY earlier. Proxy because the CSV has no debt data. Not for financials</td><td>annual</td></tr>
+  <tr><td>Cash conversion</td><td>Σ CFO ÷ Σ PAT over the last 3 FY ≥ the 3 FY before (2 + 2 if history is short). Not for financials</td><td>annual</td></tr></table></div>
+  <p>Profit uses PAT rather than quarterly EPS because quarterly EPS in the CSV is not adjusted for splits and bonuses. Comparing each quarter's TTM with the TTM a year earlier removes seasonality.
+  <b>Trend % = checks passed ÷ checks with data</b>, shown as e.g. 5/7. A stock needs data for at least 4 checks (3 for financials). Missing checks are left out, not counted as fails.
+  In 1Y back mode the checks use only results published by then, so fewer stocks qualify (shorter quarterly history).</p>
+  <p><b>Caveats:</b> improving margins and ROE peak with the business cycle, so cyclicals score best just before they turn. Use it alongside valuation, not alone.</p>
+
   <h2>PSU and semi-PSU filter</h2>
   <p>The CSV has no ownership-type field, so government-owned companies are tagged from a fixed list.
   <b>PSU</b> (${S.filter(s=>s.psu==='psu').length} stocks): central or state government holds a majority, directly or through another PSU (e.g. SBI Life, Chennai Petroleum).
@@ -1331,15 +1647,11 @@ function methodView() {
   </div>`);
 }
 
-function banner() {
+function backInfo() {                                    // was a big banner; now a small popover behind the (i)
   const mode = k => { const c = {}; S.forEach(s => { const v = sv(s,k); if (v) c[v] = (c[v]||0) + 1; });
                       return Object.keys(c).sort((a,b) => c[b]-c[a])[0] || '–'; };
-  const div = document.createElement('div'); div.className = 'banner';
-  div.innerHTML = `<b>Fundamentals as they stood on ${esc(D.then.date)}</b>
-    <span>Latest results then: quarter ${esc(mode('qThen'))}, financial year ${esc(mode('fyThen'))}. "Since" columns compare with the latest now (quarter ${esc(mode('qNow'))}, FY ${esc(mode('fyNow'))}).
-    No old prices in the CSVs, so PE, PB, yields and price columns are hidden in this view.</span>`;
-  const t = $('h2.page', view);
-  if (t) t.after(div); else view.prepend(div);
+  return `<b>Fundamentals as they stood on ${esc(D.then.date)}</b>Latest results then: quarter ${esc(mode('qThen'))}, FY ${esc(mode('fyThen'))}.
+    "Since" columns compare with the latest now (quarter ${esc(mode('qNow'))}, FY ${esc(mode('fyNow'))}). No old prices in the CSVs, so PE, PB, yields and price columns are hidden.`;
 }
 function route() {
   setMode();
@@ -1351,16 +1663,20 @@ function route() {
   else if (h === '#/magic') magicView();
   else if (h === '#/promoter') promoterView();
   else if (h === '#/public') publicView();
+  else if (h === '#/improving') improvingView();
   else if (h === '#/method') methodView();
   else homeView();
-  if (BACK && !h.startsWith('#/method')) banner();
   meta();
   window.scrollTo(0,0);
 }
 function meta() {
   $('#meta').innerHTML = `<b>${V().length}</b> stocks in <b>${Object.keys(industries).length}</b> sectors, data downloaded <b>${esc(D.asOf)}</b>`
-    + (BACK ? `, showing <b>${esc(D.then.date)}</b>` : '');
+    + (BACK ? `<span class="backnote">, showing <b>${esc(D.then.date)}</b> <button type="button" class="info" id="backInfo" aria-label="About the 1Y back view">i</button>`
+            + `<span class="pop" id="backPop">${backInfo()}</span></span>` : '');
+  const b = $('#backInfo');
+  if (b) b.addEventListener('click', e => { e.stopPropagation(); $('#backPop').classList.toggle('open'); });
 }
+document.addEventListener('click', e => { const p = $('#backPop'); if (p && !e.target.closest('#backPop')) p.classList.remove('open'); });
 const saveGF = () => lsSet('gf', JSON.stringify(GF));
 [['psu','#hidePSU'], ['semi','#hideSemi'], ['back','#back1y']].forEach(([k, id]) => {
   const el = $(id); el.checked = !!GF[k];
