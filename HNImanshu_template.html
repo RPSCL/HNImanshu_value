@@ -146,6 +146,15 @@ input { font-family: var(--sans); }
 .hstat { text-align: right; }
 .hstat-val { font-family: var(--mono); font-size: 16px; font-weight: 700; color: var(--accent); line-height: 1; }
 .hstat-lbl { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.8px; margin-top: 1px; }
+/* Fundamentals button — same outline style as Export CSV so it reads as part of the header */
+.fund-btn {
+  display: inline-flex; align-items: center; gap: 6px; margin-left: 14px; flex-shrink: 0;
+  padding: 5px 12px; border: 1px solid var(--accent); border-radius: 6px;
+  color: var(--accent); font-family: var(--mono); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.4px; white-space: nowrap; transition: background 0.15s, color 0.15s;
+}
+.fund-btn:hover { background: var(--accent); color: var(--bg); }
+.fund-btn svg { flex-shrink: 0; }
 #theme-toggle {
   display: flex; align-items: center; gap: 6px; margin-left: 14px; flex-shrink: 0;
 }
@@ -677,14 +686,15 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
   body { overflow: hidden; }
   #header {
     display: grid !important;
-    grid-template-columns: 1fr auto !important;
+    grid-template-columns: 1fr auto auto !important;              /* extra column for the Fundamentals button */
     grid-template-rows: auto auto !important;
-    grid-template-areas: "logo toggle" "tabs tabs" !important;
+    grid-template-areas: "logo fund toggle" "tabs tabs tabs" !important;
     padding: 8px 12px 0 !important;
     height: auto !important; gap: 0 !important; align-items: center !important;
   }
   .hni-logo    { grid-area: logo; gap: 8px; align-items: center; }
   #theme-toggle { grid-area: toggle; margin-left: 0; gap: 6px; justify-self: end; }
+  .fund-btn { grid-area: fund; margin: 0 12px 0 0; padding: 6px 9px; font-size: 10.5px; }   /* sits left of the toggle */
   .universe-switch { grid-area: tabs; }
   .h-stats { display: none !important; }
   .hni-mark svg { width: 30px; height: 30px; }
@@ -986,6 +996,11 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
     <div class="hstat"><div class="hstat-val" id="hs-dv">—</div><div class="hstat-lbl">Deep Value</div></div>
     <div class="hstat"><div class="hstat-val" id="hs-best">—</div><div class="hstat-lbl">A/B+</div></div>
   </div>
+  <!-- Fundamentals page link — href gets ?uni=<active tab> from updateFundLink() -->
+  <a class="fund-btn" id="fund-btn" href="fundamentals.html" title="Industry PE, value screen, Magic Formula, promoter and public holding">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M2 11V7M5 11V4M8 11V6M11 11V2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    <span>Fundamentals</span>
+  </a>
   <div id="theme-toggle">
     <span class="toggle-icon moon-icon">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -1410,6 +1425,13 @@ function toggleTheme(){
   try{localStorage.setItem('hnimanshu_theme',isDay?'night':'day');}catch(e){}
 }
 
+// ── FUNDAMENTALS LINK: screener tab -> fundamentals List picker label (must match UNIVERSES in fundamentals.py) ──
+var FUND_UNI = {n500:'NIFTY 500', sc250:'Smallcap 500', mc250:'Microcap 250', all:'all'};
+function updateFundLink(){
+  var a = document.getElementById('fund-btn'); if(!a) return;
+  a.href = 'fundamentals.html?uni=' + encodeURIComponent(FUND_UNI[universe] || 'all');
+}
+
 function switchUniverse(u){
   universe=u; rawData=DATASETS[u]; selectedSym=null; closeDetail();
   document.getElementById('btn-n500').classList.toggle('active',u==='n500');
@@ -1417,7 +1439,7 @@ function switchUniverse(u){
   document.getElementById('btn-mc250').classList.toggle('active',u==='mc250');
   document.getElementById('btn-all').classList.toggle('active',u==='all');
   searchQ=''; document.getElementById('search-inp').value=''; updateSearchClearBtn();
-  buildSidebar(); buildMobileSheet(); updateHideNanCount(); run();
+  buildSidebar(); buildMobileSheet(); updateHideNanCount(); updateFundLink(); run();
 }
 
 function updateSearchClearBtn(){
@@ -1910,7 +1932,7 @@ document.addEventListener('keydown', function(e) {
 });
 
 var th=document.querySelector('th[data-col="FINAL_RANK"]'); if(th) th.classList.add('sorted-asc');
-buildSidebar(); buildMobileSheet(); run();
+buildSidebar(); buildMobileSheet(); updateFundLink(); run();   // updateFundLink sets the initial ?uni= on page load
 
 }); // end DOMContentLoaded
 </script>

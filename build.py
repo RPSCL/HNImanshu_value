@@ -34,6 +34,11 @@ News:
   Reads multi_stock_news.csv (columns: stockname, datetime, news, link)
   and injects per-symbol news into the HTML as NEWS_DATA JS object.
   Headlines are hyperlinked to their source URLs.
+
+Fundamentals:
+  Also builds public/fundamentals.html (industry PE, value screen, Magic
+  Formula, promoter / public holding, 1Y-back view) via fundamentals.py,
+  from the same three CSVs. A failure there never blocks the screener.
 """
 
 import pandas as pd
@@ -42,11 +47,19 @@ import json
 import sys
 import re
 import argparse
+import traceback
 from pathlib import Path
 from datetime import datetime
 import zoneinfo
 import htmlmin
 import rcssmin
+
+# Fundamentals page builder — guarded so a problem there never blocks the screener deploy
+try:
+    import fundamentals
+except Exception as e:
+    fundamentals = None
+    print(f"[WARN] fundamentals.py not importable: {e}")
 
 # =========================
 # 🗜 MINIFIER
@@ -74,6 +87,7 @@ def minify_html_css(html: str) -> str:
 BASE        = Path(__file__).parent
 TEMPLATE    = BASE / "HNImanshu_template.html"
 OUTPUT      = BASE / "public" / "index.html"
+OUTPUT_FUND = BASE / "public" / "fundamentals.html"   # second page, same Firebase deploy
 
 N500_CSV    = BASE / "nifty500_valuation.csv"
 SC250_CSV   = BASE / "niftysmallcap500_valuation.csv"
@@ -663,6 +677,23 @@ def inject_news(html: str, news_js: str) -> str:
 
 
 # =========================
+# 📈 FUNDAMENTALS PAGE
+# =========================
+
+def build_fundamentals():
+    """Build public/fundamentals.html from the same 3 CSVs (explicit paths, so test_*.csv is never read)."""
+    print("\nBuilding Fundamentals page...\n")
+    if fundamentals is None:
+        print("  [WARN] skipped — fundamentals.py missing")
+        return
+    try:
+        fundamentals.build_site([N500_CSV, SC250_CSV, MC250_CSV], OUTPUT_FUND, minify=minify_html_css)
+    except Exception:
+        traceback.print_exc()   # log it, but keep the screener build + deploy going
+        print("  [WARN] Fundamentals build failed — previous fundamentals.html stays live")
+
+
+# =========================
 # 🏗 BUILD
 # =========================
 
@@ -714,10 +745,14 @@ def build(deploy=False):
     html = minify_html_css(html)
     OUTPUT.write_text(html, encoding="utf-8")
 
+    # ── Fundamentals page (separate HTML, same deploy) ──
+    build_fundamentals()
+
     total = len(data_n500 or []) + len(data_sc250) + len(data_mc250)
     print(f"\n✅ Build Complete  —  {total} total stocks, "
           f"{sum(len(v) for v in news_map.values())} news items")
     print(f"   Output: {OUTPUT}")
+    print(f"           {OUTPUT_FUND}")
 
     if deploy:
         import subprocess

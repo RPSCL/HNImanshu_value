@@ -1,0 +1,142 @@
+name: Smart Build & Deploy
+
+permissions:
+  contents: write
+
+on:
+  schedule:
+    # 📰 00:00 IST (18:30 UTC previous day)
+    - cron: "30 18 * * *"
+
+    # 📊 Trading day runs (Mon–Fri)
+    - cron: "45 3 * * 1-5"   # 09:15 IST
+    - cron: "45 4 * * 1-5"   # 10:15 IST
+    - cron: "45 7 * * 1-5"   # 13:15 IST
+    - cron: "00 8 * * 1-5"   # 13:30 IST
+
+  workflow_dispatch:
+    inputs:
+      force_full:
+        description: "Force FULL run (1=yes)"
+        required: false
+        default: "0"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ───────────────────────────────────────────
+      # 1. SETUP
+      # ───────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install requests pandas numpy beautifulsoup4 lxml tqdm gnews
+
+      # ───────────────────────────────────────────
+      # 2. DECIDE MODE
+      # ───────────────────────────────────────────
+      - name: Decide run mode
+        id: mode
+        run: |
+          FORCE="${{ github.event.inputs.force_full }}"
+          EVENT="${{ github.event_name }}"
+
+          IST_H=$(TZ="Asia/Kolkata" date +"%H")
+          IST_M=$(TZ="Asia/Kolkata" date +"%M")
+          IST_TOTAL=$((IST_H * 60 + IST_M))
+          echo "IST time in minutes: $IST_TOTAL"
+
+          # 🚀 Manual force-full trigger (from OPC server or manual)
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$FORCE" = "1" ]; then
+            echo "mode=full" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # ⏱ Full run window — 15:30 IST only (930 min ± 7)
+          DIFF=$((IST_TOTAL - 930))
+          if [ "$DIFF" -ge -7 ] && [ "$DIFF" -le 7 ]; then
+            echo "mode=full" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Everything else → light (includes midnight, all trading crons)
+          echo "mode=light" >> $GITHUB_OUTPUT
+
+      # ───────────────────────────────────────────
+      # 3. RUN SCRIPTS
+      # build.py now also writes public/fundamentals.html (via fundamentals.py)
+      # ───────────────────────────────────────────
+      - name: "🚀 Full run"
+        if: steps.mode.outputs.mode == 'full'
+        run: |
+          python -u fetch_news.py
+          python n500.py
+          python nm250.py
+          python ns500.py
+          python build.py
+
+      - name: "⚡ Light run"
+        if: steps.mode.outputs.mode == 'light'
+        run: |
+          python -u fetch_news.py
+          python build.py
+
+      # ───────────────────────────────────────────
+      # 4. COMMIT & PUSH (both modes)
+      # ───────────────────────────────────────────
+      - name: Commit & push changes
+        continue-on-error: true
+        run: |
+          git config --global user.name  "github-actions"
+          git config --global user.email "actions@github.com"
+
+          git stash   || true
+          git pull origin main --rebase || true
+          git stash pop || true
+
+          # public/ = index.html + fundamentals.html (folder path never fails if a file is missing)
+          git add \
+            nifty500_valuation.csv \
+            niftymicrocap250_valuation.csv \
+            niftysmallcap500_valuation.csv \
+            multi_stock_news.csv \
+            public/
+
+          git diff --cached --quiet || git commit -m "Auto update [skip ci]"
+          git push origin main || true
+
+      # ───────────────────────────────────────────
+      # 5. FIREBASE DEPLOY (both modes, always silent)
+      # ───────────────────────────────────────────
+      - name: Setup Firebase
+        run: |
+          echo '${{ secrets.GOOGLE_CREDENTIALS }}' > serviceAccount.json
+          npm install -g firebase-tools
+
+      - name: Deploy to Firebase Hosting
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: serviceAccount.json
+        run: firebase deploy --project hnimanshu --only hosting --non-interactive 2>/dev/null
+
+      # ───────────────────────────────────────────
+      # 6. TELEGRAM — full run only (15:30 / OPC trigger)
+      # ───────────────────────────────────────────
+      - name: "📩 Telegram — full run success"
+        if: steps.mode.outputs.mode == 'full' && success()
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT:  ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT}" \
+            -d text="https://hnimanshu-value.web.app/ %0A%0AFull update completed 🚀"
