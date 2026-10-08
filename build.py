@@ -121,6 +121,9 @@ KEY_COLS = [
     "QUALITY_SCORE",     # 0–13.4 · Absolute-level quality addon
     "COMBINED_SCORE",    # 0–22.4 · PIOTROSKI + QUALITY
     "LOW_PROMOTER_FLAG",
+    # ── consolidated + standalone merge (n500/ns500/nm250 weekly master) ──
+    "SCREENER_PAGE_TYPE",   # basis used for the row: consolidated / standalone
+    "STALE_SINCE",          # only set when this week's scrape failed → date of the data shown
 ]
 
 
@@ -603,6 +606,20 @@ def load_csv(path: Path, name_col: str, label: str, optional=False):
         dupes = before - len(df)
         if dupes:
             print(f"    Dropped {dupes} duplicate symbols")
+
+    # ── Merged-scrape columns (older CSVs won't have them → sensible defaults) ──
+    if "SCREENER_PAGE_TYPE" not in df.columns:
+        df["SCREENER_PAGE_TYPE"] = np.where(
+            df.get("SCREENER_URL", pd.Series("", index=df.index)).astype(str).str.contains("/consolidated/"),
+            "consolidated", "standalone")
+    df["STALE_SINCE"] = None
+    if "LAST_SCRAPE_STATUS" in df.columns and "DATE_DOWNLOADED" in df.columns:
+        is_stale = df["LAST_SCRAPE_STATUS"].astype(str).str.startswith("STALE")
+        df.loc[is_stale, "STALE_SINCE"] = df.loc[is_stale, "DATE_DOWNLOADED"].astype(str)
+        if is_stale.any():
+            print(f"    Note: {int(is_stale.sum())} stocks kept last week's data (scrape failed this run)")
+    basis = df["SCREENER_PAGE_TYPE"].value_counts().to_dict()
+    print(f"    Basis: {basis}")
 
     # ── Derived: NET_DEBT_TO_EBITDA ──
     if "NET_DEBT_CR" in df.columns and "PL_EBITDA_CR" in df.columns:

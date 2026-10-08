@@ -1682,7 +1682,9 @@ function showDetail(sym){
   var s=rawData.find(function(d){return d.SYMBOL===sym;}); if(!s) return;
   var gc=GC[s.GRADE]||'#888';
   document.getElementById('dp-name').textContent=s.COMPANY_NAME;
-  document.getElementById('dp-sub').textContent=s.SYMBOL+' · '+(s.INDUSTRY||'—')+' · '+fmtMC(s.MARKET_CAP_CR);
+  var basis=s.SCREENER_PAGE_TYPE?(' · '+s.SCREENER_PAGE_TYPE.charAt(0).toUpperCase()+s.SCREENER_PAGE_TYPE.slice(1)):'';
+  var stale=s.STALE_SINCE?(' · data of '+s.STALE_SINCE):'';
+  document.getElementById('dp-sub').textContent=s.SYMBOL+' · '+(s.INDUSTRY||'—')+' · '+fmtMC(s.MARKET_CAP_CR)+basis+stale;
   var dg=document.getElementById('dp-grade'); dg.textContent=s.GRADE; dg.style.color=gc; dg.style.borderColor=gc;
 
   var url = s.SCREENER_URL||'#';

@@ -1712,7 +1712,7 @@ function methodView() {
   const W = lsJson('vw', W_DEF);
   view.insertAdjacentHTML('beforeend', `<div class="doc">
   <h2>Data</h2>
-  <p>Everything comes from the same valuation CSVs that power the screener (downloaded ${esc(D.asOf)}), ${S.length} stocks, consolidated figures.
+  <p>Everything comes from the same valuation CSVs that power the screener (downloaded ${esc(D.asOf)}), ${S.length} stocks, consolidated figures (standalone for companies that do not publish consolidated accounts; both pages are scraped and merged weekly).
   Annual history (EPS, profit, cash flow, reserves) runs roughly 2015 → 2026. Shareholding history mostly covers ${esc(D.shSpan)}.
   Stocks whose latest annual figure is older than ${D.staleDays} days are treated as having no history. Industry = the CSV's broad sector bucket (${Object.keys(industries).length} buckets).
   "Financials" = industries matching bank / finance / NBFC / insurance; they get special handling below.</p>

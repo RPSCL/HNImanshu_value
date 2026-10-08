@@ -1,6 +1,29 @@
 """
 Nifty 500 — COMPLETE Fundamental Data Pipeline
 =================================================
+WEEKLY-MASTER VERSION (Oct 2026)
+────────────────────────────────
+M-1  Every stock is fetched from ALL links in SCREENER_LINKS at the same time
+     (standalone + consolidated, with and without #quarters).  "#quarters" is a
+     URL fragment the browser never sends to the server, so those two links
+     return the same page as their base link — duplicates are fetched once.
+M-2  Consolidated + standalone are MERGED into one row:
+       • primary basis = consolidated when it has a real P&L, else standalone
+       • a whole section (annual P&L / quarters / BS / CF / holding) missing on
+         the primary page is taken from the other page
+       • single missing values (ratios etc.) are filled from the other page
+       • headline standalone numbers are always kept as SA_* columns
+M-3  The output CSV is a MASTER file: one row per stock, upserted every run.
+       • new scrape wins for every value it has
+       • dated history columns that screener no longer shows (old quarters /
+         years / holdings) are KEPT, so history grows beyond screener's window
+       • a failed scrape keeps the stock's previous good row (STALE flag)
+M-4  Before the CSV is touched, the previous file is snapshotted into
+     old_csv.zip as DDMMYY_<name>.csv (archive_csv.py).
+M-5  Removed the "delete CSV at 15:00/16:00 IST" block — the run is weekly now
+     and the master merge replaces it.  Progress is checkpointed to
+     .<name>_inprogress.jsonl so an interrupted run resumes.
+
 FIXES in this version vs the submitted code
 ────────────────────────────────────────────
 BUG-1  compute_composite: quality/stability haircut (step 7) now rechecks
@@ -56,8 +79,10 @@ Usage:
   python nifty500_pipeline.py --limit 20
 """
 
-import argparse, time, sys, re, io, math, logging, csv, os
+import argparse, time, sys, re, io, math, logging, csv, os, json, threading
 from pathlib import Path
+from urllib.parse import urldefrag
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 import requests
 import pandas as pd
@@ -79,7 +104,17 @@ log = logging.getLogger(__name__)
 # ══════════════════════════════════════════════════════════════════════════════
 SKIP_DOWNLOAD  = False
 REFRESH_DAYS   = 30
-REQUEST_DELAY  = 1.5
+REQUEST_DELAY  = 2.0     # pause between stocks (each stock = 2 parallel requests now)
+MAX_RETRIES    = 4       # per link, on 429 / 5xx / network error
+
+# All links scraped for every stock ({sym} is replaced by the symbol).
+# "#quarters" never reaches the server → same page as the base link, fetched once.
+SCREENER_LINKS = [
+    "https://www.screener.in/company/{sym}/",
+    "https://www.screener.in/company/{sym}/consolidated/",
+    "https://www.screener.in/company/{sym}/consolidated/#quarters",
+    "https://www.screener.in/company/{sym}/#quarters",
+]
 
 # ── Network constants ─────────────────────────────────────────────────────────
 INDEX = "niftymicrocap250"
@@ -93,15 +128,8 @@ NSE_CSV_URL  = f"https://nsearchives.nseindia.com/content/indices/ind_{INDEX}lis
 
 OUTPUT_FILE = f"{INDEX}_valuation.csv"
 
-# ── Delete stale output at startup ───────────────────────────────────────────
-try:
-    ist_time = datetime.now(ZoneInfo("Asia/Kolkata"))
-    if ist_time.hour == 15 or ist_time.hour == 16:
-        os.remove(OUTPUT_FILE)
-        print(f"{OUTPUT_FILE} File deleted at {ist_time.strftime('%Y-%m-%d %H:%M:%S')} IST")
-except Exception as e:
-    ist_time = datetime.now(ZoneInfo("Asia/Kolkata"))
-    print(f"Delete failed at {ist_time.strftime('%Y-%m-%d %H:%M:%S')} IST | Error: {e}")
+# ── (M-5) No more "delete CSV at startup" — the CSV is now a master file that is
+#    snapshotted to old_csv.zip and then upserted.  See build_master_csv().
 
 # ── Network headers ───────────────────────────────────────────────────────────
 NSE_HDR = {
@@ -431,32 +459,163 @@ def _all_q_rows(df, row_map, qcols, prefix=""):
     return result
 
 
-def scrape_screener(symbol: str, session: requests.Session) -> dict:
-    r = {"SYMBOL": symbol}
-    html = None
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 2a — FETCH ALL LINKS IN PARALLEL  (M-1)
+# ══════════════════════════════════════════════════════════════════════════════
 
-    for suffix in ["/consolidated/", "/"]:
-        url = f"{SCREENER_BASE}/company/{symbol}{suffix}"
+_tls = threading.local()
+
+def _session() -> requests.Session:
+    """One requests.Session per worker thread (Session is not thread-safe)."""
+    s = getattr(_tls, "s", None)
+    if s is None:
+        s = requests.Session()
+        s.headers.update(SCREENER_HDR)
+        _tls.s = s
+    return s
+
+def unique_links(symbol: str) -> list:
+    """SCREENER_LINKS for this symbol, '#fragment' stripped, duplicates removed, order kept."""
+    out = []
+    for tpl in SCREENER_LINKS:
+        u = urldefrag(tpl.format(sym=symbol))[0]
+        if u not in out:
+            out.append(u)
+    return out
+
+def _fetch(url: str):
+    """GET with retry/backoff on 429 / 5xx / network errors. Returns (final_url, html, error)."""
+    err = "not fetched"
+    for attempt in range(MAX_RETRIES):
         try:
-            resp = session.get(url, timeout=30)
-            if resp.status_code == 404: continue
+            resp = _session().get(url, timeout=30)
+            if resp.status_code == 404:
+                return None, None, "404"
+            if resp.status_code == 429 or resp.status_code >= 500:
+                ra = resp.headers.get("Retry-After", "")
+                wait = int(ra) if ra.isdigit() else 5 * (2 ** attempt)   # 5, 10, 20, 40 s
+                err = f"HTTP {resp.status_code}"
+                time.sleep(min(wait, 60))
+                continue
             resp.raise_for_status()
-            html = resp.text
-            r["SCREENER_URL"] = url
-            break
-        except Exception as e:
-            r["SCREENER_ERROR"] = str(e)
+            return resp.url, resp.text, None
+        except requests.RequestException as e:
+            err = str(e)
+            time.sleep(2 ** attempt)
+    return None, None, err
 
-    if not html:
-        r.setdefault("SCREENER_ERROR", "page not loaded")
-        return r
+def _page_type(url: str) -> str:
+    return "consolidated" if "/consolidated/" in (url or "") else "standalone"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 2b — MERGE CONSOLIDATED + STANDALONE  (M-2)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# dated history columns, e.g. A_PL_PAT_CR_MAR2024, Q_PL_PAT_CR_QJUN2025, SH_FII_PCT_QSEP2025
+_MONTHS   = "JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC"
+DATED_RE  = re.compile(rf"^(A_|Q_|B_|C_|SH_).*_Q?({_MONTHS})\d{{4}}$")
+_SECTION  = {"A_": "PL_ANNUAL", "Q_": "QUARTERS", "B_": "BALANCE_SHEET",
+             "C_": "CASH_FLOW", "SH_": "SHAREHOLDING"}
+
+# standalone headline numbers kept side-by-side as SA_<col>
+SA_COLS = ["PL_REVENUE_CR", "PL_EBITDA_CR", "PL_PAT_CR", "PL_PAT_REPORTED_CR", "PL_EPS_BASIC",
+           "PE", "BOOK_VALUE", "ROE_PCT", "ROCE_PCT", "LATEST_QUARTER",
+           "Q_PL_REVENUE_CR", "Q_PL_PAT_CR", "TTM_REVENUE_CR", "TTM_PAT_CR", "BS_TOTAL_BORROWINGS_CR"]
+
+def _section_of(key: str):
+    for p, name in _SECTION.items():
+        if key.startswith(p):
+            return name
+    return None
+
+def _has_pl(page: dict) -> bool:
+    """True when the page carried a real annual P&L (some screener consolidated pages are empty)."""
+    if not page or page.get("PL_PAT_REPORTED_CR") is None:
+        return False
+    return sum(1 for k, v in page.items()
+               if k.startswith("A_PL_PAT_CR_") and v is not None) >= 1
+
+def merge_pages(symbol: str, pages: dict, errors: dict) -> dict:
+    """
+    pages  = {"consolidated": {...parsed...}, "standalone": {...parsed...}}  (either may be missing)
+    errors = {url: error-string} for links that failed
+    """
+    cons, stand = pages.get("consolidated"), pages.get("standalone")
+
+    if cons and _has_pl(cons):
+        primary, secondary = cons, stand
+    elif stand and _has_pl(stand):
+        primary, secondary = stand, cons
+    else:
+        primary, secondary = (cons or stand), (stand if cons else None)
+
+    if primary is None:
+        return {"SYMBOL": symbol,
+                "SCREENER_ERROR": "; ".join(f"{u}: {e}" for u, e in errors.items()) or "page not loaded"}
+
+    merged = dict(primary)
+    if secondary:
+        primary_sections = {_section_of(k) for k, v in primary.items() if v is not None} - {None}
+        for k, v in secondary.items():
+            if v is None or k in ("SCREENER_URL", "SCREENER_PAGE_TYPE"):
+                continue
+            sec = _section_of(k)
+            if sec:
+                if sec not in primary_sections:      # whole section missing → take it
+                    merged[k] = v
+            elif merged.get(k) is None:              # single value missing → fill
+                merged[k] = v
+
+    for page_type, page in pages.items():
+        merged[f"SCREENER_URL_{page_type.upper()}"] = page.get("SCREENER_URL")
+    if stand:
+        for c in SA_COLS:
+            merged[f"SA_{c}"] = stand.get(c)
+
+    merged["SYMBOL"]             = symbol
+    merged["SCREENER_URL"]       = primary.get("SCREENER_URL")
+    merged["SCREENER_PAGE_TYPE"] = primary.get("SCREENER_PAGE_TYPE")
+    merged["DATA_SOURCES"]       = "+".join(t for t in ("consolidated", "standalone") if t in pages)
+    merged.pop("SCREENER_ERROR", None)
+    if errors:
+        merged["SCREENER_WARN"] = "; ".join(f"{u}: {e}" for u, e in errors.items())
+    return merged
+
+
+def scrape_screener(symbol: str, pool: ThreadPoolExecutor) -> dict:
+    """Fetch every unique link at once, parse each page, merge into one row."""
+    links   = unique_links(symbol)
+    results = list(pool.map(_fetch, links))
+    pages, errors = {}, {}
+    for asked, (final_url, html, err) in zip(links, results):
+        if not html:
+            if err != "404":
+                errors[asked] = err
+            continue
+        ptype = _page_type(final_url or asked)
+        if ptype in pages:          # e.g. /consolidated/ redirected to standalone → duplicate
+            continue
+        try:
+            pages[ptype] = _parse_screener_page(symbol, html, final_url or asked)
+        except Exception as e:      # one bad page must not kill the stock
+            errors[asked] = f"parse error: {e}"
+    return merge_pages(symbol, pages, errors)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 2c — PARSE ONE SCREENER PAGE  (unchanged logic from the old scraper)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _parse_screener_page(symbol: str, html: str, url: str) -> dict:
+    r = {"SYMBOL": symbol, "SCREENER_URL": url}
 
     soup = BeautifulSoup(html, "lxml")
 
     h1 = soup.find("h1")
     if h1: r["COMPANY_NAME"] = h1.get_text(strip=True)
 
-    r["SCREENER_PAGE_TYPE"] = "consolidated" if "/consolidated/" in r.get("SCREENER_URL","") else "standalone"
+    r["SCREENER_PAGE_TYPE"] = _page_type(url)
 
     for tag in soup.select("a[href*='/company/']"):
         href = str(tag.get("href", "")).lower()
@@ -792,116 +951,176 @@ def _load_existing_symbols(path: str) -> set:
     except: return set()
 
 
-def build_master_csv(nse_df, symbols, output_path,
-                     delay=REQUEST_DELAY, force_refresh=False):
-    """
-    Identical row-by-row DictWriter behaviour as the original working code:
-      - Appends each scraped row immediately to disk (Ctrl+C safe, resume-safe)
-      - Skips symbols already in the CSV
-      - Tracks DATE_DOWNLOADED per row
-
-    BUG-4 fix (column truncation) is handled with a post-loop re-merge:
-      After all rows are written, we read the full CSV back, union its columns
-      with any columns seen in new rows that the DictWriter may have dropped
-      (because they appeared after the header was written), and rewrite once.
-      This keeps the streaming write intact while ensuring no column is lost.
-    """
-    out_path = Path(output_path)
-    today    = datetime.now().strftime("%Y-%m-%d")
-    existing = _load_existing_symbols(output_path) if not force_refresh else set()
-    if existing: log.info(f"  CSV already has {len(existing)} symbols — skipping those")
-
-    todo = [s for s in symbols if s.upper() not in existing]
-    if not todo:
-        log.info("  All symbols done.")
-        return pd.read_csv(output_path)
-
-    log.info(f"  Need: {len(todo)}  |  Done: {len(existing)}")
-    session = requests.Session()
-    session.headers.update(SCREENER_HDR)
-
-    write_header = not out_path.exists() or force_refresh
-    if force_refresh and out_path.exists():
-        out_path.unlink()
-        write_header = True
-
-    errors        = 0
-    dw_fieldnames = None   # columns the DictWriter header was written with
-    overflow_rows = {}     # {sym: {extra_col: val}} for late-appearing columns
-    csv_file      = None
-
-    try:
-        csv_file = open(out_path, "a", newline="", encoding="utf-8")
-        writer   = None
-
-        for sym in tqdm(todo, desc="Screener.in", unit="stock"):
-            row = scrape_screener(sym, session)
-            row["DATE_DOWNLOADED"] = today
-
-            if writer is None:
-                # First row sets the DictWriter header — same as original code
-                dw_fieldnames = list(row.keys())
-                writer = csv.DictWriter(csv_file, fieldnames=dw_fieldnames,
-                                        extrasaction="ignore", lineterminator="\n")
-                if write_header:
-                    writer.writeheader()
-                    write_header = False
-            else:
-                # Save any keys that appeared AFTER the header was written
-                # so we can merge them back into the CSV after the loop.
-                extra = {k: v for k, v in row.items() if k not in dw_fieldnames}
-                if extra:
-                    overflow_rows[sym] = extra
-
-            writer.writerow(row)
-            csv_file.flush()
-
-            if "SCREENER_ERROR" in row: errors += 1
-            time.sleep(delay)
-
-    except KeyboardInterrupt:
-        log.warning("\n  ⚠ Interrupted — partial data saved to CSV")
-    finally:
-        if csv_file: csv_file.close()
-
-    log.info(f"  ✓ {len(todo)-errors} new rows  |  Errors: {errors}")
-
-    # ── Post-loop: read back, patch overflow columns with their actual values ──
-    try:
-        scraped_df = pd.read_csv(out_path)
-    except Exception:
-        scraped_df = pd.DataFrame()
-
-    if scraped_df.empty:
-        return scraped_df
-
-    # Merge overflow columns — use pd.concat (not repeated inserts) to avoid
-    # PerformanceWarning on highly-fragmented DataFrames.
-    if overflow_rows:
-        extra_cols: dict = {}
-        for sym, extras in overflow_rows.items():
-            idxs = scraped_df.index[scraped_df["SYMBOL"] == sym].tolist()
-            for col, val in extras.items():
-                if col not in extra_cols:
-                    extra_cols[col] = {}
-                for idx in idxs:
-                    extra_cols[col][idx] = val
-        if extra_cols:
-            import pandas as _pd
-            extra_df = _pd.DataFrame(extra_cols, index=scraped_df.index)
-            scraped_df = _pd.concat([scraped_df, extra_df], axis=1)
-
+# NSE list columns that are refreshed every run (screener's COMPANY_NAME is kept)
+def _nse_lookup(nse_df):
     sym_col = next((c for c in nse_df.columns if "SYMBOL" in c.upper()), None)
-    if sym_col:
-        nse_extra = nse_df[[c for c in nse_df.columns
-                             if c not in scraped_df.columns or c == sym_col]]
-        master = scraped_df.merge(nse_extra, left_on="SYMBOL", right_on=sym_col, how="left")
-    else:
-        master = scraped_df
+    if not sym_col:
+        return {}, []
+    cols = [c for c in nse_df.columns if c != sym_col]
+    look = {}
+    for _, row in nse_df.iterrows():
+        s = str(row[sym_col]).strip().upper()
+        look[s] = {c: row[c] for c in cols}
+    return look, cols
 
-    master.to_csv(output_path, index=False)
-    log.info(f"  ✓ Final CSV → {output_path}  ({len(master)} rows × {len(master.columns)} cols)")
+
+def _is_good(row: dict) -> bool:
+    """A scrape is usable when it has no error and at least a price or a P&L."""
+    if not row or row.get("SCREENER_ERROR"):
+        return False
+    return any(_safe(row.get(k)) is not None for k in ("CMP", "MARKET_CAP_CR", "PL_PAT_REPORTED_CR"))
+
+
+def merge_into_master(old_df: pd.DataFrame, new_rows: dict, nse_df: pd.DataFrame,
+                      index_symbols: list) -> pd.DataFrame:
+    """
+    (M-3) Upsert the fresh scrape into the existing master CSV.
+      index_symbols : every symbol currently in the index (row order follows this)
+      new_rows      : {SYMBOL: scraped dict} for this run
+    Rules per stock
+      fresh OK   → fresh values win; dated history cols missing from the fresh
+                   page are carried from the old row (same consolidated/standalone basis only)
+      fresh FAIL → old row kept as-is, LAST_SCRAPE_STATUS = STALE
+      not scraped this run (e.g. --limit) → old row kept as-is
+      not in index any more → dropped (it is still inside old_csv.zip)
+    """
+    old_rows = {}
+    if old_df is not None and not old_df.empty and "SYMBOL" in old_df.columns:
+        old_df = old_df[old_df["SYMBOL"].notna()].copy()
+        old_df["SYMBOL"] = old_df["SYMBOL"].astype(str).str.strip()
+        old_df = old_df.drop_duplicates(subset=["SYMBOL"], keep="first")
+        for rec in old_df.to_dict(orient="records"):
+            old_rows[rec["SYMBOL"].upper()] = {k: v for k, v in rec.items()
+                                               if not (isinstance(v, float) and math.isnan(v))}
+
+    nse_look, nse_cols = _nse_lookup(nse_df)
+    out, n_ok, n_stale, n_carried_cols = [], 0, 0, 0
+
+    for sym in index_symbols:
+        S   = str(sym).strip().upper()
+        new = new_rows.get(S)
+        old = old_rows.get(S)
+
+        if _is_good(new):
+            row = dict(new)
+            if old and old.get("SCREENER_PAGE_TYPE") in (None, new.get("SCREENER_PAGE_TYPE")):
+                for k, v in old.items():
+                    if DATED_RE.match(k) and row.get(k) is None:
+                        row[k] = v
+                        n_carried_cols += 1
+            row["LAST_SCRAPE_STATUS"] = "OK"
+            n_ok += 1
+        elif old:
+            row = dict(old)
+            if new is not None:
+                row["LAST_SCRAPE_STATUS"] = f"STALE (scrape failed {datetime.now():%Y-%m-%d})"
+                row["SCREENER_ERROR"]     = new.get("SCREENER_ERROR")
+                n_stale += 1
+        elif new is not None:
+            row = dict(new)
+            row["LAST_SCRAPE_STATUS"] = "FAILED"
+        else:
+            continue
+
+        for c, v in nse_look.get(S, {}).items():          # NSE columns: refresh
+            if c == "COMPANY_NAME" and row.get("COMPANY_NAME"):
+                continue
+            row[c] = v
+        out.append(row)
+
+    dropped = sorted(set(old_rows) - {str(s).strip().upper() for s in index_symbols})
+    if dropped:
+        log.info(f"  Dropped {len(dropped)} symbols no longer in {INDEX}: {', '.join(dropped[:15])}"
+                 + (" …" if len(dropped) > 15 else ""))
+    log.info(f"  Master: {len(out)} rows  |  fresh OK: {n_ok}  |  kept stale: {n_stale}  "
+             f"|  history cells carried: {n_carried_cols}")
+
+    master = pd.DataFrame(out)
+    # keep the familiar column order: old master order first, new columns after
+    if old_df is not None and not old_df.empty:
+        first = [c for c in old_df.columns if c in master.columns]
+        master = master[first + [c for c in master.columns if c not in first]]
+    if "SYMBOL" in master.columns:
+        master = master[["SYMBOL"] + [c for c in master.columns if c != "SYMBOL"]]
     return master
+
+
+def build_master_csv(nse_df, symbols, output_path,
+                     delay=REQUEST_DELAY, force_refresh=False, index_symbols=None):
+    """
+    1. snapshot the current CSV into old_csv.zip            (M-4)
+    2. scrape every symbol (all links in parallel, merged)    (M-1/M-2)
+       – each row is appended to .<name>_inprogress.jsonl so Ctrl+C / a crash
+         can resume; rows older than 2 days in that file are ignored
+    3. upsert into the master CSV                             (M-3)
+    force_refresh → ignore the checkpoint AND the old master (fresh rebuild)
+    """
+    out_path      = Path(output_path)
+    ckpt          = out_path.with_name(f".{out_path.stem}_inprogress.jsonl")
+    today         = datetime.now().strftime("%Y-%m-%d")
+    index_symbols = index_symbols or symbols
+
+    # ── 1. snapshot ──────────────────────────────────────────────────────────
+    try:
+        import archive_csv
+        archive_csv.snapshot(out_path)
+    except Exception as e:
+        log.warning(f"  Snapshot to old_csv.zip failed (continuing): {e}")
+
+    # ── 2. scrape ────────────────────────────────────────────────────────────
+    done = {}
+    if ckpt.exists() and not force_refresh:
+        cutoff = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
+        with open(ckpt, encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                if str(rec.get("DATE_DOWNLOADED", "")) >= cutoff:
+                    done[str(rec["SYMBOL"]).upper()] = rec
+        if done:
+            log.info(f"  Resuming — {len(done)} symbols already scraped in checkpoint")
+    elif ckpt.exists():
+        ckpt.unlink()
+
+    todo = [s for s in symbols if str(s).upper() not in done]
+    n_links = len(unique_links("X"))
+    log.info(f"  Need: {len(todo)}  |  Done: {len(done)}  |  links per stock: {n_links}")
+
+    errors = 0
+    try:
+        with ThreadPoolExecutor(max_workers=n_links) as pool, \
+             open(ckpt, "a", encoding="utf-8") as fh:
+            for sym in tqdm(todo, desc="Screener.in", unit="stock"):
+                row = scrape_screener(sym, pool)
+                row["DATE_DOWNLOADED"] = today
+                fh.write(json.dumps(row, default=str) + "\n")
+                fh.flush()
+                done[str(sym).upper()] = row
+                if not _is_good(row):
+                    errors += 1
+                time.sleep(delay)
+    except KeyboardInterrupt:
+        log.warning(f"\n  ⚠ Interrupted — progress kept in {ckpt.name}; re-run to resume. "
+                    f"{out_path.name} was NOT changed.")
+        sys.exit(1)
+
+    log.info(f"  ✓ scraped {len(todo)}  |  failed: {errors}")
+
+    # ── 3. upsert into master ────────────────────────────────────────────────
+    old_df = None
+    if out_path.exists() and not force_refresh:
+        try:
+            old_df = pd.read_csv(out_path, low_memory=False)
+        except Exception as e:
+            log.warning(f"  Could not read old master ({e}) — building fresh")
+
+    master = merge_into_master(old_df, done, nse_df, index_symbols)
+    master.to_csv(out_path, index=False)
+    ckpt.unlink(missing_ok=True)
+    log.info(f"  ✓ Master CSV → {out_path}  ({len(master)} rows × {len(master.columns)} cols)")
+    return pd.read_csv(out_path, low_memory=False)   # round-trip → same dtypes as --skip-fetch
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1740,27 +1959,24 @@ def main():
     args = ap.parse_args()
     out  = args.output
 
-    do_download = True
-    if args.skip_fetch or SKIP_DOWNLOAD:
-        do_download = False
-        log.info("Download skipped")
+    # --skip-fetch  → just re-score the existing master CSV
+    # (default)     → snapshot old CSV, scrape all links, upsert master, re-score
+    # --force-refresh → same, but ignore checkpoint + old master (fresh rebuild)
+    do_download = not (args.skip_fetch or SKIP_DOWNLOAD)
     if args.force_refresh:
         do_download = True
-
-    if do_download and not args.force_refresh:
-        age = _csv_age_days(out)
-        if age is not None and age < REFRESH_DAYS:
-            log.info(f"  CSV is {age}d old — using existing data")
-            do_download = True
+    if not do_download:
+        log.info("Download skipped — re-scoring existing CSV")
 
     if do_download:
         nse_df  = fetch_nifty500()
         sc      = next((c for c in nse_df.columns if "SYMBOL" in c.upper()), nse_df.columns[0])
-        symbols = nse_df[sc].dropna().unique().tolist()
-        if args.limit: symbols = symbols[:args.limit]
+        index_symbols = [str(s).strip() for s in nse_df[sc].dropna().unique().tolist()]
+        symbols = index_symbols[:args.limit] if args.limit else index_symbols
         master = build_master_csv(nse_df, symbols, out,
                                    delay=args.delay,
-                                   force_refresh=args.force_refresh)
+                                   force_refresh=args.force_refresh,
+                                   index_symbols=index_symbols)
     else:
         if not Path(out).exists():
             log.error(f"CSV not found: {out}"); sys.exit(1)
