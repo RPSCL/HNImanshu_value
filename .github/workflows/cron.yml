@@ -38,6 +38,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 330          # full run ≈ 1–1.5 h (≈1,250 stocks × 2 pages); GitHub max is 360
+    env:
+      # Telegram creds come from Settings → Secrets and variables → Actions (never written in this file)
+      TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TG_CHAT:  ${{ secrets.TELEGRAM_CHAT_ID }}
 
     steps:
       # ───────────────────────────────────────────
@@ -98,6 +102,26 @@ jobs:
       #                     upsert into the master CSV (each also snapshots its own CSV first)
       #    build.py → public/index.html + public/fundamentals.html
       # ───────────────────────────────────────────
+      # Broker credentials are given ONLY to this step (not job-wide), so npm / firebase never see them.
+      # Runs only once fetch_prices.py exists in the repo.
+      - name: "📈 Fetch prices (Angel / Kotak)"
+        if: steps.mode.outputs.mode == 'full' && hashFiles('fetch_prices.py') != ''
+        continue-on-error: true
+        env:
+          ANGEL_API_KEY:         ${{ secrets.ANGEL_API_KEY }}
+          ANGEL_CLIENT_CODE:     ${{ secrets.ANGEL_CLIENT_CODE }}
+          ANGEL_PIN:             ${{ secrets.ANGEL_PIN }}
+          ANGEL_TOTP_SECRET:     ${{ secrets.ANGEL_TOTP_SECRET }}
+          KOTAK_API_KEY:         ${{ secrets.KOTAK_API_KEY }}
+          KOTAK_CONSUMER_SECRET: ${{ secrets.KOTAK_CONSUMER_SECRET }}
+          KOTAK_MOBILE:          ${{ secrets.KOTAK_MOBILE }}
+          KOTAK_MPIN:            ${{ secrets.KOTAK_MPIN }}
+          KOTAK_TOTP_SECRET:     ${{ secrets.KOTAK_TOTP_SECRET }}
+          KOTAK_UCC:             ${{ secrets.KOTAK_UCC }}
+        run: |
+          pip install pyotp
+          python fetch_prices.py
+
       - name: "🚀 Full run (1)"
         if: steps.mode.outputs.mode == 'full'
         run: |
@@ -161,7 +185,7 @@ jobs:
         run: firebase deploy --project hnimanshu --only hosting --non-interactive 2>/dev/null
 
       # ───────────────────────────────────────────
-      # 6. TELEGRAM  (token + channel id embedded)
+      # 6. TELEGRAM  (token + channel id from repo secrets TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)
       #    full  → success message / failure message
       #    light → one-liner
       #    build → no message
@@ -171,8 +195,8 @@ jobs:
         if: steps.mode.outputs.mode == 'full' && success()
         continue-on-error: true
         run: |
-          curl -s -X POST "https://api.telegram.org/bot5588744140:AAFMzYGBbQDzZ_hYDf9d1WSTHmC3I-Z3kZk/sendMessage" \
-            -d chat_id="-1002683944312" \
+          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT}" \
             -d text="https://hnimanshu-value.web.app/ %0A%0AWeekly full update completed 🚀 (standalone + consolidated merged)"
 
       - name: "📩 Telegram — full run success (details)"
@@ -180,8 +204,8 @@ jobs:
         continue-on-error: true
         run: |
           IST_NOW=$(TZ=Asia/Kolkata date '+%d %b %Y %I:%M %p IST')
-          curl -s -X POST "https://api.telegram.org/bot5588744140:AAFMzYGBbQDzZ_hYDf9d1WSTHmC3I-Z3kZk/sendMessage" \
-            --data-urlencode chat_id="-1002683944312" \
+          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            --data-urlencode chat_id="${TG_CHAT}" \
             --data-urlencode text="✅ Full run completed successfully
           Repo: https://github.com/RPSCL/HNImanshu_value
           Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -192,14 +216,14 @@ jobs:
         if: steps.mode.outputs.mode == 'light' && success()
         continue-on-error: true
         run: |
-          curl -s -X POST "https://api.telegram.org/bot5588744140:AAFMzYGBbQDzZ_hYDf9d1WSTHmC3I-Z3kZk/sendMessage" \
-            --data-urlencode chat_id="-1002683944312" \
+          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            --data-urlencode chat_id="${TG_CHAT}" \
             --data-urlencode text="https://hnimanshu-value.web.app/ website updated from github."
 
       - name: "📩 Telegram — full run failed"
         if: steps.mode.outputs.mode == 'full' && failure()
         continue-on-error: true
         run: |
-          curl -s -X POST "https://api.telegram.org/bot5588744140:AAFMzYGBbQDzZ_hYDf9d1WSTHmC3I-Z3kZk/sendMessage" \
-            -d chat_id="-1002683944312" \
+          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT}" \
             -d text="⚠️ Weekly full run FAILED — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
