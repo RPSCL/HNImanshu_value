@@ -40,7 +40,7 @@ jobs:
     timeout-minutes: 330          # full run ≈ 1–1.5 h (≈1,250 stocks × 2 pages); GitHub max is 360
     env:
       # Telegram creds come from Settings → Secrets and variables → Actions (never written in this file)
-            TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || vars.TELEGRAM_BOT_TOKEN }}   # Secrets tab first, falls back to the Variables tab
+      TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || vars.TELEGRAM_BOT_TOKEN }}   # Secrets tab first, falls back to the Variables tab
       TG_CHAT:  ${{ secrets.TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID }}       # chat id isn't sensitive, so a Variable is fine
 
     steps:
