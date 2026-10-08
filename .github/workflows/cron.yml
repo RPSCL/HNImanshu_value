@@ -94,6 +94,15 @@ jobs:
 
           echo "mode=light" >> $GITHUB_OUTPUT
 
+            # one-off check: shows whether the Telegram secret arrives, without ever printing it
+      - name: "🔎 Check Telegram secret"
+        continue-on-error: true
+        run: |
+          echo "TG_TOKEN length: ${#TG_TOKEN}  (0 = secret missing / wrong name / wrong tab; a real token is ~46)"
+          echo "TG_CHAT  length: ${#TG_CHAT}"
+          [[ "$TG_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]{30,}$ ]] && echo "format OK" || echo "format WRONG: remove any 'bot' prefix, quotes or spaces"
+          curl -s "https://api.telegram.org/bot${TG_TOKEN}/getMe"; echo   # ok:true + bot name = token works
+
       # ───────────────────────────────────────────
       # 3. RUN SCRIPTS
       #    archive_csv.py → snapshots the 3 CSVs into old_csv.zip as DDMMYY_<name>.csv
