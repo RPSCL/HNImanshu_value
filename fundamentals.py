@@ -1058,7 +1058,7 @@ const PRICE_KEYS = new Set(['cmp','pe','cpe','prem','indpe','pb','peg','gup','dy
 const fnNum = v => String(v).replace('-', 'm').replace('.', 'p');          // filename-safe: -30 -> m30, 0.5 -> 0p5
 const fnK = v => +v >= 1000 ? fnNum(+(v / 1000).toFixed(2)) + 'K' : fnNum(v); // 20000 -> 20K
 const FN_CODE = {
-  minMcap:v=>'mcap_'+fnK(v), maxPE:v=>'PE'+fnNum(v), maxPB:v=>'PB'+fnNum(v), minQ:v=>'RCE_ROE'+fnNum(v),
+  minMcap:v=>'mcap_'+fnK(v), maxMcap:v=>'maxmcap_'+fnK(v), maxPE:v=>'PE'+fnNum(v), maxPB:v=>'PB'+fnNum(v), minQ:v=>'RCE_ROE'+fnNum(v),
   minScore:v=>'SC'+fnNum(v), minTrend:v=>'MT'+fnNum(v), maxPrem:v=>'VSIND'+fnNum(v), maxPeg:v=>'PEG'+fnNum(v),
   minFcf:v=>'FCF'+fnNum(v), minDy:v=>'DY'+fnNum(v), minCc:v=>'CC'+fnNum(v), top:v=>'TOP'+fnNum(v),
   minChg:v=>'CHG'+fnNum(v), minNow:v=>'NOW'+fnNum(v), dir:v=>String(v).toUpperCase(),
@@ -1093,6 +1093,10 @@ function downloadCsv(name, cols, data, withIndex) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
+
+const mcapOk = (s, st) => (s.mcap || 0) >= (+st.minMcap || 0)
+  && (st.maxMcap === '' || st.maxMcap == null || +st.maxMcap === 0 || (s.mcap != null && s.mcap <= +st.maxMcap));   // Max Mcap blank / 0 = no cap
+const fMcap = st => fNum(st,'minMcap','Min Mcap ₹ Cr',{min:0,step:500,w:90}) + fNum(st,'maxMcap','Max Mcap ₹ Cr',{min:0,step:500,w:100});
 
 const TABLE_ROWS = 15;                                    // visible rows per table, the rest scrolls
 function makeTable(id, cols, rows, opt={}) {
@@ -1323,10 +1327,12 @@ function filterBox(o, rerender) {
   const {key, def} = o;
   const st = lsJson(key, def);
   const presets = (o.presets || []).filter(p => !BACK || !p.price);     // price-based screens make no sense 1Y back
-  const isOn = p => Object.entries(Object.assign({}, def, p.st)).every(([k, v]) => String(st[k]) === String(v));
+  const unset = v => v === '' || v == null || v === 0;                 // blank box and 0 both mean "no filter"
+  const same = (a, b) => (unset(a) && unset(b)) || String(a) === String(b);
+  const isOn = p => Object.entries(Object.assign({}, def, p.st)).every(([k, v]) => same(st[k], v));
   const active = presets.find(isOn);
   const moreHtml = o.more ? o.more(st) : '';
-  const nMore = (o.moreKeys || []).filter(k => String(st[k]) !== String(def[k])).length;
+  const nMore = (o.moreKeys || []).filter(k => typeof def[k] === 'boolean' ? st[k] !== def[k] : !unset(st[k])).length;
   const f = document.createElement('div'); f.className = 'fbox';
   f.innerHTML =
       (presets.length ? `<div class="presets"><span class="t">Screens</span>` + presets.map((p, i) =>
@@ -1360,7 +1366,7 @@ function filterBox(o, rerender) {
 }
 
 /* ---------- VALUE SCREEN ---------- */
-const VF_DEF = {maxPE:'', maxPB:'', minQ:12, minScore:0, minFcf:'', minMcap:0, trap:true, graham:false, minTrend:'',
+const VF_DEF = {maxPE:'', maxPB:'', minQ:12, minScore:0, minFcf:'', minMcap:0, maxMcap:'', trap:true, graham:false, minTrend:'',
                 maxPrem:'', maxPeg:'', minDy:'', minCc:''};
 const VF_PRESETS = [
   {name:'Quality, fair price', tip:'ROCE (ROE for financials) ≥ 15%, Value score ≥ 60, no value-trap flags', st:{minQ:15, minScore:60}},
@@ -1384,9 +1390,9 @@ function valueView() {
     more: st => (BACK ? '' : fNum(st,'maxPB','Max PB',{min:0,step:0.5}) + fNum(st,'maxPrem','Max vs industry PE %',{step:5})
       + fNum(st,'maxPeg','Max PEG',{min:0,step:0.25}) + fNum(st,'minFcf','Min FCF yield %',{step:0.5})
       + fNum(st,'minDy','Min div yield %',{min:0,step:0.5}))
-      + fNum(st,'minCc','Min cash conv. x',{step:0.1}) + fNum(st,'minMcap','Min Mcap ₹ Cr',{min:0,step:500,w:90})
+      + fNum(st,'minCc','Min cash conv. x',{step:0.1}) + fMcap(st)
       + (BACK ? '' : fChk(st,'graham','Graham pass (PE × PB ≤ 22.5)')),
-    moreKeys: BACK ? ['minCc','minMcap'] : ['maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','minMcap','graham'],
+    moreKeys: BACK ? ['minCc','minMcap','maxMcap'] : ['maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','minMcap','maxMcap','graham'],
     extra: {label:'Scoring', build: el => {                 // industry PE method + score weights, out of the way
       const W = lsJson('vw', W_DEF);
       el.appendChild(pePicker());
@@ -1410,7 +1416,7 @@ function valueView() {
     && (BACK || vf.minFcf === '' || s.fin || (s.fcfy != null && s.fcfy >= vf.minFcf))
     && (vf.minCc === '' || s.fin || (s.cc != null && s.cc >= vf.minCc))
     && s.score >= (+vf.minScore || 0)
-    && (s.mcap || 0) >= (+vf.minMcap || 0)
+    && mcapOk(s, vf)
     && (!vf.trap || !trapReasons(s).length)
     && (BACK || !vf.graham || grahamPass(s))
     && trendOk(s, vf.minTrend));                                       // Trend is a filter here, never part of the score
@@ -1421,14 +1427,14 @@ function valueView() {
   view.appendChild(makeTable('value',
     [C.score, C.trend, C.sym, C.name, C.ind, C.cmp, C.pe, C.cpe, C.prem, C.pb, C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
     rows, {sortKey:'score', sortDir:-1, search:true, csv:() => csvName('Value_screen', vf, VF_DEF,
-      BACK ? ['minMcap','minQ','minScore','minTrend','minCc','trap']
-           : ['minMcap','maxPE','minQ','minScore','minTrend','maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','trap','graham'])}));
+      BACK ? ['minMcap','maxMcap','minQ','minScore','minTrend','minCc','trap']
+           : ['minMcap','maxMcap','maxPE','minQ','minScore','minTrend','maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','trap','graham'])}));
   if (BACK) hint('1 year back the score uses only the quality metrics as they stood then (ROCE / ROE, EPS growth, cash conversion), ranked within each industry. Green / red "since" columns show what the business did after that. Mcap filter uses today\'s market cap.');
   else hint('Value score = weighted percentile rank within the stock\'s own industry (hover a score for each part). Screens are one-click presets; any change turns them into Custom. FCF yield, cash conversion and core PE are not used for financials. Orange core PE = over 20% of profit is other income.');
 }
 
 /* ---------- MAGIC FORMULA ---------- */
-const MF_DEF = {exFin:true, minMcap:1000, top:50, trap:false, minTrend:''};
+const MF_DEF = {exFin:true, minMcap:1000, maxMcap:'', top:50, trap:false, minTrend:''};
 const MF_PRESETS = [
   {name:'Classic', tip:'Greenblatt as published: ex-financials, Mcap ≥ ₹1,000 Cr, top 30, nothing else', st:{top:30}},
   {name:'Magic + safety', tip:'Classic, then drop stocks with value-trap flags', st:{top:30, trap:true}},
@@ -1439,11 +1445,11 @@ function magicView() {
   pageTitle('Magic Formula');
   const mf = filterBox({
     key:'mf', def:MF_DEF, presets:MF_PRESETS,
-    main: st => fChk(st,'exFin','Exclude financials') + fNum(st,'top','Show top',{min:5,max:500,step:5}) + fNum(st,'minMcap','Min Mcap ₹ Cr',{min:0,step:500,w:90}),
+    main: st => fChk(st,'exFin','Exclude financials') + fNum(st,'top','Show top',{min:5,max:500,step:5}) + fMcap(st),
     more: st => fNum(st,'minTrend','Min Trend %',{min:0,max:100,step:10}) + fChk(st,'trap','Hide value traps'),
     moreKeys: ['minTrend','trap'],
   }, magicView);
-  const u = V().filter(s => (BACK || s.pe != null) && s.roce != null && s.roce > 0 && (s.mcap || 0) >= (+mf.minMcap || 0) && !(mf.exFin && s.fin));
+  const u = V().filter(s => (BACK || s.pe != null) && s.roce != null && s.roce > 0 && mcapOk(s, mf) && !(mf.exFin && s.fin));
   [...u].sort((a,b) => b.roce - a.roce).forEach((s,i) => s.rQ = i+1);
   if (BACK) {                                            // no PE a year back: rank on the ROCE half only
     u.forEach(s => { s.rEY = null; s.mf = s.rQ; });
@@ -1462,7 +1468,7 @@ function magicView() {
     C.sym, C.name, C.ind, C.cmp, C.pe, C.ey, {k:'rEY', label:'EY rank', v:s=>s.rEY, f:s=>`<span class="na">${s.rEY}</span>`},
     C.roce, {k:'rQ', label:'ROCE rank', v:s=>s.rQ, f:s=>`<span class="na">${s.rQ}</span>`},
     C.pb, C.dy, C.cagr, C.fcfy, C.score, C.trend, C.mcap, C.flags, C.spark], rows, {sortKey:'mfRank', sortDir:1, search:true, noIndex:true,
-    csv:() => csvName('Magic_formula', mf, MF_DEF, ['minMcap','top','exFin','minTrend','trap'])}));
+    csv:() => csvName('Magic_formula', mf, MF_DEF, ['minMcap','maxMcap','top','exFin','minTrend','trap'])}));
   if (BACK) hint('1 year back the Magic Formula is ranked on its quality half only (ROCE as it stood then, approximate), since PE needs a price. "Since" columns show how those businesses did afterwards.');
   else hint('Greenblatt: rank by earnings yield (100 ÷ PE) + rank by ROCE, lowest total wins. Uses PE instead of EBIT / EV because the CSV has no debt data. Trend and value-trap filters only remove stocks from the ranked list, they never change the ranks.');
 }
@@ -1485,7 +1491,7 @@ const jumpCell = {k:'jump', label:'Check', l:1, tip:'largest single-quarter move
 const hasJump = s => jumpOf(s) > D.jumpPP;
 const dirOk = (c, dir, m) => dir==='up' ? c >= Math.max(m, 0.01) : dir==='down' ? c <= -Math.max(m, 0.01) : Math.abs(c) >= m;
 
-const PR_DEF = {dir:'up', minChg:1, hideJump:true, maxPE:'', minMcap:0, minNow:''};
+const PR_DEF = {dir:'up', minChg:1, hideJump:true, maxPE:'', minMcap:0, maxMcap:'', minNow:''};
 const PR_PRESETS = [
   {name:'Insiders buying', tip:'Promoter holding up ≥ 1 pp, merger / OFS jumps hidden', st:{dir:'up', minChg:1}},
   {name:'Buying + cheap', price:1, tip:'Promoter up ≥ 0.5 pp and PE ≤ 20', st:{dir:'up', minChg:0.5, maxPE:20}},
@@ -1498,16 +1504,16 @@ function promoterView() {
     key:'pr', def:PR_DEF, presets:PR_PRESETS,
     main: st => fSel(st,'dir','Direction',[['up','Increasing'],['down','Decreasing'],['all','All']]) + fNum(st,'minChg','Min change pp',{min:0,step:0.5})
       + (BACK ? '' : fNum(st,'maxPE','Max PE',{min:0})),
-    more: st => fNum(st,'minNow','Min promoter % now',{min:0,step:5}) + fNum(st,'minMcap','Min Mcap ₹ Cr',{min:0,step:500,w:90})
+    more: st => fNum(st,'minNow','Min promoter % now',{min:0,step:5}) + fMcap(st)
       + fChk(st,'hideJump',`Hide jumps > ${D.jumpPP} pp in one quarter`),
-    moreKeys: ['minNow','minMcap','hideJump'],
+    moreKeys: ['minNow','minMcap','maxMcap','hideJump'],
   }, promoterView);
   const P = holdCols('pro', true), F = holdCols('fii', true), Dd = holdCols('dii', true);
   const all = V().filter(s => s.h && s.h.pro);
   const rows = all.filter(s => dirOk(s.h.pro.chg, f.dir, +f.minChg || 0)
       && (f.minNow === '' || s.h.pro.now >= f.minNow)
       && (BACK || f.maxPE === '' || (s.pe != null && s.pe <= f.maxPE))
-      && (s.mcap || 0) >= (+f.minMcap || 0)
+      && mcapOk(s, f)
       && (!f.hideJump || !hasJump(s)));
   stats([['Stocks shown', rows.length], ['Promoter ↑ ≥ 1 pp', all.filter(s=>s.h.pro.chg>=1).length],
          ['Promoter ↓ ≥ 1 pp', all.filter(s=>s.h.pro.chg<=-1).length], ['With holding history', all.length],
@@ -1517,11 +1523,11 @@ function promoterView() {
   view.appendChild(makeTable('promoter', [C.sym, C.name, C.ind, C.cmp, P.now, P.chg, P.chg1, P.ud, P.win, P.sp,
       Object.assign({}, F.chg, {label:'FII Δ'}), Object.assign({}, Dd.chg, {label:'DII Δ'}), C.pe, C.pb, C.dy, C.score, C.trend, C.mcap, jumpCell],
     rows, {sortKey:'prochg', sortDir: f.dir==='down' ? 1 : -1, search:true, sinceCols:[C.proD, C.patG, C.roeD],
-    csv:() => csvName('Promoter_holding', f, PR_DEF, ['minMcap','dir','minChg'].concat(BACK ? [] : ['maxPE'], ['minNow','hideJump']))}));
+    csv:() => csvName('Promoter_holding', f, PR_DEF, ['minMcap','maxMcap','dir','minChg'].concat(BACK ? [] : ['maxPE'], ['minNow','hideJump']))}));
   hint(`Δ = change in percentage points between the first and last quarter available (most stocks ~${fmt(median(all.map(s=>s.h.pro.yrs)),2)} years, see Period). Qtrs ↑ / ↓ counts quarter-on-quarter moves above 0.05 pp; steady creeping buying matters more than one jump.`);
 }
 
-const PU_DEF = {dir:'down', minChg:1, smart:false, hideJump:true, maxPE:'', minMcap:0};
+const PU_DEF = {dir:'down', minChg:1, smart:false, hideJump:true, maxPE:'', minMcap:0, maxMcap:''};
 const PU_PRESETS = [
   {name:'Smart money absorbing', tip:'Public % falling ≥ 1 pp while FII + DII rise', st:{dir:'down', minChg:1, smart:true}},
   {name:'Retail piling in', tip:'Public % rising ≥ 2 pp (often promoters or funds selling)', st:{dir:'up', minChg:2}},
@@ -1533,16 +1539,16 @@ function publicView() {
     key:'pu', def:PU_DEF, presets:PU_PRESETS,
     main: st => fSel(st,'dir','Direction',[['down','Falling'],['up','Rising'],['all','All']]) + fNum(st,'minChg','Min change pp',{min:0,step:0.5})
       + fChk(st,'smart','FII + DII rising'),
-    more: st => (BACK ? '' : fNum(st,'maxPE','Max PE',{min:0})) + fNum(st,'minMcap','Min Mcap ₹ Cr',{min:0,step:500,w:90})
+    more: st => (BACK ? '' : fNum(st,'maxPE','Max PE',{min:0})) + fMcap(st)
       + fChk(st,'hideJump',`Hide jumps > ${D.jumpPP} pp in one quarter`),
-    moreKeys: ['maxPE','minMcap','hideJump'],
+    moreKeys: ['maxPE','minMcap','maxMcap','hideJump'],
   }, publicView);
   const U = holdCols('pub', false), P = holdCols('pro', true);
   const all = V().filter(s => s.h && s.h.pub);
   const rows = all.filter(s => dirOk(s.h.pub.chg, f.dir, +f.minChg || 0)
       && (!f.smart || (smart(s) != null && smart(s) > 0))
       && (BACK || f.maxPE === '' || (s.pe != null && s.pe <= f.maxPE))
-      && (s.mcap || 0) >= (+f.minMcap || 0)
+      && mcapOk(s, f)
       && (!f.hideJump || !hasJump(s)));
   stats([['Stocks shown', rows.length], ['Public ↓ ≥ 1 pp', all.filter(s=>s.h.pub.chg<=-1).length],
          ['Public ↑ ≥ 1 pp', all.filter(s=>s.h.pub.chg>=1).length],
@@ -1553,12 +1559,12 @@ function publicView() {
       {k:'smart', label:'FII + DII Δ', tip:'smart money', v:smart, f:s=>ppPill(smart(s), true)},
       Object.assign({}, P.chg, {label:'Promoter Δ'}), C.pe, C.pb, C.dy, C.score, C.trend, C.mcap, jumpCell],
     rows, {sortKey:'pubchg', sortDir: f.dir==='up' ? -1 : 1, search:true, sinceCols:[C.patG, C.revG, C.roeD],
-    csv:() => csvName('Public_holding', f, PU_DEF, ['minMcap','dir','minChg','smart'].concat(BACK ? [] : ['maxPE'], ['hideJump']))}));
+    csv:() => csvName('Public_holding', f, PU_DEF, ['minMcap','maxMcap','dir','minChg','smart'].concat(BACK ? [] : ['maxPE'], ['hideJump']))}));
   hint('Public = retail and other non-institutional holders. Falling public % (green) = promoters or institutions absorbing shares; rising (red) = shares moving to retail. Strongest signal: public falling while FII + DII rise.');
 }
 
 /* ---------- IMPROVING (trend score) ---------- */
-const IM_DEF = {minTrend:70, minMcap:0, maxPE:'', exFin:false, trap:false};
+const IM_DEF = {minTrend:70, minMcap:0, maxMcap:'', maxPE:'', exFin:false, trap:false};
 const IM_PRESETS = [
   {name:'All green', tip:'Every check with data passed', st:{minTrend:100}},
   {name:'Mostly green', tip:'Trend ≥ 70%', st:{minTrend:70}},
@@ -1571,13 +1577,13 @@ function improvingView() {
   const f = filterBox({
     key:'im', def:IM_DEF, presets:IM_PRESETS,
     main: st => fNum(st,'minTrend','Min Trend %',{min:0,max:100,step:10}) + (BACK ? '' : fNum(st,'maxPE','Max PE',{min:0})) + fChk(st,'exFin','Exclude financials'),
-    more: st => fNum(st,'minMcap','Min Mcap ₹ Cr',{min:0,step:500,w:90}) + fChk(st,'trap','Hide value traps'),
-    moreKeys: ['minMcap','trap'],
+    more: st => fMcap(st) + fChk(st,'trap','Hide value traps'),
+    moreKeys: ['minMcap','maxMcap','trap'],
   }, improvingView);
   const all = V().filter(s => s.tr);
   const rows = all.filter(s => trendOk(s, f.minTrend)
       && (BACK || f.maxPE === '' || (s.pe != null && s.pe <= f.maxPE))
-      && (s.mcap || 0) >= (+f.minMcap || 0)
+      && mcapOk(s, f)
       && !(f.exFin && s.fin)
       && (!f.trap || !trapReasons(s).length));
   stats([['Stocks shown', rows.length], ['With a Trend score', all.length],
@@ -1586,7 +1592,7 @@ function improvingView() {
          ['Median Value score of list', fmt(median(rows.map(s=>s.score)),0)]], rows);
   view.appendChild(makeTable('improving', [C.trend, C.sym, C.name, C.ind, C.cmp, ...TR_KEYS.map(trCheck), C.pe, C.score, C.mcap, C.flags],
     rows, {sortKey:'trend', sortDir:-1, search:true, sinceCols:[C.patG, C.revG, C.roeD],
-    csv:() => csvName('Improving', f, IM_DEF, ['minMcap','minTrend'].concat(BACK ? [] : ['maxPE'], ['exFin','trap']))}));
+    csv:() => csvName('Improving', f, IM_DEF, ['minMcap','maxMcap','minTrend'].concat(BACK ? [] : ['maxPE'], ['exFin','trap']))}));
   hint(BACK ? 'Trend checks as they stood 1 year back, using only results published by then. "Since" columns show whether the improving businesses kept delivering.'
             : 'Trend = share of 7 pass / fail checks that are green (financials: 4). Each ✓ / ✗ shows its evidence; hover the Trend bar for all of them. Improving is not cheap: pair it with Value screen or Magic Formula. Cyclicals look best here right at a peak.');
 }
