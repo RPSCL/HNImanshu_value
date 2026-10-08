@@ -161,24 +161,45 @@ jobs:
         run: firebase deploy --project hnimanshu --only hosting --non-interactive 2>/dev/null
 
       # ───────────────────────────────────────────
-      # 6. TELEGRAM — full run only
+      # 6. TELEGRAM  (token + channel id embedded)
+      #    full  → success message / failure message
+      #    light → one-liner
+      #    build → no message
+      #    continue-on-error: a Telegram hiccup never fails the run
       # ───────────────────────────────────────────
       - name: "📩 Telegram — full run success"
         if: steps.mode.outputs.mode == 'full' && success()
-        env:
-          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TG_CHAT:  ${{ secrets.TELEGRAM_CHAT_ID }}
+        continue-on-error: true
         run: |
-          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-            -d chat_id="${TG_CHAT}" \
+          curl -s -X POST "https://api.telegram.org/bot5588744140:AAFMzYGBbQDzZ_hYDf9d1WSTHmC3I-Z3kZk/sendMessage" \
+            -d chat_id="-1002683944312" \
             -d text="https://hnimanshu-value.web.app/ %0A%0AWeekly full update completed 🚀 (standalone + consolidated merged)"
+
+      - name: "📩 Telegram — full run success (details)"
+        if: steps.mode.outputs.mode == 'full' && success()
+        continue-on-error: true
+        run: |
+          IST_NOW=$(TZ=Asia/Kolkata date '+%d %b %Y %I:%M %p IST')
+          curl -s -X POST "https://api.telegram.org/bot5588744140:AAFMzYGBbQDzZ_hYDf9d1WSTHmC3I-Z3kZk/sendMessage" \
+            --data-urlencode chat_id="-1002683944312" \
+            --data-urlencode text="✅ Full run completed successfully
+          Repo: https://github.com/RPSCL/HNImanshu_value
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          Time: ${IST_NOW}
+          Site: https://hnimanshu-value.web.app/"
+
+      - name: "📩 Telegram — light run"
+        if: steps.mode.outputs.mode == 'light' && success()
+        continue-on-error: true
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot5588744140:AAFMzYGBbQDzZ_hYDf9d1WSTHmC3I-Z3kZk/sendMessage" \
+            --data-urlencode chat_id="-1002683944312" \
+            --data-urlencode text="https://hnimanshu-value.web.app/ website updated from github."
 
       - name: "📩 Telegram — full run failed"
         if: steps.mode.outputs.mode == 'full' && failure()
-        env:
-          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TG_CHAT:  ${{ secrets.TELEGRAM_CHAT_ID }}
+        continue-on-error: true
         run: |
-          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-            -d chat_id="${TG_CHAT}" \
+          curl -s -X POST "https://api.telegram.org/bot5588744140:AAFMzYGBbQDzZ_hYDf9d1WSTHmC3I-Z3kZk/sendMessage" \
+            -d chat_id="-1002683944312" \
             -d text="⚠️ Weekly full run FAILED — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
