@@ -3,12 +3,20 @@ name: Smart Build & Deploy
 permissions:
   contents: write
 
+# never let two runs commit at the same time (a light run waits for the weekly full run)
+concurrency:
+  group: smart-build
+  cancel-in-progress: false
+
 on:
   schedule:
-    # 📰 00:00 IST (18:30 UTC previous day)
-    - cron: "30 18 * * *"
+    # 🚀 FULL — once a week, Saturday 00:00 IST  (= Friday 18:30 UTC)
+    - cron: "30 18 * * 5"
 
-    # 📊 Trading day runs (Mon–Fri)
+    # 📰 Light — 00:00 IST every other night  (Sun–Thu + Sat UTC = Mon–Fri + Sun IST)
+    - cron: "30 18 * * 0-4,6"
+
+    # 📊 Light — trading day runs (Mon–Fri)
     - cron: "45 3 * * 1-5"   # 09:15 IST
     - cron: "45 4 * * 1-5"   # 10:15 IST
     - cron: "45 7 * * 1-5"   # 13:15 IST
@@ -24,6 +32,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 330          # full run ≈ 1–1.5 h (≈1,250 stocks × 2 pages); GitHub max is 360
 
     steps:
       # ───────────────────────────────────────────
@@ -44,41 +53,41 @@ jobs:
 
       # ───────────────────────────────────────────
       # 2. DECIDE MODE
+      #    FULL  = the Saturday 00:00 IST schedule, or manual run with force_full=1
+      #    LIGHT = everything else (news + rebuild site from existing CSVs)
+      #    github.event.schedule = the exact cron string that fired, so a late
+      #    GitHub start (they are often 10–30 min late) still picks the right mode.
       # ───────────────────────────────────────────
       - name: Decide run mode
         id: mode
         run: |
           FORCE="${{ github.event.inputs.force_full }}"
           EVENT="${{ github.event_name }}"
+          SCHED="${{ github.event.schedule }}"
+          echo "event=$EVENT schedule='$SCHED' force=$FORCE  IST now: $(TZ=Asia/Kolkata date '+%a %d %b %H:%M')"
 
-          IST_H=$(TZ="Asia/Kolkata" date +"%H")
-          IST_M=$(TZ="Asia/Kolkata" date +"%M")
-          IST_TOTAL=$((IST_H * 60 + IST_M))
-          echo "IST time in minutes: $IST_TOTAL"
-
-          # 🚀 Manual force-full trigger (from OPC server or manual)
           if [ "$EVENT" = "workflow_dispatch" ] && [ "$FORCE" = "1" ]; then
-            echo "mode=full" >> $GITHUB_OUTPUT
-            exit 0
+            echo "mode=full" >> $GITHUB_OUTPUT; exit 0
           fi
 
-          # ⏱ Full run window — 15:30 IST only (930 min ± 7)
-          DIFF=$((IST_TOTAL - 930))
-          if [ "$DIFF" -ge -7 ] && [ "$DIFF" -le 7 ]; then
-            echo "mode=full" >> $GITHUB_OUTPUT
-            exit 0
+          if [ "$EVENT" = "schedule" ] && [ "$SCHED" = "30 18 * * 5" ]; then
+            echo "mode=full" >> $GITHUB_OUTPUT; exit 0
           fi
 
-          # Everything else → light (includes midnight, all trading crons)
           echo "mode=light" >> $GITHUB_OUTPUT
 
       # ───────────────────────────────────────────
       # 3. RUN SCRIPTS
-      # build.py now also writes public/fundamentals.html (via fundamentals.py)
+      #    archive_csv.py → snapshots the 3 CSVs into old_csv.zip as DDMMYY_<name>.csv
+      #                     and moves any loose dated CSV into the zip
+      #    n500 / nm250 / ns500 → scrape standalone + consolidated (parallel), merge,
+      #                     upsert into the master CSV (each also snapshots its own CSV first)
+      #    build.py → public/index.html + public/fundamentals.html
       # ───────────────────────────────────────────
-      - name: "🚀 Full run"
+      - name: "🚀 Full run (weekly)"
         if: steps.mode.outputs.mode == 'full'
         run: |
+          python archive_csv.py
           python -u fetch_news.py
           python n500.py
           python nm250.py
@@ -95,6 +104,7 @@ jobs:
       # 4. COMMIT & PUSH (both modes)
       # ───────────────────────────────────────────
       - name: Commit & push changes
+        if: always()
         continue-on-error: true
         run: |
           git config --global user.name  "github-actions"
@@ -110,9 +120,12 @@ jobs:
             niftymicrocap250_valuation.csv \
             niftysmallcap500_valuation.csv \
             multi_stock_news.csv \
-            public/
+            public/ || true
+          [ -f old_csv.zip ] && git add old_csv.zip
+          # dated CSVs now live inside old_csv.zip → remove any loose ones from git
+          git add -u -- '*.csv' || true
 
-          git diff --cached --quiet || git commit -m "Auto update [skip ci]"
+          git diff --cached --quiet || git commit -m "Auto update (${{ steps.mode.outputs.mode }}) [skip ci]"
           git push origin main || true
 
       # ───────────────────────────────────────────
@@ -129,7 +142,7 @@ jobs:
         run: firebase deploy --project hnimanshu --only hosting --non-interactive 2>/dev/null
 
       # ───────────────────────────────────────────
-      # 6. TELEGRAM — full run only (15:30 / OPC trigger)
+      # 6. TELEGRAM — weekly full run only
       # ───────────────────────────────────────────
       - name: "📩 Telegram — full run success"
         if: steps.mode.outputs.mode == 'full' && success()
@@ -139,4 +152,14 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT}" \
-            -d text="https://hnimanshu-value.web.app/ %0A%0AFull update completed 🚀"
+            -d text="https://hnimanshu-value.web.app/ %0A%0AWeekly full update completed 🚀 (standalone + consolidated merged)"
+
+      - name: "📩 Telegram — full run failed"
+        if: steps.mode.outputs.mode == 'full' && failure()
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT:  ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT}" \
+            -d text="⚠️ Weekly full run FAILED — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
