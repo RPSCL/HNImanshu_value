@@ -909,6 +909,7 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
   <a href="#/" data-t="home">Industries</a>
   <a href="#/value" data-t="value">Value screen</a>
   <a href="#/magic" data-t="magic">Magic Formula</a>
+  <a href="#/qv" data-t="qv">Quality-Value</a>
   <a href="#/promoter" data-t="promoter">Promoter holding</a>
   <a href="#/public" data-t="public">Public holding</a>
   <a href="#/improving" data-t="improving">Improving</a>
@@ -1053,7 +1054,7 @@ function perfStats(rows) {
           ['Median ROE change', signPP(medSince(rows,'roeD'))]];
 }
 /* in 1Y-back mode, price-based columns are dropped and the "since then" columns take the price column's place */
-const PRICE_KEYS = new Set(['cmp','pe','cpe','prem','indpe','pb','peg','gup','dy','ey','fcfy','from52','cheap','nPE','rEY']);
+const PRICE_KEYS = new Set(['qvV','cmp','pe','cpe','prem','indpe','pb','peg','gup','dy','ey','fcfy','from52','cheap','nPE','rEY']);
 /* ---------- CSV export: name encodes the tab + active filters, e.g. Value_screen_mcap_20K_RCE_ROE12_MT10.csv ---------- */
 const fnNum = v => String(v).replace('-', 'm').replace('.', 'p');          // filename-safe: -30 -> m30, 0.5 -> 0p5
 const fnK = v => +v >= 1000 ? fnNum(+(v / 1000).toFixed(2)) + 'K' : fnNum(v); // 20000 -> 20K
@@ -1064,6 +1065,8 @@ const FN_CODE = {
   minChg:v=>'CHG'+fnNum(v), minNow:v=>'NOW'+fnNum(v), dir:v=>String(v).toUpperCase(),
   trap:v=>v?'NOTRAPS':'TRAPS', graham:v=>v?'GRAHAM':'', exFin:v=>v?'EXFIN':'INCLFIN',
   smart:v=>v?'SMART':'', hideJump:v=>v?'NOJUMPS':'JUMPS',
+  minRoce:v=>'ROCE'+fnNum(v), minRoe:v=>'ROE'+fnNum(v), minRoeFin:v=>'ROEFIN'+fnNum(v), minIcov:v=>'ICR'+fnNum(v),
+  maxProDrop:v=>'PRODROP'+fnNum(v), exPsu:v=>v?'':'WITHPSU', peers:v=>v==='all'?'PEERSALL':'', showFail:v=>v?'WITHFAILS':'',
 };
 // numbers: kept when set and non-zero; tick boxes: only when changed from default; dropdowns: always
 function csvName(tab, st, def, keys) {
@@ -1073,7 +1076,7 @@ function csvName(tab, st, def, keys) {
     if (!code || v === '' || v == null) return;
     if (typeof v === 'boolean') { if (v !== def[k] && code(v)) parts.push(code(v)); return; }
     if (typeof v === 'number' && v === 0) return;
-    parts.push(code(v));
+    if (code(v)) parts.push(code(v));
   });
   return parts.join('_').replace(/[^A-Za-z0-9_.-]+/g, '_') + '.csv';
 }
@@ -1332,12 +1335,12 @@ function filterBox(o, rerender) {
   const isOn = p => Object.entries(Object.assign({}, def, p.st)).every(([k, v]) => same(st[k], v));
   const active = presets.find(isOn);
   const moreHtml = o.more ? o.more(st) : '';
-  const nMore = (o.moreKeys || []).filter(k => typeof def[k] === 'boolean' ? st[k] !== def[k] : !unset(st[k])).length;
+  const nMore = (o.moreKeys || []).filter(k => !same(st[k], def[k])).length;
   const f = document.createElement('div'); f.className = 'fbox';
   f.innerHTML =
       (presets.length ? `<div class="presets"><span class="t">Screens</span>` + presets.map((p, i) =>
-        `<button type="button" class="preset${p === active ? ' on' : ''}" data-p="${i}" title="${esc(p.tip || '')}">${esc(p.name)}</button>`).join('')
-        + (active ? '' : '<span class="preset-custom">Custom</span>') + '</div>' : '')
+        `<button type="button" class="preset${p === active ? ' on' : ''}" data-p="${i}" aria-pressed="${p === active}" title="${esc((p.tip || '') + (p === active ? ' (click again to switch off)' : ''))}">${esc(p.name)}</button>`).join('')
+        + (active || !Object.keys(def).some(k => !same(st[k], def[k])) ? '' : '<span class="preset-custom">Custom</span>') + '</div>' : '')   // defaults = no label
     + `<div class="frow"><span class="t">Filters</span>${o.main(st)}<span class="fbtns">`
     + (moreHtml ? `<button type="button" class="btn ghost" data-tog="more">More filters${nMore ? ` <b class="cnt">${nMore}</b>` : ''} <span class="car">▾</span></button>` : '')
     + (o.extra ? `<button type="button" class="btn ghost" data-tog="extra">${o.extra.label} <span class="car">▾</span></button>` : '')
@@ -1358,7 +1361,9 @@ function filterBox(o, rerender) {
     lsSet(key, JSON.stringify(st)); rerender();
   }));
   f.querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => {
-    lsSet(key, JSON.stringify(Object.assign({}, def, presets[+b.dataset.p].st))); rerender();
+    const p = presets[+b.dataset.p];
+    lsSet(key, p === active ? '{}' : JSON.stringify(Object.assign({}, def, p.st)));   // click the active screen again = switch it off
+    rerender();
   }));
   $('[data-reset]', f).addEventListener('click', () => { lsSet(key, '{}'); rerender(); });
   view.appendChild(f);
@@ -1471,6 +1476,109 @@ function magicView() {
     csv:() => csvName('Magic_formula', mf, MF_DEF, ['minMcap','maxMcap','top','exFin','minTrend','trap'])}));
   if (BACK) hint('1 year back the Magic Formula is ranked on its quality half only (ROCE as it stood then, approximate), since PE needs a price. "Since" columns show how those businesses did afterwards.');
   else hint('Greenblatt: rank by earnings yield (100 ÷ PE) + rank by ROCE, lowest total wins. Uses PE instead of EBIT / EV because the CSV has no debt data. Trend and value-trap filters only remove stocks from the ranked list, they never change the ranks.');
+}
+
+/* ---------- QUALITY-VALUE (strict): hard filters first, then 50% value + 50% quality ---------- */
+const QV_DEF = {minRoce:15, minRoe:15, minIcov:3.5, minCc:0.75, maxProDrop:1, top:30,
+                minRoeFin:14, exPsu:true, peers:'ind', minMcap:0, maxMcap:'', minTrend:'', trap:false, showFail:false};
+const QV_PRESETS = [
+  {name:'Strict (as written)', tip:'ROCE ≥ 15% and ROE ≥ 15% (financials ROE ≥ 14%), interest cover > 3.5x, cash conversion > 0.75x, promoter not down > 1 pp in 1Y, no PSU', st:{}},
+  {name:'Relaxed', tip:'ROCE / ROE ≥ 12%, interest cover > 2x, cash conversion > 0.6x, promoter not down > 2 pp', st:{minRoce:12, minRoe:12, minRoeFin:12, minIcov:2, minCc:0.6, maxProDrop:2}},
+  {name:'Strict + improving', tip:'Strict hard filters, then Trend ≥ 70%', st:{minTrend:70}},
+  {name:'Strict + no traps', tip:'Strict hard filters, then drop stocks with value-trap flags', st:{trap:true}},
+];
+const QV_LABEL = {pe:'PE', pb:'PB', fcf:'FCF yield', gr:'Graham upside', q:'ROCE (ROE fin.)', opm:'OPM change', inst:'FII + DII change 1Y'};
+const qvOpm = s => s.tr && s.tr.d && s.tr.d.opmD != null ? s.tr.d.opmD : s.opmT;           // TTM OPM vs a year ago, else vs 5Y avg
+const qvInst = s => { const a = hv(s,'fii','chg1'), b = hv(s,'dii','chg1'); return a == null && b == null ? null : (a || 0) + (b || 0); };
+const qvPro1 = s => hv(s,'pro','chg1');
+function qvFails(s, st) {                                  // hard filters: every reason a stock is out
+  const r = [], num = v => (v === '' || v == null) ? null : +v;
+  const below = (v, min, label) => { if (min == null) return; if (v == null) r.push('no ' + label); else if (v < min) r.push(label + ' < ' + min); };
+  if (st.exPsu && s.psu) r.push(s.psu === 'psu' ? 'PSU' : 'semi-PSU');
+  if (s.fin) below(s.roe, num(st.minRoeFin), 'ROE');
+  else {
+    below(s.roce, num(st.minRoce), 'ROCE');
+    below(s.roe, num(st.minRoe), 'ROE');
+    if (num(st.minIcov) != null && s.icov != null && s.icov <= num(st.minIcov)) r.push('interest cover ≤ ' + st.minIcov + 'x');   // no interest = debt-free = pass
+    if (num(st.minCc) != null) { if (s.cc == null) r.push('no cash-conversion data'); else if (s.cc <= num(st.minCc)) r.push('cash conv. ≤ ' + st.minCc + 'x'); }
+  }
+  const p = qvPro1(s);
+  if (num(st.maxProDrop) != null && p != null && p < -num(st.maxProDrop)) r.push('promoter sold ' + fmt(-p, 1) + ' pp in 1Y');
+  return r;
+}
+function qvScore(pass, st) {
+  const F = {pe:s=>s.pe, pb:s=>s.pb, fcf:s=>s.fin ? null : s.fcfy, gr:grahamUp, q:qual, opm:s=>s.fin ? null : qvOpm(s), inst:qvInst};
+  const VAL = [['pe',.2,false], ['pb',.2,false], ['fcf',.4,true], ['gr',.2,true]];      // value half: PE + PB 40, FCF yield 40, Graham 20
+  const QUAL = [['q',.4,true], ['opm',.3,true], ['inst',.3,true]];                    // quality half: ROCE / ROE 40, OPM 30, FII + DII 30
+  const sorted = arr => arr.filter(ok).sort((a,b) => a-b);
+  const all = {}, byInd = {};
+  Object.keys(F).forEach(k => all[k] = sorted(pass.map(F[k])));
+  pass.forEach(s => { const g = byInd[s.ind] = byInd[s.ind] || {}; Object.keys(F).forEach(k => (g[k] = g[k] || []).push(F[k](s))); });
+  Object.values(byInd).forEach(g => Object.keys(g).forEach(k => g[k] = sorted(g[k])));
+  const half = (s, parts, useInd) => {
+    let t = 0, w = 0, tot = 0; const out = {};
+    parts.forEach(([k, wt, hi]) => {
+      const v = F[k](s); if (k === 'fcf' && s.fin) return; if (k === 'opm' && s.fin) return;   // not applicable to financials
+      tot += wt; if (!ok(v)) return;
+      const peers = useInd && byInd[s.ind][k].length >= 4 ? byInd[s.ind][k] : all[k];        // small industry -> whole list
+      const p = pctl(peers, v, hi); out[k] = p; t += p * wt; w += wt;
+    });
+    return w && w >= 0.5 * tot ? {v: t / w * 100, parts: out} : null;
+  };
+  pass.forEach(s => {
+    const v = BACK ? null : half(s, VAL, st.peers === 'ind'), q = half(s, QUAL, false);
+    s.qvV = v ? v.v : null; s.qvQ = q ? q.v : null;
+    s.qvParts = Object.assign({}, v && v.parts, q && q.parts);
+    s.qv = BACK ? s.qvQ : (v && q ? (v.v + q.v) / 2 : null);
+  });
+}
+function qvView() {
+  setNav('qv'); view.innerHTML = '';
+  pageTitle(BACK ? 'Quality-Value, 1 year back' : 'Quality-Value (strict)');
+  const st = filterBox({
+    key:'qv', def:QV_DEF, presets:QV_PRESETS,
+    main: st => fNum(st,'minRoce','Min ROCE %') + fNum(st,'minRoe','Min ROE %') + fNum(st,'minIcov','Min int. cover x',{step:0.5})
+      + fNum(st,'minCc','Min cash conv. x',{step:0.05}) + fNum(st,'maxProDrop','Max promoter drop 1Y pp',{min:0,step:0.5})
+      + fNum(st,'top','Show top',{min:5,max:500,step:5}),
+    more: st => fNum(st,'minRoeFin','Financials: min ROE %') + fChk(st,'exPsu','Exclude PSU & semi-PSU')
+      + (BACK ? '' : fSel(st,'peers','Rank PE / PB',[['ind','within industry'],['all','across the list']]))
+      + fMcap(st) + fNum(st,'minTrend','Min Trend %',{min:0,max:100,step:10}) + fChk(st,'trap','Hide value traps')
+      + fChk(st,'showFail','Show failing stocks with reason'),
+    moreKeys: ['minRoeFin','exPsu','peers','minMcap','maxMcap','minTrend','trap','showFail'],
+  }, qvView);
+  const base = V().filter(s => (BACK || s.pe != null) && mcapOk(s, st));
+  base.forEach(s => { s.qv = s.qvV = s.qvQ = s.qvRank = null; s.qvParts = {}; });
+  const pass = base.filter(s => !qvFails(s, st).length);
+  qvScore(pass, st);
+  pass.filter(s => s.qv != null).sort((a,b) => b.qv - a.qv).forEach((s,i) => s.qvRank = i + 1);   // rank = pure composite
+  let rows = pass.filter(s => s.qv != null && (!st.trap || !trapReasons(s).length) && trendOk(s, st.minTrend))
+                 .sort((a,b) => a.qvRank - b.qvRank).slice(0, +st.top || 30);
+  if (st.showFail) rows = rows.concat(base.filter(s => qvFails(s, st).length));         // listed after the ranked ones, no rank
+  const shownRanked = rows.filter(s => s.qvRank);
+  stats([['Pass hard filters', `${pass.length} of ${base.length}`], ['Shown', shownRanked.length],
+         ...(BACK ? [] : [['Median PE of list', fmt(median(shownRanked.map(s=>s.pe)))], ['Median FCF yield', fmt(median(shownRanked.map(s=>s.fcfy))) + '%']]),
+         ['Median ROCE of list', fmt(median(shownRanked.map(qual))) + '%']], shownRanked);
+  const meter = (v, tip) => v == null ? NA : `<span class="meter"${tip ? ` title="${esc(tip)}"` : ''}><span>${fmt(v,0)}</span><i><b style="width:${Math.max(3, v).toFixed(0)}%"></b></i></span>`;
+  const tipOf = s => Object.entries(s.qvParts || {}).map(([k,p]) => QV_LABEL[k] + ': ' + Math.round(p*100)).join('\n');
+  const cols = [
+    {k:'qvRank', label:'Rank', l:1, v:s=>s.qvRank, f:s=>s.qvRank ? `<span class="rank ${s.qvRank<=10?'top':''}">${s.qvRank}</span>` : NA},
+    {k:'qv', label: BACK ? 'Quality score (then)' : 'QV score', tip:'50% value half + 50% quality half', v:s=>s.qv, f:s=>meter(s.qv, tipOf(s))},
+    {k:'qvV', label:'Value half', v:s=>s.qvV, f:s=>s.qvV==null ? NA : fmt(s.qvV,0)},
+    {k:'qvQ', label:'Quality half', v:s=>s.qvQ, f:s=>s.qvQ==null ? NA : fmt(s.qvQ,0)},
+    C.sym, C.name, C.ind, C.cmp, C.pe, C.prem, C.pb, C.fcfy, C.gup, C.q, C.roe,
+    {k:'icov', label:'Int. cover', v:s=>s.icov, f:s=>s.icov==null ? '<span class="na">no debt</span>' : fmt(s.icov,1)+'x'},
+    C.cc,
+    {k:'qvOpm', label:'OPM Δ', tip:'TTM operating margin vs a year ago, pp', v:qvOpm, f:s=>ppPill(s.fin ? null : qvOpm(s), true)},
+    {k:'qvInst', label:'FII + DII Δ 1Y', v:qvInst, f:s=>ppPill(qvInst(s), true)},
+    {k:'qvPro', label:'Promoter Δ 1Y', v:qvPro1, f:s=>ppPill(qvPro1(s), true)},
+    C.trend, C.mcap,
+    ...(st.showFail ? [{k:'qvWhy', label:'Hard filters', l:1, v:s=>qvFails(s, st).length, x:s=>qvFails(s, st).join('; ') || 'pass',
+        f:s=>{ const r = qvFails(s, st); return r.length ? `<span class="pill warn">${esc(r.join(' · '))}</span>` : '<span class="pill disc">pass</span>'; }}] : []),
+  ];
+  view.appendChild(makeTable('qv', cols, rows, {sortKey:'qvRank', sortDir:1, search:true, noIndex:true,
+    csv:() => csvName('Quality_value', st, QV_DEF, ['minMcap','maxMcap','minRoce','minRoe','minRoeFin','minIcov','minCc','maxProDrop','top','minTrend','exPsu','peers','trap','showFail'])}));
+  hint(BACK ? 'Hard filters as they stood 1 year back; only the quality half can be scored (no old prices). "Since" columns show how the survivors did afterwards.'
+            : 'Step 1: hard filters remove anything weak or risky. Step 2: survivors are ranked 50% on value (PE + PB 40, FCF yield 40, Graham upside 20) and 50% on quality (ROCE / ROE 40, OPM change 30, FII + DII change 30). Hover a QV score for its parts. No pledge or debt-to-equity data in the CSV, so those two rules are not applied.');
 }
 
 /* ---------- SHAREHOLDING TABS ---------- */
@@ -1654,6 +1762,21 @@ function methodView() {
   <p>Joel Greenblatt's method: rank all eligible stocks by earnings yield (highest = rank 1) and separately by ROCE (highest = rank 1), add the two ranks, lowest total is best.
   The original uses EBIT ÷ enterprise value; the CSV has no debt data so 100 ÷ PE is used. Financials are excluded by default because ROCE does not apply to them. Stocks need positive PE and ROCE.</p>
 
+  <h2>Quality-Value (strict)</h2>
+  <p>Two steps. <b>Hard filters</b> remove anything weak or risky; only survivors are scored. Defaults (all editable):</p>
+  <div class="wrap"><table><tr><th>Hard filter</th><th>Default</th></tr>
+  <tr><td>ROCE and ROE (non-financials)</td><td>both ≥ 15%</td></tr>
+  <tr><td>ROE (financials)</td><td>≥ 14%</td></tr>
+  <tr><td>Interest coverage (non-financials)</td><td>&gt; 3.5x; no interest expense counts as a pass</td></tr>
+  <tr><td>Cash conversion, Σ CFO ÷ Σ PAT over 5 FY (non-financials)</td><td>&gt; 0.75x</td></tr>
+  <tr><td>Promoter holding change over 1 year</td><td>not down more than 1 pp (no promoter: pass)</td></tr>
+  <tr><td>PSU / semi-PSU</td><td>excluded</td></tr></table></div>
+  <p><b>QV score = 50% value half + 50% quality half</b>, each a weighted percentile among the survivors.
+  Value half: PE 20 + PB 20 (lower better, ranked within industry by default, or across the list), FCF yield 40, Graham upside 20.
+  Quality half: ROCE (ROE for financials) 40, OPM change 30 (TTM vs a year ago), FII + DII change over 1 year 30.
+  Not applicable parts (FCF and OPM for financials) are skipped and the rest re-weighted. Promoter pledge and debt-to-equity are part of the original idea but are not in the CSV, so they are not applied.
+  1 year back only the quality half can be scored. Tick "Show failing stocks" to see every stock that was removed and why.</p>
+
   <h2>Promoter and public holding</h2>
   <p>Holding is already a percentage, so change is measured in <b>percentage points (pp)</b>, not CAGR: 52.1% → 55.3% = +3.2 pp. (A CAGR on a percentage blows up for small holdings, e.g. 2% → 4% would read as +100%.)</p>
   <div class="wrap"><table>
@@ -1731,6 +1854,7 @@ function route() {
   if (h.startsWith('#/industry/')) industryView(decodeURIComponent(h.slice(11)));
   else if (h === '#/value') valueView();
   else if (h === '#/magic') magicView();
+  else if (h === '#/qv') qvView();
   else if (h === '#/promoter') promoterView();
   else if (h === '#/public') publicView();
   else if (h === '#/improving') improvingView();
