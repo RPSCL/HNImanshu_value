@@ -25,9 +25,14 @@ on:
   workflow_dispatch:
     inputs:
       force_full:
-        description: "Force FULL run (1=yes)"
+        description: "Run mode:  0 = news + build + publish (light)  |  1 = FULL run  |  -1 = build + push only"
         required: false
+        type: choice
         default: "0"
+        options:
+          - "0"
+          - "1"
+          - "-1"
 
 jobs:
   build:
@@ -53,8 +58,12 @@ jobs:
 
       # ───────────────────────────────────────────
       # 2. DECIDE MODE
-      #    FULL  = the Saturday 00:00 IST schedule, or manual run with force_full=1
-      #    LIGHT = everything else (news + rebuild site from existing CSVs)
+      #    Manual run (force_full):
+      #       1  → full   (archive + news + scrape all 3 + build)
+      #       0  → light  (news + build)
+      #      -1  → build  (build only, no news, no scrape)
+      #    Schedule:
+      #       Saturday 00:00 IST cron → full, every other cron → light
       #    github.event.schedule = the exact cron string that fired, so a late
       #    GitHub start (they are often 10–30 min late) still picks the right mode.
       # ───────────────────────────────────────────
@@ -66,8 +75,13 @@ jobs:
           SCHED="${{ github.event.schedule }}"
           echo "event=$EVENT schedule='$SCHED' force=$FORCE  IST now: $(TZ=Asia/Kolkata date '+%a %d %b %H:%M')"
 
-          if [ "$EVENT" = "workflow_dispatch" ] && [ "$FORCE" = "1" ]; then
-            echo "mode=full" >> $GITHUB_OUTPUT; exit 0
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            case "$FORCE" in
+              1)  echo "mode=full"  >> $GITHUB_OUTPUT ;;
+              -1) echo "mode=build" >> $GITHUB_OUTPUT ;;
+              *)  echo "mode=light" >> $GITHUB_OUTPUT ;;
+            esac
+            exit 0
           fi
 
           if [ "$EVENT" = "schedule" ] && [ "$SCHED" = "30 18 * * 5" ]; then
@@ -84,7 +98,7 @@ jobs:
       #                     upsert into the master CSV (each also snapshots its own CSV first)
       #    build.py → public/index.html + public/fundamentals.html
       # ───────────────────────────────────────────
-      - name: "🚀 Full run (weekly)"
+      - name: "🚀 Full run (1)"
         if: steps.mode.outputs.mode == 'full'
         run: |
           python archive_csv.py
@@ -94,14 +108,19 @@ jobs:
           python ns500.py
           python build.py
 
-      - name: "⚡ Light run"
+      - name: "⚡ Light run — news + build (0)"
         if: steps.mode.outputs.mode == 'light'
         run: |
           python -u fetch_news.py
           python build.py
 
+      - name: "🔨 Build only (-1)"
+        if: steps.mode.outputs.mode == 'build'
+        run: |
+          python build.py
+
       # ───────────────────────────────────────────
-      # 4. COMMIT & PUSH (both modes)
+      # 4. COMMIT & PUSH (all modes)
       # ───────────────────────────────────────────
       - name: Commit & push changes
         if: always()
@@ -129,7 +148,7 @@ jobs:
           git push origin main || true
 
       # ───────────────────────────────────────────
-      # 5. FIREBASE DEPLOY (both modes, always silent)
+      # 5. FIREBASE DEPLOY (all modes, always silent)
       # ───────────────────────────────────────────
       - name: Setup Firebase
         run: |
@@ -142,7 +161,7 @@ jobs:
         run: firebase deploy --project hnimanshu --only hosting --non-interactive 2>/dev/null
 
       # ───────────────────────────────────────────
-      # 6. TELEGRAM — weekly full run only
+      # 6. TELEGRAM — full run only
       # ───────────────────────────────────────────
       - name: "📩 Telegram — full run success"
         if: steps.mode.outputs.mode == 'full' && success()
