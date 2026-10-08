@@ -713,6 +713,12 @@ body.day{
 .fpanel .bar{margin:0}
 .fpanel .frow{width:100%}
 
+/* table toolbar: search left, Download CSV right (same outline style as the screener's Export CSV) */
+.tbar{justify-content:space-between}
+.btn.csv{border-color:var(--brass);color:var(--brass);background:transparent;margin-left:auto}
+.btn.csv:hover{background:var(--brass);color:var(--bg)}
+@media (max-width:700px){.tbar{flex-wrap:nowrap}.tbar input[type=search]{flex:1;min-width:0}}
+
 /* table card: 15-row window + footer with count and help text */
 .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .card .wrap{border:0;border-radius:0;max-height:none}
@@ -1048,6 +1054,46 @@ function perfStats(rows) {
 }
 /* in 1Y-back mode, price-based columns are dropped and the "since then" columns take the price column's place */
 const PRICE_KEYS = new Set(['cmp','pe','cpe','prem','indpe','pb','peg','gup','dy','ey','fcfy','from52','cheap','nPE','rEY']);
+/* ---------- CSV export: name encodes the tab + active filters, e.g. Value_screen_mcap_20K_RCE_ROE12_MT10.csv ---------- */
+const fnNum = v => String(v).replace('-', 'm').replace('.', 'p');          // filename-safe: -30 -> m30, 0.5 -> 0p5
+const fnK = v => +v >= 1000 ? fnNum(+(v / 1000).toFixed(2)) + 'K' : fnNum(v); // 20000 -> 20K
+const FN_CODE = {
+  minMcap:v=>'mcap_'+fnK(v), maxPE:v=>'PE'+fnNum(v), maxPB:v=>'PB'+fnNum(v), minQ:v=>'RCE_ROE'+fnNum(v),
+  minScore:v=>'SC'+fnNum(v), minTrend:v=>'MT'+fnNum(v), maxPrem:v=>'VSIND'+fnNum(v), maxPeg:v=>'PEG'+fnNum(v),
+  minFcf:v=>'FCF'+fnNum(v), minDy:v=>'DY'+fnNum(v), minCc:v=>'CC'+fnNum(v), top:v=>'TOP'+fnNum(v),
+  minChg:v=>'CHG'+fnNum(v), minNow:v=>'NOW'+fnNum(v), dir:v=>String(v).toUpperCase(),
+  trap:v=>v?'NOTRAPS':'TRAPS', graham:v=>v?'GRAHAM':'', exFin:v=>v?'EXFIN':'INCLFIN',
+  smart:v=>v?'SMART':'', hideJump:v=>v?'NOJUMPS':'JUMPS',
+};
+// numbers: kept when set and non-zero; tick boxes: only when changed from default; dropdowns: always
+function csvName(tab, st, def, keys) {
+  const parts = [tab];
+  keys.forEach(k => {
+    const v = st[k], code = FN_CODE[k];
+    if (!code || v === '' || v == null) return;
+    if (typeof v === 'boolean') { if (v !== def[k] && code(v)) parts.push(code(v)); return; }
+    if (typeof v === 'number' && v === 0) return;
+    parts.push(code(v));
+  });
+  return parts.join('_').replace(/[^A-Za-z0-9_.-]+/g, '_') + '.csv';
+}
+const csvCell = v => {
+  if (v == null || (typeof v === 'number' && !isFinite(v))) return '';
+  if (typeof v === 'number') v = Math.round(v * 100) / 100;
+  const t = String(v);
+  return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+};
+function downloadCsv(name, cols, data, withIndex) {
+  const use = cols.filter(c => !c.noCsv);
+  const lines = [(withIndex ? ['#'] : []).concat(use.map(c => c.label)).map(csvCell).join(',')];
+  data.forEach((r, i) => lines.push((withIndex ? [i + 1] : []).concat(use.map(c => c.x ? c.x(r) : c.v(r))).map(csvCell).join(',')));
+  const blob = new Blob(['\ufeff' + lines.join('\n')], {type:'text/csv;charset=utf-8'});   // BOM so Excel shows ₹ / Δ correctly
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
 const TABLE_ROWS = 15;                                    // visible rows per table, the rest scrolls
 function makeTable(id, cols, rows, opt={}) {
   if (BACK) {
@@ -1060,11 +1106,20 @@ function makeTable(id, cols, rows, opt={}) {
     }
   }
   const box = document.createElement('div');
-  if (opt.search) {
-    const bar = document.createElement('div'); bar.className='bar';
-    bar.innerHTML = '<input type="search" placeholder="Filter by symbol / name / industry…" style="width:280px">';
-    const inp = $('input', bar); inp.value = searchState[id] || '';
-    inp.addEventListener('input', () => { searchState[id] = inp.value; draw(); });
+  let shown = rows;                                       // rows on screen after search + sort, used by the export
+  if (opt.search || opt.csv) {
+    const bar = document.createElement('div'); bar.className='bar tbar';
+    bar.innerHTML = (opt.search ? '<input type="search" placeholder="Filter by symbol / name / industry…" style="width:280px">' : '')
+      + (opt.csv ? `<button type="button" class="btn csv" title="Download the stocks in this table as CSV">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M6.5 1v7M6.5 8l-2.5-2.5M6.5 8l2.5-2.5M1.5 10.5h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="lg">Download </span>CSV</button>` : '');
+    const inp = $('input', bar);
+    if (inp) { inp.value = searchState[id] || ''; inp.addEventListener('input', () => { searchState[id] = inp.value; draw(); }); }
+    if (opt.csv) $('.csv', bar).addEventListener('click', () => {
+      const q = (searchState[id] || '').trim();
+      const name = opt.csv().replace(/\.csv$/, '') + (q ? '_q-' + q.replace(/[^A-Za-z0-9]+/g, '') : '') + '.csv';   // search text tagged too
+      downloadCsv(name, cols, shown, !opt.noIndex);
+    });
     box.appendChild(bar);
   }
   const card = document.createElement('div'); card.className = 'card';      // table + footer (count, help text)
@@ -1093,8 +1148,9 @@ function makeTable(id, cols, rows, opt={}) {
     });
     if (!data.length) tb.innerHTML = `<tr><td class="l na" colspan="${cols.length+1}">No stocks match these filters. Loosen a filter or press Reset.</td></tr>`;
     tbl.appendChild(tb);
+    shown = data;
     $('.tcount', foot).textContent = data.length + (data.length === 1 ? ' stock' : ' stocks') + (data.length > TABLE_ROWS ? ' · scroll for more' : '');
-    requestAnimationFrame(() => {                        // window = header + 15 rows, rest scrolls inside the card
+    (window.requestAnimationFrame || setTimeout)(() => {  // window = header + 15 rows, rest scrolls inside the card
       const r = tb.rows[0];
       if (r && r.offsetHeight) wrap.style.maxHeight = (tbl.tHead.offsetHeight + r.offsetHeight * TABLE_ROWS + 1) + 'px';
     });
@@ -1150,6 +1206,7 @@ const trendTip = s => TR_KEYS.map(k => {
 const trendCell = s => s.tr == null ? NA :
   `<span class="meter" title="${esc(trendTip(s))}"><span>${s.tr.pass}/${s.tr.of}</span><i><b style="width:${Math.max(3, s.tr.pct)}%"></b></i></span>`;
 const trCheck = k => ({k:'tc_'+k, label:TR_LABEL[k], v:s=>s.tr && s.tr.c[k]!=null ? s.tr.c[k] : null,
+  x:s => { const v = s.tr ? s.tr.c[k] : null; return v==null ? '' : (v ? 'PASS ' : 'FAIL ') + TR_DETAIL[k](s); },
   f:s => { const v = s.tr ? s.tr.c[k] : null; if (v==null) return NA;
            return `<span class="pill ${v?'disc':'prem'}">${v?'✓':'✗'} ${esc(TR_DETAIL[k](s))}</span>`; }});
 const trendOk = (s, min) => min === '' || min == null || (s.tr != null && s.tr.pct >= +min);
@@ -1159,7 +1216,7 @@ const C = {
   name: {k:'name', label:'Company', l:1, v:s=>s.name, f:s=>`<span class="co" title="${esc(s.name)}">${esc(s.name)}</span>`},
   ind: {k:'ind', label:'Industry', l:1, v:s=>s.ind, f:indLink},
   cmp: {k:'cmp', label:'CMP ₹', v:s=>s.cmp, f:s=>fmt(s.cmp,2)},
-  patG: {k:'patG', label:'Profit growth since', tip:'TTM profit now vs TTM profit a year earlier',
+  patG: {k:'patG', label:'Profit growth since', tip:'TTM profit now vs TTM profit a year earlier', x:s=>sv(s,'patL') || sv(s,'patG'),
          v:s=>sv(s,'patG') ?? (sv(s,'patL')==='turned profitable' ? 1e9 : null),
          f:s=>{const l=sv(s,'patL'); return l ? `<span class="pill ${l==='turned profitable'?'disc':'prem'}">${l}</span>` : pctPill(sv(s,'patG'), v=>v>=0);}},
   revG: {k:'revG', label:'Revenue growth since', tip:'TTM revenue now vs a year earlier', v:s=>sv(s,'revG'), f:s=>pctPill(sv(s,'revG'), v=>v>=0)},
@@ -1191,10 +1248,11 @@ const C = {
   dy: {k:'dy', label:'Div yield %', v:s=>s.dy, f:s=>s.dy==null?NA:(s.dy>=3?`<b class="up">${fmt(s.dy,2)}</b>`:fmt(s.dy,2))},
   ey: {k:'ey', label:'Earnings yld %', v:ey, f:s=>fmt(ey(s),2)},
   proChg: {k:'proChg', label:'Promoter Δ', tip:'promoter holding change over all quarters available', v:s=>hv(s,'pro','chg'), f:s=>ppPill(hv(s,'pro','chg'), true)},
-  flags: {k:'flags', label:'Value-trap flags', l:1, v:s=>trapReasons(s).length, f:s=>{
+  flags: {k:'flags', label:'Value-trap flags', l:1, v:s=>trapReasons(s).length, x:s=>trapReasons(s).join('; ') || 'clean', f:s=>{
     const r = trapReasons(s); return r.length ? `<span class="pill warn">${esc(r.join(' · '))}</span>` : '<span class="pill disc">clean</span>'; }},
-  spark: {k:'spark', label:'EPS trend', v:s=>null, f:epsSpark},
-  trend: {k:'trend', label:'Trend', tip:'improving-fundamentals checks passed (see Improving tab)', v:s=>s.tr?s.tr.pct+s.tr.of/100:null, f:trendCell},
+  spark: {k:'spark', label:'EPS trend', noCsv:1, v:s=>null, f:epsSpark},
+  trend: {k:'trend', label:'Trend', tip:'improving-fundamentals checks passed (see Improving tab)', v:s=>s.tr?s.tr.pct+s.tr.of/100:null,
+          x:s=>s.tr ? `${s.tr.pass}/${s.tr.of}` : '', f:trendCell},
 };
 
 /* ---------- views ---------- */
@@ -1235,10 +1293,10 @@ function homeView() {
     {k:'n', label:'Stocks', v:g=>g.n, f:g=>g.n},
     {k:'nPE', label:'With valid PE', v:g=>g.nPE, f:g=>g.nPE},
     {k:'mcap', label:'Total Mcap ₹ Cr', v:g=>g.mcap, f:g=>fmt(g.mcap,0)},
-    {k:'cheap', label:'Lowest-PE stock', l:1, v:g=>{const c=cheapest(g); return c?c.pe:null;}, f:g=>{const c=cheapest(g); return c?`${esc(c.sym)}${psuTag(c)} <span class="na">PE ${fmt(c.pe)}</span>`:NA;}},
+    {k:'cheap', label:'Lowest-PE stock', l:1, v:g=>{const c=cheapest(g); return c?c.pe:null;}, x:g=>{const c=cheapest(g); return c?`${c.sym} (PE ${fmt(c.pe)})`:'';}, f:g=>{const c=cheapest(g); return c?`${esc(c.sym)}${psuTag(c)} <span class="na">PE ${fmt(c.pe)}</span>`:NA;}},
   ];
   const rows = Object.values(industries).map(g => Object.assign(g, {sym:g.name, ind:g.name}));
-  view.appendChild(makeTable('home', cols, rows, {sortKey:'pe', sortDir:1, search:true,
+  view.appendChild(makeTable('home', cols, rows, {sortKey:'pe', sortDir:1, search:true, csv:() => 'Industries.csv',
     onRow: g => location.hash = '#/industry/' + encodeURIComponent(g.name), noIndex:true}));
   hint('Click an industry to see its stocks. Stocks with negative / missing PE are excluded from industry PE. The CSV has only broad sector buckets, so industry PE is a rough benchmark.');
 }
@@ -1252,7 +1310,7 @@ function industryView(name) {
          ['Cap-weighted PE', fmt(g.pe.weighted)], ['Median PB', fmt(g.medPB,2)], ['Stocks', g.n]], g.stocks.filter(vis));
   view.appendChild(pePicker());
   view.appendChild(makeTable('ind', [C.sym, C.name, C.cmp, C.pe, C.cpe, C.prem, C.pb, C.score, C.q, C.cagr, C.fcfy, C.dy, C.proChg, C.mcap, C.from52],
-    g.stocks.filter(vis), {sortKey:'pe', sortDir:1, search:true}));
+    g.stocks.filter(vis), {sortKey:'pe', sortDir:1, search:true, csv:() => csvName('Industry_' + g.name, {}, {}, [])}));
   hint('Sorted by PE, lowest first. Green = PE below industry PE (discount), red = above (premium).');
 }
 
@@ -1362,7 +1420,9 @@ function valueView() {
          ['Graham pass in list', rows.filter(grahamPass).length]], rows);
   view.appendChild(makeTable('value',
     [C.score, C.trend, C.sym, C.name, C.ind, C.cmp, C.pe, C.cpe, C.prem, C.pb, C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
-    rows, {sortKey:'score', sortDir:-1, search:true}));
+    rows, {sortKey:'score', sortDir:-1, search:true, csv:() => csvName('Value_screen', vf, VF_DEF,
+      BACK ? ['minMcap','minQ','minScore','minTrend','minCc','trap']
+           : ['minMcap','maxPE','minQ','minScore','minTrend','maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','trap','graham'])}));
   if (BACK) hint('1 year back the score uses only the quality metrics as they stood then (ROCE / ROE, EPS growth, cash conversion), ranked within each industry. Green / red "since" columns show what the business did after that. Mcap filter uses today\'s market cap.');
   else hint('Value score = weighted percentile rank within the stock\'s own industry (hover a score for each part). Screens are one-click presets; any change turns them into Custom. FCF yield, cash conversion and core PE are not used for financials. Orange core PE = over 20% of profit is other income.');
 }
@@ -1401,7 +1461,8 @@ function magicView() {
     {k:'mfRank', label:'Rank', l:1, v:s=>s.mfRank, f:s=>`<span class="rank ${s.mfRank<=10?'top':''}">${s.mfRank}</span>`},
     C.sym, C.name, C.ind, C.cmp, C.pe, C.ey, {k:'rEY', label:'EY rank', v:s=>s.rEY, f:s=>`<span class="na">${s.rEY}</span>`},
     C.roce, {k:'rQ', label:'ROCE rank', v:s=>s.rQ, f:s=>`<span class="na">${s.rQ}</span>`},
-    C.pb, C.dy, C.cagr, C.fcfy, C.score, C.trend, C.mcap, C.flags, C.spark], rows, {sortKey:'mfRank', sortDir:1, search:true, noIndex:true}));
+    C.pb, C.dy, C.cagr, C.fcfy, C.score, C.trend, C.mcap, C.flags, C.spark], rows, {sortKey:'mfRank', sortDir:1, search:true, noIndex:true,
+    csv:() => csvName('Magic_formula', mf, MF_DEF, ['minMcap','top','exFin','minTrend','trap'])}));
   if (BACK) hint('1 year back the Magic Formula is ranked on its quality half only (ROCE as it stood then, approximate), since PE needs a price. "Since" columns show how those businesses did afterwards.');
   else hint('Greenblatt: rank by earnings yield (100 ÷ PE) + rank by ROCE, lowest total wins. Uses PE instead of EBIT / EV because the CSV has no debt data. Trend and value-trap filters only remove stocks from the ranked list, they never change the ranks.');
 }
@@ -1412,10 +1473,10 @@ function holdCols(k, upGood) {
   return {
     now:  {k:k+'now', label:'Now %', v:s=>hv(s,k,'now'), f:s=>fmt(hv(s,k,'now'),2)},
     chg:  {k:k+'chg', label:'Δ full period', v:s=>hv(s,k,'chg'), f:s=>ppPill(hv(s,k,'chg'), upGood)},
-    win:  {k:k+'win', label:'Period', l:1, v:s=>hv(s,k,'yrs'), f:s=>sinceCell(s,k)},
+    win:  {k:k+'win', label:'Period', l:1, v:s=>hv(s,k,'yrs'), x:s=>s.h&&s.h[k] ? `${s.h[k].since} to ${s.h[k].till}` : '', f:s=>sinceCell(s,k)},
     chg1: {k:k+'chg1', label:'Δ last 1Y', v:s=>hv(s,k,'chg1'), f:s=>ppPill(hv(s,k,'chg1'), upGood)},
     ud:   {k:k+'ud', label:'Qtrs ↑ / ↓', v:s=>s.h&&s.h[k]?s.h[k].up-s.h[k].dn:null, f:s=>s.h&&s.h[k]?`<span class="${upGood?'up':'dn'}">${s.h[k].up}↑</span> <span class="${upGood?'dn':'up'}">${s.h[k].dn}↓</span>`:NA},
-    sp:   {k:k+'sp', label:'Trend', v:s=>null, f:s=>s.h&&s.h[k]?sparkLine(s.h[k].s, upGood?'var(--good)':'var(--accent)'):NA},
+    sp:   {k:k+'sp', label:'Trend', noCsv:1, v:s=>null, f:s=>s.h&&s.h[k]?sparkLine(s.h[k].s, upGood?'var(--good)':'var(--accent)'):NA},
   };
 }
 const jumpOf = s => Math.max(hv(s,'pro','jump')||0, hv(s,'pub','jump')||0);
@@ -1455,7 +1516,8 @@ function promoterView() {
   if (st && st.k === 'prochg') st.dir = f.dir==='down' ? 1 : -1;      // keep the biggest movers on top
   view.appendChild(makeTable('promoter', [C.sym, C.name, C.ind, C.cmp, P.now, P.chg, P.chg1, P.ud, P.win, P.sp,
       Object.assign({}, F.chg, {label:'FII Δ'}), Object.assign({}, Dd.chg, {label:'DII Δ'}), C.pe, C.pb, C.dy, C.score, C.trend, C.mcap, jumpCell],
-    rows, {sortKey:'prochg', sortDir: f.dir==='down' ? 1 : -1, search:true, sinceCols:[C.proD, C.patG, C.roeD]}));
+    rows, {sortKey:'prochg', sortDir: f.dir==='down' ? 1 : -1, search:true, sinceCols:[C.proD, C.patG, C.roeD],
+    csv:() => csvName('Promoter_holding', f, PR_DEF, ['minMcap','dir','minChg'].concat(BACK ? [] : ['maxPE'], ['minNow','hideJump']))}));
   hint(`Δ = change in percentage points between the first and last quarter available (most stocks ~${fmt(median(all.map(s=>s.h.pro.yrs)),2)} years, see Period). Qtrs ↑ / ↓ counts quarter-on-quarter moves above 0.05 pp; steady creeping buying matters more than one jump.`);
 }
 
@@ -1490,7 +1552,8 @@ function publicView() {
   view.appendChild(makeTable('public', [C.sym, C.name, C.ind, C.cmp, U.now, U.chg, U.chg1, U.ud, U.win, U.sp,
       {k:'smart', label:'FII + DII Δ', tip:'smart money', v:smart, f:s=>ppPill(smart(s), true)},
       Object.assign({}, P.chg, {label:'Promoter Δ'}), C.pe, C.pb, C.dy, C.score, C.trend, C.mcap, jumpCell],
-    rows, {sortKey:'pubchg', sortDir: f.dir==='up' ? -1 : 1, search:true, sinceCols:[C.patG, C.revG, C.roeD]}));
+    rows, {sortKey:'pubchg', sortDir: f.dir==='up' ? -1 : 1, search:true, sinceCols:[C.patG, C.revG, C.roeD],
+    csv:() => csvName('Public_holding', f, PU_DEF, ['minMcap','dir','minChg','smart'].concat(BACK ? [] : ['maxPE'], ['hideJump']))}));
   hint('Public = retail and other non-institutional holders. Falling public % (green) = promoters or institutions absorbing shares; rising (red) = shares moving to retail. Strongest signal: public falling while FII + DII rise.');
 }
 
@@ -1522,7 +1585,8 @@ function improvingView() {
          ...(BACK ? [] : [['Median PE of list', fmt(median(rows.map(s=>s.pe)))]]),
          ['Median Value score of list', fmt(median(rows.map(s=>s.score)),0)]], rows);
   view.appendChild(makeTable('improving', [C.trend, C.sym, C.name, C.ind, C.cmp, ...TR_KEYS.map(trCheck), C.pe, C.score, C.mcap, C.flags],
-    rows, {sortKey:'trend', sortDir:-1, search:true, sinceCols:[C.patG, C.revG, C.roeD]}));
+    rows, {sortKey:'trend', sortDir:-1, search:true, sinceCols:[C.patG, C.revG, C.roeD],
+    csv:() => csvName('Improving', f, IM_DEF, ['minMcap','minTrend'].concat(BACK ? [] : ['maxPE'], ['exFin','trap']))}));
   hint(BACK ? 'Trend checks as they stood 1 year back, using only results published by then. "Since" columns show whether the improving businesses kept delivering.'
             : 'Trend = share of 7 pass / fail checks that are green (financials: 4). Each ✓ / ✗ shows its evidence; hover the Trend bar for all of them. Improving is not cheap: pair it with Value screen or Magic Formula. Cyclicals look best here right at a peak.');
 }
