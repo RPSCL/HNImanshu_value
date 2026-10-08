@@ -557,6 +557,13 @@ def load_news(path: Path) -> dict:
     return news_map
 
 
+def js_safe(s: str) -> str:
+    """JSON text → safe inside an inline <script>: no '</script>' break-out, no raw U+2028/2029."""
+    return (s.replace("</", "<\\/")
+             .replace(" ", "\\u2028")
+             .replace(" ", "\\u2029"))
+
+
 def build_news_js(news_map: dict) -> str:
     """
     Render the NEWS_DATA JS block.
@@ -567,7 +574,7 @@ def build_news_js(news_map: dict) -> str:
 
     lines = ["// ── NEWS DATA ──", "var NEWS_DATA = {", "  '__default__': []"]
     for sym, items in sorted(news_map.items()):
-        safe_items = json.dumps(items, ensure_ascii=False, separators=(",", ":"))
+        safe_items = js_safe(json.dumps(items, ensure_ascii=False, separators=(",", ":")))
         lines.append(f",{json.dumps(sym)}:{safe_items}")
     lines.append("};")
     return "\n".join(lines)
@@ -688,7 +695,10 @@ def inject_news(html: str, news_js: str) -> str:
         re.DOTALL
     )
     if pattern.search(html):
-        return pattern.sub(news_js, html)
+        # lambda = insert news_js literally. A plain string here is treated as a regex
+        # replacement template, so "\n" / "\\" inside headlines became raw newlines /
+        # broken escapes inside JS strings → SyntaxError → whole page dead.
+        return pattern.sub(lambda _m: news_js, html, count=1)
     print("  [WARN] NEWS_DATA block not found via regex — appending before </script>")
     return html.replace('</script>', news_js + '\n</script>', 1)
 
@@ -743,9 +753,9 @@ def build(deploy=False):
     # ── Build DATASETS JS ──
     datasets_js = (
         "const DATASETS = {\n"
-        f"n500:{json.dumps(data_n500, separators=(',', ':'))},\n"
-        f"sc250:{json.dumps(data_sc250, separators=(',', ':'))},\n"
-        f"mc250:{json.dumps(data_mc250, separators=(',', ':'))}\n"
+        f"n500:{js_safe(json.dumps(data_n500, separators=(',', ':')))},\n"
+        f"sc250:{js_safe(json.dumps(data_sc250, separators=(',', ':')))},\n"
+        f"mc250:{js_safe(json.dumps(data_mc250, separators=(',', ':')))}\n"
         "};"
     )
 
