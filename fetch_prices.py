@@ -63,6 +63,12 @@ def log(msg):
 	print(msg, flush=True)
 
 
+def mask(v, keep=2):
+	"""'H62425962' -> 'H6*****62' : enough to recognise which account, never the full value."""
+	v = str(v or "")
+	return (v[:keep] + "*" * max(len(v) - 2 * keep, 3) + v[-keep:]) if len(v) > 2 * keep else "*" * len(v)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Symbols + dates from the valuation CSVs
 # ─────────────────────────────────────────────────────────────────────────────
@@ -138,11 +144,23 @@ class Angel:
 		self.login()
 
 	def login(self):
-		self.api = self._api(api_key=self._c["api_key"])
-		res = self.api.generateSession(self._c["username"], self._c["pwd"], self._totp(self._c["totp_token"]))
+		c = self._c
+		log("── Angel login ─────────────────────────────────────────")
+		log(f"  1/4 credentials loaded   client {mask(c['username'])}  |  API key {mask(c['api_key'])}"
+		    f"  |  PIN {len(str(c['pwd']))} digits  |  TOTP secret {len(str(c['totp_token']))} chars")
+		self.api = self._api(api_key=c["api_key"])
+		log("  2/4 SmartConnect created")
+		code = self._totp(c["totp_token"])
+		log(f"  3/4 TOTP generated       {len(code)} digits (valid ~30 s)")
+		res = self.api.generateSession(c["username"], c["pwd"], code)
 		if not res or not res.get("status"):
+			log(f"  4/4 generateSession      FAILED  message: {(res or {}).get('message')}  errorcode: {(res or {}).get('errorcode')}")
 			raise RuntimeError(f"Angel login failed: {(res or {}).get('message')} ({(res or {}).get('errorcode')})")
-		log("Angel login OK")
+		data = res.get("data") or {}
+		who = data.get("name") or data.get("clientcode") or ""
+		log(f"  4/4 generateSession      OK  {('logged in as ' + str(who)) if who else ''}"
+		    f"  |  session token received: {'yes' if data.get('jwtToken') or data.get('jwttoken') else 'n/a'}")
+		log("────────────────────────────────────────────────────────")
 
 	def candles(self, token, start: date, end: date):
 		"""Daily candles [(date, open, close, high)] between start and end, fetched in ~1-year chunks."""
@@ -236,7 +254,14 @@ def main():
 	if a.map_only:
 		return 0
 
-	old = {}
+	if OUT_CSV.exists():                                             # 1. archive the current prices.csv first …
+		try:
+			import archive_csv
+			archive_csv.snapshot(OUT_CSV)                            # → old_csv.zip / DDMMYY_prices.csv
+		except Exception as ex:
+			log(f"  Snapshot of {OUT_CSV.name} to old_csv.zip failed (continuing): {ex}")
+
+	old = {}                                                         # 2. … then update it
 	if OUT_CSV.exists():                                             # keep last good row if a fetch fails
 		try:
 			old = {r["SYMBOL"]: r for r in pd.read_csv(OUT_CSV).to_dict("records")}
@@ -249,17 +274,24 @@ def main():
 	for i, s in enumerate(todo, 1):
 		base = {"SYMBOL": s, "BACK_DATE": f"{back:%Y-%m-%d}", "FETCHED_AT": now_s}
 		if s not in tmap:
+			log(f"  [{i:>4}/{len(todo)}] {s:<14} no Angel token (not in scrip master as NSE EQ/BE/BZ/SM/ST)")
 			rows.append({**base, "STATUS": "NO ANGEL TOKEN"}); n_fail += 1
 			continue
 		asym, tok = tmap[s]
 		base.update({"ANGEL_SYMBOL": asym, "ANGEL_TOKEN": tok})
+		tag = f"  [{i:>4}/{len(todo)}] {s:<14} {asym:<18} token {tok:<8}"
 		try:
 			c = api.candles(tok, start, datetime.now(IST).date())
 			if not c:
 				raise RuntimeError("no candles")
-			rows.append({**base, **summarise(c, back)}); n_ok += 1
+			row = summarise(c, back)
+			rows.append({**base, **row}); n_ok += 1
+			p1 = f"1Y {row['PRICE_1Y']:>10,.2f} ({row['PRICE_1Y_DATE']})" if row.get("PRICE_1Y") is not None else "1Y        n/a"
+			ca = f"  split/bonus: {row['CORP_ACTIONS']}" if row.get("CORP_ACTIONS") else ""
+			log(f"{tag} LTP {row['LTP']:>10,.2f} ({row['LTP_DATE']})  {p1}  {len(c)} candles  {row['STATUS']}{ca}")
 		except Exception as ex:
 			n_fail += 1
+			log(f"{tag} FAILED  {str(ex)[:100]}")
 			prev = old.get(s)
 			if prev is not None and str(prev.get("STATUS", "")).startswith("OK"):
 				rows.append({**prev, "STATUS": f"STALE (fetch failed {now_s[:10]})"})
