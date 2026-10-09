@@ -786,6 +786,13 @@ def _parse_screener_page(symbol: str, html: str, url: str) -> dict:
         cash = _safe(r.get("BS_CASH_CR")) or 0
         r["NET_DEBT_CR"] = round(debt - cash, 2) if debt else None
 
+        # Debt ÷ equity: Screener's page doesn't show it, so derive it from the balance sheet
+        # (only when the Borrowings row was actually found; a missing row must not read as "no debt")
+        if r.get("BS_TOTAL_BORROWINGS_CR") is not None and not _safe(r.get("DEBT_TO_EQUITY")):
+            eq = (_safe(r.get("BS_SHARE_CAPITAL_CR")) or 0) + (_safe(r.get("BS_RESERVES_CR")) or 0)
+            if eq > 0:
+                r["DEBT_TO_EQUITY"] = round((_safe(r.get("BS_TOTAL_BORROWINGS_CR")) or 0) / eq, 2)
+
         curr_a = _safe(r.get("BS_TOTAL_CURR_ASSETS_CR"))
         curr_l = _safe(r.get("BS_TOTAL_CURR_LIAB_CR"))
         if curr_a and curr_l and curr_l != 0 and not r.get("CURRENT_RATIO"):

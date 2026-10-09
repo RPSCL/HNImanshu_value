@@ -445,9 +445,9 @@ def calc_final_score(df: pd.DataFrame) -> pd.DataFrame:
     qual_norm = (df["QUALITY_SCORE"] / 13.4 * 10).clip(0, 10)
 
     df["FINAL_SCORE"] = (
-        val_norm  * 4.0 +
-        piot_norm * 3.5 +
-        qual_norm * 2.5
+        val_norm  * 0.40 +      # weights must add up to 1.0 so FINAL_SCORE stays on 0–10
+        piot_norm * 0.35 +      # (4.0 / 3.5 / 2.5 gave 0–100, so every stock cleared the A ≥ 7.5 cut-off)
+        qual_norm * 0.25
     ).round(2)
 
     df["FINAL_RANK"] = (
