@@ -105,11 +105,11 @@ MONTHS = "JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC"
 MONTH_NUM = {m: i + 1 for i, m in enumerate(MONTHS.split("|"))}
 ANNUAL_FIELDS = ["B_BS_TOTAL_BORROWINGS_CR", "B_BS_SHARE_CAPITAL_CR",            # present once the scraper fix lands
                  "A_PL_EPS_BASIC", "A_PL_PAT_CR", "A_PL_PBT_CR", "A_PL_INTEREST_CR", "A_PL_OTHER_INCOME_CR",
-                 "A_PL_DIVIDEND_CR", "A_PL_OPM_PCT", "C_CF_OPERATING_CR", "C_CF_INVESTING_CR",
+                 "A_PL_DIVIDEND_CR", "A_PL_OPM_PCT", "A_PL_EBITDA_CR", "C_CF_OPERATING_CR", "C_CF_INVESTING_CR",
                  "B_BS_RESERVES_CR", "B_BS_TOTAL_ASSETS_CR",
                  "B_BS_NET_BLOCK_CR", "B_BS_CWIP_CR", "B_BS_INVESTMENTS_CR"]          # asset backing (fixed assets / investments once scraped)
 ANNUAL_RE = re.compile(r"^(%s)_(%s)(\d{4})$" % ("|".join(ANNUAL_FIELDS), MONTHS))
-QTR_RE = re.compile(r"^(Q_EPS_GENERIC|Q_PL_PAT_CR|Q_PL_REVENUE_CR|Q_PL_EBITDA_CR)_Q(%s)(\d{4})$" % MONTHS)   # EBITDA -> quarterly OPM
+QTR_RE = re.compile(r"^(Q_EPS_GENERIC|Q_PL_PAT_CR|Q_PL_REVENUE_CR|Q_PL_EBITDA_CR|Q_PL_GNPA_PCT|Q_PL_NNPA_PCT)_Q(%s)(\d{4})$" % MONTHS)   # NPA: banks, once scraped   # EBITDA -> quarterly OPM
 SH_RE = re.compile(r"^SH_(PROMOTER|FII|DII|PUBLIC)_PCT_Q(%s)(\d{4})$" % MONTHS)
 SH_KEY = {"PROMOTER": "pro", "PUBLIC": "pub", "FII": "fii", "DII": "dii"}
 
@@ -266,6 +266,66 @@ def assets_at(r, F, until=None):
     nb, cw = same("B_BS_NET_BLOCK_CR"), same("B_BS_CWIP_CR")
     return {"ta": ta[-1][2], "fa": (nb + (cw or 0)) if nb is not None else None,
             "inv": same("B_BS_INVESTMENTS_CR"), "fy": ta[-1][1]}
+
+
+def safety(r, F, acut, ref, fin):
+    """Graham-style safety numbers, from the yearly / quarterly rows known at the date (same function today and 1Y back).
+    de   = borrowings ÷ (reserves + share capital), latest FY (non-financials; needs the scraper's Borrowings rows)
+    pup  = (years profit rose, years compared) over the last 10 financial years
+    roa  = PAT ÷ total assets, latest FY (used for financials)
+    gnpa = latest quarterly Gross NPA % (banks; needs the scraper's NPA rows)"""
+    yr = lambda k: {p[0]: p[2] for p in series(r, F.get(k, []), acut)}
+    pat, ta, debt, res, cap = (yr(k) for k in ("A_PL_PAT_CR", "B_BS_TOTAL_ASSETS_CR", "B_BS_TOTAL_BORROWINGS_CR",
+                                                 "B_BS_RESERVES_CR", "B_BS_SHARE_CAPITAL_CR"))
+    out = {"de": None, "pup": None, "roa": None, "gnpa": None, "nnpa": None, "pcr": None, "q5": None, "q5n": 0, "debitda": None}
+    ys = sorted(pat)
+    if ys and (ref - ys[-1]).days <= MAX_STALE_DAYS:
+        run = [ys[-1]]                                              # unbroken yearly run, newest first
+        for d in reversed(ys[:-1]):
+            if 300 <= (run[-1] - d).days <= 430 and len(run) < 11:
+                run.append(d)
+            else:
+                break
+        run.reverse()
+        if len(run) >= 6:                                           # at least 5 year-on-year comparisons
+            out["pup"] = (sum(pat[b] > pat[a] for a, b in zip(run, run[1:])), len(run) - 1)
+        t = ys[-1]
+        if t in ta and ta[t] > 0:
+            out["roa"] = pat[t] / ta[t] * 100
+        eqy = lambda d: (res[d] + (cap.get(d) or share_cap(r) or 0)) if d in res else None
+        if not fin and t in debt and t in res:
+            eq = eqy(t)
+            if eq and eq > 0:
+                out["de"] = debt[t] / eq
+            ebitda = yr("A_PL_EBITDA_CR").get(t)
+            if ebitda is not None:
+                out["debitda"] = debt[t] / ebitda if ebitda > 0 else (0.0 if debt[t] <= 0 else 99.0)   # loss-making + debt = fail
+        # 5-year median ROCE (ROE for financials): one good year at the top of a cycle can't carry it
+        pbt, intr = yr("A_PL_PBT_CR"), yr("A_PL_INTEREST_CR")
+        vals = []
+        for d in [y for y in ys if y >= ys[-1] - pd.Timedelta(days=5 * 366)][-5:]:
+            if fin:
+                prev = [y for y in ys if 300 <= (d - y).days <= 430]
+                e1, e0 = eqy(d), (eqy(prev[-1]) if prev else None)
+                base = (e1 + e0) / 2 if (e1 and e0 and e0 > 0) else e1
+                if base and base > 0:
+                    vals.append(pat[d] / base * 100)
+            elif d in pbt and d in debt and d in res:                # true capital employed only, never the proxy
+                ce = (eqy(d) or 0) + debt[d]
+                if ce > 0:
+                    vals.append((pbt[d] + intr.get(d, 0)) / ce * 100)
+        if len(vals) >= 3:
+            out["q5"], out["q5n"] = float(pd.Series(vals).median()), len(vals)
+    if fin:
+        q = series(r, F.get("Q_PL_GNPA_PCT", []), (acut + pd.Timedelta(days=ANNUAL_LAG_DAYS - QUARTER_LAG_DAYS)) if acut is not None else None)
+        if q and (ref - q[-1][0]).days <= 200:
+            out["gnpa"] = q[-1][2]
+            n = {p[0]: p[2] for p in series(r, F.get("Q_PL_NNPA_PCT", []))}.get(q[-1][0])   # same quarter
+            if n is not None:
+                out["nnpa"] = n
+                if q[-1][2] > 0:                                    # provision coverage ≈ 1 − net NPA ÷ gross NPA
+                    out["pcr"] = max(0.0, (1 - n / q[-1][2]) * 100)
+    return out
 
 
 def series(row, cols, until=None):
@@ -686,6 +746,7 @@ def build_record(r, F, inp, fin):
     # asset backing: what the market pays for each rupee of assets on the books (non-financials only;
     # a lender's "assets" are its loan book). Fixed assets carry land at historical cost, so they understate it.
     a = assets_at(r, F, acut) if not fin else {}
+    sf = safety(r, F, acut, ref, fin)
     ratio = lambda x: (mcap / x) if (ok(mcap) and x and x > 0) else None
     pta, pfa = ratio(a.get("ta")), ratio(a.get("fa"))
     invp = (a["inv"] / mcap * 100) if (a.get("inv") is not None and ok(mcap) and mcap > 0) else None
@@ -716,6 +777,8 @@ def build_record(r, F, inp, fin):
         "divYrs": num(r["DIVIDEND_CONSECUTIVE_YRS"], 0), "fs": num(r["F_SCORE"], 0),
         "eps": [[p[1], round(p[2], 2)] for p in eps_run[-15:]] if len(eps_run) >= 2 else [],
         "h": h,
+        "q5": num(sf["q5"]), "debitda": num(sf["debitda"]),
+        "de": num(sf["de"]), "pup": list(sf["pup"]) if sf["pup"] else None, "roa": num(sf["roa"]), "gnpa": num(sf["gnpa"]), "nnpa": num(sf["nnpa"]), "pcr": num(sf["pcr"]),
         "pta": num(pta, 2), "pfa": num(pfa, 2), "invp": num(invp), "taFy": a.get("fy"),
         "tr": inp.get("trend"),
         "roceSrc": inp.get("roceSrc"),
@@ -1308,7 +1371,7 @@ const FN_CODE = {
   minChg:v=>'CHG'+fnNum(v), minNow:v=>'NOW'+fnNum(v), dir:v=>String(v).toUpperCase(),
   trap:v=>v?'NOTRAPS':'TRAPS', graham:v=>v?'GRAHAM':'', exFin:v=>v?'EXFIN':'INCLFIN',
   smart:v=>v?'SMART':'', hideJump:v=>v?'NOJUMPS':'JUMPS',
-  maxPta:v=>'MA'+fnNum(v), maxPfa:v=>'MFA'+fnNum(v), minInv:v=>'INV'+fnNum(v),
+  minQ5:v=>'RCE5Y'+fnNum(v), maxDebitda:v=>'DEBITDA'+fnNum(v), maxNnpa:v=>'NNPA'+fnNum(v), minPcr:v=>'PCR'+fnNum(v), minUp:v=>'UP'+fnNum(v), maxDe:v=>'DE'+fnNum(v), minRoa:v=>'ROA'+fnNum(v), maxNpa:v=>'NPA'+fnNum(v), maxPta:v=>'MA'+fnNum(v), maxPfa:v=>'MFA'+fnNum(v), minInv:v=>'INV'+fnNum(v),
   minRoce:v=>'ROCE'+fnNum(v), minRoe:v=>'ROE'+fnNum(v), minRoeFin:v=>'ROEFIN'+fnNum(v), minIcov:v=>'ICR'+fnNum(v),
   maxProDrop:v=>'PRODROP'+fnNum(v), exPsu:v=>v?'':'WITHPSU', peers:v=>v==='all'?'PEERSALL':'', showFail:v=>v?'WITHFAILS':'',
 };
@@ -1526,6 +1589,23 @@ const C = {
   from52: {k:'from52', label:'vs 52W high', v:s=>pctFrom(s.cmp,s.hi52), f:s=>{const p=pctFrom(s.cmp,s.hi52); return p==null?NA:fmt(p)+'%';}},
   score: {k:'score', label:'Value score', v:s=>s.score, f:scoreCell},
   pb: {k:'pb', label:'PB', v:s=>s.pb, f:s=>s.pb==null?'<span class="na">N/A</span>':fmt(s.pb,2)+(s.pbSrc==='derived'?'<span class="na">*</span>':'')},
+  pup: {k:'pup', label:'Profit ↑ yrs', tip:'Years profit (PAT) grew, out of the last 10 financial years (fewer if the history is shorter). Graham: at least 7 of 10.',
+        v:s=>s.pup ? s.pup[0] / s.pup[1] * 10 : null, x:s=>s.pup ? `${s.pup[0]}/${s.pup[1]}` : '',
+        f:s=>s.pup ? `<span class="pill ${s.pup[0] / s.pup[1] >= 0.7 ? 'disc' : s.pup[0] / s.pup[1] < 0.5 ? 'prem' : ''}">${s.pup[0]}/${s.pup[1]}</span>` : NA},
+  q5: {k:'q5', label:'ROCE 5Y med', tip:'Median of the last 5 financial years: ROCE = EBIT ÷ (equity + borrowings); ROE for financials. Shows the whole cycle, not one peak year. Graham screens: ≥ 12%.',
+       v:s=>s.q5, f:s=>s.q5==null ? NA : `<span class="pill ${s.q5 >= 12 ? 'disc' : s.q5 < 8 ? 'prem' : ''}">${fmt(s.q5)}</span>` + (s.fin ? ' <span class="na">ROE</span>' : '')},
+  debitda: {k:'debitda', label:'Debt ÷ EBITDA', tip:'Borrowings ÷ operating profit (EBITDA), latest financial year; non-financials. Graham screens: below 1.5x. Gross debt (Screener has no cash figure), so it is stricter than net debt ÷ EBITDA.',
+            v:s=>s.fin ? null : s.debitda, f:s=>s.fin || s.debitda==null ? NA : `<span class="pill ${s.debitda <= 1.5 ? 'disc' : s.debitda > 3 ? 'prem' : ''}">${s.debitda >= 99 ? 'loss' : fmt(s.debitda, 1) + 'x'}</span>`},
+  de: {k:'de', label:'Debt ÷ Equity', tip:'Borrowings ÷ (reserves + share capital), latest financial year; not used for financials. Graham: below 0.5.',
+       v:s=>s.fin ? null : s.de, f:s=>s.fin || s.de==null ? NA : `<span class="pill ${s.de <= 0.5 ? 'disc' : s.de > 1 ? 'prem' : ''}">${fmt(s.de, 2)}</span>`},
+  roa: {k:'roa', label:'ROA %', tip:'PAT ÷ total assets, latest financial year. Banks / NBFCs: 1.5%+ is strong.', v:s=>s.roa,
+        f:s=>s.roa==null ? NA : (s.fin ? `<span class="pill ${s.roa >= 1.5 ? 'disc' : s.roa < 1 ? 'prem' : ''}">${fmt(s.roa, 2)}</span>` : fmt(s.roa, 1))},
+  gnpa: {k:'gnpa', label:'Gross NPA %', tip:'Latest quarterly Gross NPA % (banks). Below 2% is clean.', v:s=>s.gnpa,
+         f:s=>s.gnpa==null ? NA : `<span class="pill ${s.gnpa <= 2 ? 'disc' : s.gnpa > 4 ? 'prem' : ''}">${fmt(s.gnpa, 2)}</span>`},
+  nnpa: {k:'nnpa', label:'Net NPA %', tip:'Latest quarterly Net NPA % (banks). Graham screens: below 1%.', v:s=>s.nnpa,
+         f:s=>s.nnpa==null ? NA : `<span class="pill ${s.nnpa <= 1 ? 'disc' : s.nnpa > 2 ? 'prem' : ''}">${fmt(s.nnpa, 2)}</span>`},
+  pcr: {k:'pcr', label:'PCR %', tip:'Provision coverage ≈ 1 − Net NPA ÷ Gross NPA (excludes technical write-offs, so a bank\'s reported PCR is usually higher). Graham screens: above 70%.', v:s=>s.pcr,
+        f:s=>s.pcr==null ? NA : `<span class="pill ${s.pcr >= 70 ? 'disc' : s.pcr < 50 ? 'prem' : ''}">${fmt(s.pcr, 0)}</span>`},
   pta: {k:'pta', label:'Mcap ÷ Assets', tip:'Market cap ÷ total assets on the latest balance sheet (non-financials). Below 1x = the market values the company at less than everything it owns on its books (before debts). Book values are at cost, so land bought long ago is understated.',
         v:s=>s.pta, f:s=>s.pta==null?NA:`<span class="pill ${s.pta<=1?'disc':s.pta<=3?'':'prem'}" title="Balance sheet ${esc(s.taFy||'')}">${fmt(s.pta,2)}x</span>`},
   pfa: {k:'pfa', label:'Mcap ÷ Fixed assets', tip:'Market cap ÷ (net block + CWIP): plant, buildings and land at book (historical) cost', v:s=>s.pfa,
@@ -1553,6 +1633,7 @@ const C = {
 };
 
 const has = k => S.some(s => s[k] != null);
+const safeCols = () => [C.q5, C.pup].concat(has('de') ? [C.de, C.debitda] : [], [C.roa], has('gnpa') ? [C.gnpa, C.nnpa, C.pcr] : []);
 const assetCols = () => [C.pta].concat(has('pfa') ? [C.pfa] : [], has('invp') ? [C.invp] : []);
 
 /* ---------- views ---------- */
@@ -1771,12 +1852,37 @@ document.addEventListener('keydown', e => {
 });
 
 /* ---------- VALUE SCREEN ---------- */
+const unsetF = v => v === '' || v == null;
+/* Graham safety: debt (non-financials), 10-year profit record (all), ROA + Gross NPA (financials).
+   A test whose data isn't scraped yet (no stock has it) is skipped, never silently failing everyone. */
+function safeOk(s, f) {
+  if (!unsetF(f.minQ5)) {                                 // 5Y median; until a category has it (non-financials need Borrowings) use this year's ROCE
+    const has5 = S.some(x => x.fin === s.fin && x.q5 != null);
+    const v = has5 ? s.q5 : qual(s);
+    const proxy = !has5 && !s.fin && s.roceSrc === 'ta';  // EBIT ÷ total assets reads ~30% low: don't judge on it
+    if (!proxy && !(v != null && v >= f.minQ5)) return false;
+  }
+  if (!s.fin && has('de') && (!unsetF(f.maxDe) || !unsetF(f.maxDebitda))) {   // leverage: debt ÷ equity OR debt ÷ EBITDA passes
+    const okDe = !unsetF(f.maxDe) && s.de != null && s.de <= f.maxDe;
+    const okEb = !unsetF(f.maxDebitda) && s.debitda != null && s.debitda <= f.maxDebitda;
+    if (!okDe && !okEb) return false;
+  }
+  if (!unsetF(f.minUp) && !(s.pup && s.pup[0] / s.pup[1] * 10 >= f.minUp - 1e-9)) return false;
+  if (s.fin && !unsetF(f.minRoa) && !(s.roa != null && s.roa >= f.minRoa)) return false;
+  if (s.fin && s.gnpa != null) {                          // banks (NBFCs have no NPA rows on Screener: judged on ROA)
+    if (!unsetF(f.maxNpa) && s.gnpa > f.maxNpa) return false;
+    if (!unsetF(f.maxNnpa) && s.nnpa != null && s.nnpa > f.maxNnpa) return false;
+    if (!unsetF(f.minPcr) && s.pcr != null && s.pcr < f.minPcr) return false;
+  }
+  return true;
+}
 const VF_DEF = {maxPE:'', maxPB:'', minQ:12, minScore:0, minFcf:'', minMcap:0, maxMcap:'', trap:true, graham:false, minTrend:'',
-                maxPrem:'', maxPeg:'', minDy:0.01, minCc:'', maxPta:'', maxPfa:'', minInv:''};
+                maxPrem:'', maxPeg:'', minDy:0.01, minCc:'', maxPta:'', maxPfa:'', minInv:'', maxDe:'', minUp:'', maxNpa:'', minRoa:'', minQ5:'', maxDebitda:'', maxNnpa:'', minPcr:''};
+const GRAHAM_SAFE = {minQ5:12, minUp:7, maxDe:1, maxDebitda:2.5, minRoa:1.5, maxNpa:2.5, maxNnpa:1, minPcr:70};   // Graham's safety tests, used by both Graham screens
 const VF_PRESETS = [
   {name:'Asset-backed', price:1, tip:'Market cap ≤ total assets on the books (Mcap ÷ Assets ≤ 1x), PB ≤ 1.5, ROCE ≥ 10%, pays a dividend, no value traps', st:{maxPta:1, maxPB:1.5, minQ:10}},
-  {name:'Graham defensive', price:1, tip:'PE × PB ≤ 22.5, pays a dividend, no value traps', st:{graham:true, minQ:''}},
-  {name:'Graham deep value', price:1, tip:'Graham pass (PE × PB ≤ 22.5) + Deep value (PE ≤ 15, PB ≤ 2, ROCE ≥ 10%) + pays a dividend, no value traps', st:{graham:true, maxPE:15, maxPB:2, minQ:10}},
+  {name:'Graham defensive', price:1, tip:'PE × PB ≤ 22.5, pays a dividend, 5-year median ROCE (ROE for financials) ≥ 12%, profit up in 7 of the last 10 years, debt ÷ equity < 1 or debt ÷ EBITDA < 2.5x; banks: Gross NPA < 2.5%, Net NPA < 1%, PCR > 70%; financials: ROA ≥ 1.5%; cash conversion ≥ 0.5x and no equity dilution (value-trap filter)', st:{graham:true, minQ:'', ...GRAHAM_SAFE}},
+  {name:'Graham deep value', price:1, tip:'Graham defensive + PE ≤ 15, PB ≤ 2', st:{graham:true, maxPE:15, maxPB:2, minQ:'', ...GRAHAM_SAFE}},
   {name:'Deep value', price:1, tip:'PE ≤ 15, PB ≤ 2, ROCE ≥ 10%, pays a dividend, no value traps', st:{maxPE:15, maxPB:2, minQ:10}},
 ];
 function valueView() {
@@ -1790,12 +1896,18 @@ function valueView() {
       + fNum(st,'maxPeg','Max PEG',{min:0,step:0.25}) + fNum(st,'minFcf','Min FCF yield %',{step:0.5})
       + fNum(st,'minDy','Min div yield %',{min:0,step:0.01}))
       + fNum(st,'minCc','Min cash conv. x',{step:0.1})
+      + fNum(st,'minQ5','Min ROCE 5Y median %',{min:0,step:1})
+      + fNum(st,'minUp','Min profit-up yrs (of 10)',{min:0,max:10,step:1})
+      + (has('de') ? fNum(st,'maxDe','Max debt ÷ equity',{min:0,step:0.1}) + fNum(st,'maxDebitda','…or max debt ÷ EBITDA x',{min:0,step:0.25}) : '')
+      + fNum(st,'minRoa','Financials: min ROA %',{min:0,step:0.25})
+      + (has('gnpa') ? fNum(st,'maxNpa','Banks: max Gross NPA %',{min:0,step:0.5}) + fNum(st,'maxNnpa','Banks: max Net NPA %',{min:0,step:0.25})
+          + fNum(st,'minPcr','Banks: min PCR %',{min:0,max:100,step:5}) : '')
       + (NOPRICE ? '' : fNum(st,'maxPta','Max Mcap ÷ Assets x',{min:0,step:0.25})
           + (has('pfa') ? fNum(st,'maxPfa','Max Mcap ÷ Fixed assets x',{min:0,step:0.25}) : '')
           + (has('invp') ? fNum(st,'minInv','Min Investments % Mcap',{min:0,step:10}) : ''))
       + fMcap(st)
       + (NOPRICE ? '' : fChk(st,'graham','Graham: PE×PB ≤ 22.5')),
-    moreKeys: NOPRICE ? ['minCc','minMcap','maxMcap'] : ['maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','maxPta','maxPfa','minInv','minMcap','maxMcap','graham'],
+    moreKeys: NOPRICE ? ['minCc','minQ5','minUp','maxDe','maxDebitda','minRoa','maxNpa','maxNnpa','minPcr','minMcap','maxMcap'] : ['maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','minQ5','minUp','maxDe','maxDebitda','minRoa','maxNpa','maxNnpa','minPcr','maxPta','maxPfa','minInv','minMcap','maxMcap','graham'],
     extra: {label:'Scoring', build: el => {                 // industry PE method + score weights, out of the way
       const W = lsJson('vw', W_DEF);
       el.appendChild(pePicker());
@@ -1821,6 +1933,7 @@ function valueView() {
     && (NOPRICE || vf.maxPta === '' || vf.maxPta == null || (s.pta != null && s.pta <= vf.maxPta))
     && (NOPRICE || vf.maxPfa === '' || vf.maxPfa == null || !has('pfa') || (s.pfa != null && s.pfa <= vf.maxPfa))
     && (NOPRICE || vf.minInv === '' || vf.minInv == null || !has('invp') || (s.invp != null && s.invp >= vf.minInv))
+    && safeOk(s, vf)
     && s.score >= (+vf.minScore || 0)
     && mcapOk(s, vf)
     && (!vf.trap || !trapReasons(s).length)
@@ -1831,10 +1944,10 @@ function valueView() {
          ['Median PE', fmt(median(rows.map(s=>s.pe)))], ['Median PB', fmt(median(rows.map(s=>s.pb)),2)],
          ['Graham pass', rows.filter(grahamPass).length]], rows);
   view.appendChild(makeTable('value',
-    [C.score, C.trend, C.sym, C.name, C.ind, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
+    [C.score, C.trend, C.sym, C.name, C.ind, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...safeCols(), ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
     rows, {sortKey:'score', sortDir:-1, search:true, csv:() => csvName('Value_screen', vf, VF_DEF,
-      NOPRICE ? ['minMcap','maxMcap','minQ','minScore','minTrend','minCc','trap']
-           : ['minMcap','maxMcap','maxPE','minQ','minScore','minTrend','maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','maxPta','maxPfa','minInv','trap','graham'])}));
+      NOPRICE ? ['minMcap','maxMcap','minQ','minScore','minTrend','minCc','minQ5','minUp','maxDe','maxDebitda','minRoa','maxNpa','maxNnpa','minPcr','trap']
+           : ['minMcap','maxMcap','maxPE','minQ','minScore','minTrend','maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','minQ5','minUp','maxDe','maxDebitda','minRoa','maxNpa','maxNnpa','minPcr','maxPta','maxPfa','minInv','trap','graham'])}));
   if (NOPRICE) hint('1 year back (no prices.csv yet) the score uses only the quality metrics as they stood then (ROCE / ROE, EPS growth, cash conversion), ranked within each industry. Green / red "since" columns show what the business did after that. Mcap filter uses today\'s market cap.');
   else hint('Value score = weighted percentile rank within the stock\'s own industry (hover a score for each part). Screens are one-click presets; any change turns them into Custom. FCF yield, cash conversion and core PE are not used for financials. Orange core PE = over 20% of profit is other income.');
 }
@@ -2246,7 +2359,18 @@ function methodView() {
   <div class="wrap"><table><tr><th>Metric</th><th>Better when</th><th>Weight</th><th>Used 1Y back?</th></tr>
   ${Object.keys(W_DEF).map(k => row(W_LABEL[k], METRICS[k].hi ? 'higher' : 'lower', W[k], (D.then.hasPrice || BACK_KEYS.includes(k)) ? 'yes' : '<b>no</b> (needs prices.csv)')).join('')}</table></div>
   <p><b>Filters</b> today: Max PE, Min ROCE / ROE, Min score, Min Trend %, Hide value traps; More: Max PB, Max vs industry PE %, Max PEG, Min FCF yield, Min div yield, Min cash conversion, Max Mcap ÷ Assets (plus Mcap ÷ Fixed assets / Investments % once scraped), Min / Max Mcap, Graham pass.
-  <b>Screens</b>: Asset-backed (Mcap ÷ Assets ≤ 1, PB ≤ 1.5, ROCE ≥ 10%), Graham defensive (PE × PB ≤ 22.5), Graham deep value (Graham + PE ≤ 15, PB ≤ 2, ROCE ≥ 10%), Deep value (PE ≤ 15, PB ≤ 2, ROCE ≥ 10%); all hide value traps. Click again to switch off. Min div yield starts at 0.01%, so every screen keeps only dividend payers unless you clear that box. All fields, Scoring and Reset sit under the Filters button.
+  <b>Screens</b>: Asset-backed (Mcap ÷ Assets ≤ 1, PB ≤ 1.5, ROCE ≥ 10%), Graham defensive (PE × PB ≤ 22.5 + the safety tests below), Graham deep value (Graham defensive + PE ≤ 15, PB ≤ 2, ROCE ≥ 10%), Deep value (PE ≤ 15, PB ≤ 2, ROCE ≥ 10%); all hide value traps and need a dividend. Click again to switch off.</p>
+  <p><b>Graham safety tests</b> (both Graham screens; each also a filter under More filters):</p>
+  <div class="wrap"><table><tr><th>Test</th><th>Applies to</th><th>Pass when</th><th>Data</th></tr>
+  ${row('Return through the cycle', 'all', 'median ROCE of the last 5 financial years ≥ 12% (ROE for financials); replaces the single-year ROCE floor', S.some(x => !x.fin && x.q5 != null) ? 'yearly, available' : 'financials: available; others use this year\'s ROCE <b>until the next full scrape</b> (Borrowings rows)')}
+  ${row('Earnings stability', 'all', 'profit (PAT) grew in ≥ 7 of the last 10 financial years (scaled if the record is shorter, minimum 5 comparisons)', 'yearly P&amp;L, available')}
+  ${row('Leverage', 'non-financials', 'borrowings ÷ (reserves + share capital) &lt; 1 <b>or</b> borrowings ÷ EBITDA &lt; 2.5x (gross debt: Screener has no cash figure, so stricter than net debt ÷ EBITDA)', has('de') ? 'yearly balance sheet, available' : '<b>skipped until the next full scrape</b> (Borrowings rows)')}
+  ${row('Return on assets', 'banks, NBFCs, insurers', 'PAT ÷ total assets ≥ 1.5%', 'yearly, available')}
+  ${row('Cash conversion, dilution', 'non-financials / all', 'Σ CFO ÷ Σ PAT ≥ 0.5x over 5 years; share count growing ≤ 6% a year (part of Hide value traps, on in every screen)', 'available')}
+  ${row('Credit quality', 'banks', 'Gross NPA &lt; 2.5%, Net NPA &lt; 1%, provision coverage (≈ 1 − Net ÷ Gross NPA) &gt; 70%, latest quarter', has('gnpa') ? 'quarterly results, available' : '<b>skipped until the next full scrape</b> (NPA rows)')}
+  ${row('Capital adequacy (CRAR) &gt; 16%', 'banks', '<b>not tested</b>', 'Screener does not publish it')}
+  ${row('Debt &lt; net current assets', 'non-financials', '<b>not tested</b> (debt ÷ equity &lt; 0.5 used instead)', 'Screener\'s summary balance sheet has no current assets / liabilities')}</table></div>
+  <p>A test with no data yet is skipped, never counted as a fail. NBFCs without NPA rows on Screener are judged on ROA only. Min div yield starts at 0.01%, so every screen keeps only dividend payers unless you clear that box. All fields, Scoring and Reset sit under the Filters button.
   <b>1Y back:</b> ${btOf('value').why}${D.then.hasPrice ? '' : ' The score is renamed "Quality score (then)" so it isn\'t mistaken for the Value score; the Screens need prices, so they are hidden.'}</p>
 
   <h2>Trend score (Trend column, Min Trend %)</h2>

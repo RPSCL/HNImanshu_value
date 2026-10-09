@@ -418,7 +418,7 @@ BS_ROW_MAP = [
 # Solution: give the generic "eps" row a distinct intermediate key EPS_GENERIC,
 # then the scraper merges it into PL_EPS_BASIC only if PL_EPS_BASIC is still None.
 PL_ROW_MAP = [
-    (["sales", "revenue from operations", "net revenue"],           "PL_REVENUE_CR"),
+    (["sales", "revenue from operations", "net revenue", "revenue"],"PL_REVENUE_CR"),     # banks / NBFCs: Screener says "Revenue"
     (["other income"],                                               "PL_OTHER_INCOME_CR"),
     (["total income", "total revenue"],                              "PL_TOTAL_INCOME_CR"),
     (["operating profit", "ebitda", "ebita", "financing profit"],   "PL_EBITDA_CR"),
@@ -434,6 +434,8 @@ PL_ROW_MAP = [
     (["eps"],                                                         "EPS_GENERIC"),   # ← was duplicate PL_EPS_BASIC
     (["dividend"],                                                    "PL_DIVIDEND_CR"),
     (["opm %", "opm%", "operating margin", "financing margin"],     "PL_OPM_PCT"),
+    (["gross npa"],                                                   "PL_GNPA_PCT"),   # banks' quarterly results -> Q_PL_GNPA_PCT_Q…
+    (["net npa"],                                                     "PL_NNPA_PCT"),
 ]
 
 CF_ROW_MAP = [
