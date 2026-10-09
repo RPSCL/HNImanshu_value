@@ -23,6 +23,10 @@ M-4  Before the CSV is touched, the previous file is snapshotted into
 M-6  Shared scrape cache: every good scrape is saved raw to .screener_cache.jsonl; the other index
      scripts reuse any stock scraped there in the last REUSE_DAYS days instead of re-scraping it
      (n500 → nm250 → ns500: Smallcap 500 is almost entirely reused). Scores are still computed per index.
+M-7  Circuit breaker: BLOCK_AFTER failed stocks in a row → pause BLOCK_PAUSE s, test once more, and if
+     screener.in still does not answer, stop this index (unscraped stocks keep last week's row, STALE)
+     and leave .screener_blocked so the next index script tests 1 stock before scraping.
+     Page timeout 20 s and 2 tries on dead connections (a blocked run used to cost 137 s per stock).
 M-5  Removed the "delete CSV at 15:00/16:00 IST" block — the run is weekly now
      and the master merge replaces it.  Progress is checkpointed to
      .<name>_inprogress.jsonl so an interrupted run resumes.
@@ -138,6 +142,14 @@ OUTPUT_FILE = f"{INDEX}_valuation.csv"
 #    Run order n500 → nm250 → ns500 means Smallcap 500 needs almost no fresh scraping.
 SCRAPE_CACHE = Path(__file__).resolve().parent / ".screener_cache.jsonl"
 REUSE_DAYS   = 2         # reuse a cached scrape only if it is at most this many days old
+
+# ── Circuit breaker (M-7): if screener.in stops answering (it throttles a busy IP), stop instead of
+#    retrying every remaining stock for minutes each (that turned a 30-min run into 10 hours).
+FETCH_TIMEOUT   = 20     # seconds per page request (was 30)
+BLOCK_AFTER     = 8      # this many failed stocks IN A ROW = screener is blocking us
+BLOCK_PAUSE     = 300    # then wait this long (s) and test one more stock
+BLOCK_MARKER    = Path(__file__).resolve().parent / ".screener_blocked"   # tells the next index script
+BLOCK_MARKER_H  = 2      # a marker younger than this makes the next script test 1 stock before scraping
 
 # ── (M-5) No more "delete CSV at startup" — the CSV is now a master file that is
 #    snapshotted to old_csv.zip and then upserted.  See build_master_csv().
@@ -499,7 +511,7 @@ def _fetch(url: str):
     err = "not fetched"
     for attempt in range(MAX_RETRIES):
         try:
-            resp = _session().get(url, timeout=30)
+            resp = _session().get(url, timeout=FETCH_TIMEOUT)
             if resp.status_code == 404:
                 return None, None, "404"
             if resp.status_code == 429 or resp.status_code >= 500:
@@ -512,6 +524,8 @@ def _fetch(url: str):
             return resp.url, resp.text, None
         except requests.RequestException as e:
             err = str(e)
+            if attempt >= 1:                    # (M-7) 2 tries on timeouts / dropped connections, not 4
+                break
             time.sleep(2 ** attempt)
     return None, None, err
 
@@ -1145,26 +1159,61 @@ def build_master_csv(nse_df, symbols, output_path,
     n_links = len(unique_links("X"))
     log.info(f"  Need: {len(todo)}  |  Done: {len(done)}  |  links per stock: {n_links}")
 
-    errors = 0
+    errors, streak, skipped = 0, 0, []
+    # (M-7) an earlier index script in this run found screener blocking → test 1 stock first
+    probe_first = BLOCK_MARKER.exists() and (time.time() - BLOCK_MARKER.stat().st_mtime) < BLOCK_MARKER_H * 3600
+    if probe_first:
+        log.warning("  ⚠ screener.in was not responding to an earlier index script — testing 1 stock first")
     try:
         with ThreadPoolExecutor(max_workers=n_links) as pool, \
              open(ckpt, "a", encoding="utf-8") as fh:
-            for sym in tqdm(todo, desc="Screener.in", unit="stock"):
+            bar = tqdm(todo, desc="Screener.in", unit="stock")
+            for k, sym in enumerate(bar):
                 row = scrape_screener(sym, pool)
                 row["DATE_DOWNLOADED"] = today
                 fh.write(json.dumps(row, default=str) + "\n")
                 fh.flush()
                 _save_to_scrape_cache(row)                            # (M-6) for the other index scripts
                 done[str(sym).upper()] = row
-                if not _is_good(row):
+                if _is_good(row):
+                    streak = 0
+                    if probe_first:
+                        log.info("  ✓ screener.in answers again — scraping normally")
+                        probe_first = False
+                        BLOCK_MARKER.unlink(missing_ok=True)
+                else:
                     errors += 1
+                    streak += 1
+                # (M-7) circuit breaker
+                blocked = probe_first or streak == BLOCK_AFTER
+                if blocked and streak == BLOCK_AFTER and not probe_first:
+                    log.warning(f"  ⚠ {BLOCK_AFTER} stocks failed in a row (last error: {row.get('SCREENER_ERROR')}) — "
+                                f"screener.in looks blocked; pausing {BLOCK_PAUSE // 60} min, then testing once more")
+                    time.sleep(BLOCK_PAUSE)
+                    probe = scrape_screener(todo[k + 1], pool) if k + 1 < len(todo) else {"SCREENER_ERROR": "none left"}
+                    blocked = not _is_good(probe)
+                    if not blocked:
+                        probe["DATE_DOWNLOADED"] = today
+                        log.info("  ✓ screener.in answers again after the pause — continuing")
+                        streak = 0
+                if blocked and streak > 0:
+                    skipped = [s for s in todo[k + 1:] if str(s).upper() not in done]
+                    BLOCK_MARKER.write_text(datetime.now().isoformat())
+                    log.warning(f"  ✖ screener.in is not responding — stopping this index. {len(skipped)} stocks not "
+                                f"scraped keep their previous row (STALE). The website still builds.")
+                    break
                 time.sleep(delay)
+            bar.close()
     except KeyboardInterrupt:
         log.warning(f"\n  ⚠ Interrupted — progress kept in {ckpt.name}; re-run to resume. "
                     f"{out_path.name} was NOT changed.")
         sys.exit(1)
 
-    log.info(f"  ✓ scraped {len(todo)}  |  reused {len(reused)} from other indices  |  failed: {errors}")
+    for s in skipped:
+        done[str(s).upper()] = {"SYMBOL": s, "DATE_DOWNLOADED": today,
+                                "SCREENER_ERROR": "skipped: screener.in not responding (circuit breaker)"}
+    log.info(f"  ✓ scraped {len(todo) - len(skipped)}  |  reused {len(reused)} from other indices  |  "
+             f"failed: {errors}  |  skipped (screener blocked): {len(skipped)}")
 
     # ── 3. upsert into master ────────────────────────────────────────────────
     old_df = None
