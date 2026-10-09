@@ -67,6 +67,7 @@ SM_TREND_QTRS = 2         # TTM year-on-year comparisons per quarterly Trend che
 SM_TREND_MIN = 2          # ... all of them must be available
 SM_SH_QTRS = 4            # shareholding window: last 4 quarter-ends = change over 3 quarters
 PRICES_CSV = "prices.csv" # written weekly by fetch_prices.py (Angel One); optional
+PRICE_TOL_DAYS = 7        # a price is used if its date is within ±7 days of the date it stands for (not exact)
 # what was already published on a snapshot date
 ANNUAL_LAG_DAYS = 60      # annual results out within ~60 days of year end
 QUARTER_LAG_DAYS = 45     # quarterly results within ~45 days
@@ -707,6 +708,12 @@ def build_all(df, asof, prices=None, bench=None):
     F = column_maps(df)
     back = asof - pd.Timedelta(days=BACK_DAYS)
     prices = prices or {}
+    tol = pd.Timedelta(days=PRICE_TOL_DAYS)
+
+    def near(d, target):                                  # price date within ±PRICE_TOL_DAYS of the date it stands for
+        d = pd.to_datetime(d, errors="coerce")
+        return pd.notna(d) and abs(d - target) <= tol
+    n_far1 = n_farL = 0
     now, smnow, then = [], [], []
     for _, r in df.iterrows():
         fin = bool(FIN_RE.search(str(r["INDUSTRY"])))
@@ -715,7 +722,9 @@ def build_all(df, asof, prices=None, bench=None):
         g = lambda k: px.get(k) if ok(px.get(k)) else None
         now.append(build_record(r, F, inputs_now(r, F, asof, fin), fin))
 
-        ltp, ltp_src = (g("LTP"), "angel") if g("LTP") else (r["CMP"], "csv")
+        ltp_ok = g("LTP") and near(px.get("LTP_DATE"), asof)
+        n_farL += bool(g("LTP") and not ltp_ok)
+        ltp, ltp_src = (g("LTP"), "angel") if ltp_ok else (r["CMP"], "csv")   # too far from the data date → CSV CMP
         rec_n = build_record(r, F, inputs_sm(r, F, asof, fin, ltp, g("HIGH_52W_NOW") or r["HIGH_52W"]), fin)
         rec_n["pxSrc"] = ltp_src
         smnow.append(rec_n)
@@ -723,7 +732,9 @@ def build_all(df, asof, prices=None, bench=None):
         if str(px.get("STATUS", "")).startswith("NOT LISTED"):
             continue                                      # listed after the 1Y-back date: not in that universe
         p1 = g("PRICE_1Y_ADJ")
-        rec = build_record(r, F, inputs_sm(r, F, back, fin, p1, g("HIGH_52W_1Y")), fin)
+        if p1 and not near(px.get("PRICE_1Y_DATE"), back):
+            p1, n_far1 = None, n_far1 + 1                 # 1Y price from a different week → not used
+        rec = build_record(r, F, inputs_sm(r, F, back, fin, p1, g("HIGH_52W_1Y") if p1 else None), fin)
         if rec["mcap"] is None:
             rec["mcap"] = num(r["MARKET_CAP_CR"], 0)      # no price then: today's size, only for the Mcap filters
             rec["mcapToday"] = True
@@ -737,6 +748,9 @@ def build_all(df, asof, prices=None, bench=None):
                         "fyThen": a["fy"], "fyNow": b["fy"], "ret": ret}
         then.append(rec)
     n_px = sum(1 for t in then if t["cmp"] is not None)
+    if prices:
+        print("Prices: 1Y-back price used for %d stocks (date within ±%d days of %s); %d skipped as too far; "
+              "%d LTPs too far from %s → CSV CMP used" % (n_px, PRICE_TOL_DAYS, back.date(), n_far1, n_farL, asof.date()))
     meta = {"hasPrice": n_px >= 0.5 * max(len(then), 1), "nPrice": n_px,
             "priceDate": None, "priceDateThen": None, "bench": None}
     dates = [p.get("LTP_DATE") for p in prices.values() if ok(p.get("LTP_DATE"))]

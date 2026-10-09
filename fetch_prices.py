@@ -25,6 +25,8 @@ Credentials come from creds.py (repo secrets on GitHub, .env locally). Nothing s
     python fetch_prices.py               # all symbols
     python fetch_prices.py --limit 20    # quick test
     python fetch_prices.py --map-only    # check symbol → Angel token mapping, no login, no candles
+    python fetch_prices.py --is-due      # exit 0 if a fetch is due (prices.csv ≥ MIN_AGE_DAYS old), else 1
+    python fetch_prices.py --force       # fetch even if prices.csv is recent
 """
 
 import argparse
@@ -53,6 +55,7 @@ RATE        = 2.5                         # max candle requests per second, shar
 WORKERS     = 3                           # parallel fetches; network delay overlaps, the rate limit stays global
 CHUNK_DAYS  = 380                         # 2 years in 2 calls (~255 rows each, under the 500-row cap some users hit)
 RETRY_PASS  = True                        # after the main pass, retry every failed symbol once more, slowly
+MIN_AGE_DAYS = 5                          # weekly: skip the fetch if prices.csv is younger than this (--force overrides)
 SERIES_PREF = ["EQ", "BE", "BZ", "SM", "ST"]   # which NSE series to use when a stock has several
 # standard split / bonus price ratios (new price ÷ old price)
 CA_RATIOS   = {1/2: "1:2 split or 1:1 bonus", 1/3: "1:3 split or 2:1 bonus", 1/4: "1:4 split or 3:1 bonus",
@@ -269,11 +272,54 @@ def summarise(c, back: date):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+def prices_age_days():
+	"""Age of prices.csv in days from its newest FETCHED_AT (file times are reset by every git checkout),
+	falling back to the last git commit of the file. None = no usable prices.csv yet."""
+	if not OUT_CSV.exists():
+		return None
+	try:
+		t = pd.to_datetime(pd.read_csv(OUT_CSV, usecols=["FETCHED_AT"])["FETCHED_AT"], errors="coerce").max()
+		if pd.notna(t):
+			return (datetime.now(IST).replace(tzinfo=None) - t.to_pydatetime()).total_seconds() / 86400
+	except Exception:
+		pass
+	try:
+		import subprocess
+		out = subprocess.run(["git", "log", "-1", "--format=%ct", "--", OUT_CSV.name], cwd=BASE,
+		                     capture_output=True, text=True, timeout=20).stdout.strip()
+		if out:
+			return (time.time() - int(out)) / 86400
+	except Exception:
+		pass
+	return None
+
+
+def is_due(force=False):
+	age = prices_age_days()
+	if force:
+		log(f"prices.csv age: {'none yet' if age is None else f'{age:.1f} days'}  →  --force: fetching anyway")
+		return True
+	if age is None:
+		log("prices.csv: none yet  →  fetch is due")
+		return True
+	due = age >= MIN_AGE_DAYS
+	log(f"prices.csv is {age:.1f} days old (weekly rule: fetch when ≥ {MIN_AGE_DAYS} days)  →  "
+	    + ("fetch is due" if due else "skipping, still fresh"))
+	return due
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 def main():
 	ap = argparse.ArgumentParser()
 	ap.add_argument("--limit", type=int, default=0)
 	ap.add_argument("--map-only", action="store_true")
+	ap.add_argument("--force", action="store_true", help="fetch even if prices.csv is younger than MIN_AGE_DAYS")
+	ap.add_argument("--is-due", action="store_true", help="only report: exit 0 if a fetch is due, 1 if not")
 	a = ap.parse_args()
+	if a.is_due:
+		return 0 if is_due(a.force) else 1
+	if not a.map_only and not is_due(a.force):
+		return 0                                                     # weekly rule: nothing to do
 
 	syms, asof = load_symbols()
 	back = asof - timedelta(days=BACK_DAYS)
