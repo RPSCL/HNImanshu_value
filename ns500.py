@@ -388,24 +388,27 @@ BS_ROW_MAP = [
     (["current investments", "short term investments"],             "BS_CURRENT_INVEST_CR"),
     (["non-current investments", "non current investments",
       "long term investments"],                                     "BS_NONCURRENT_INVEST_CR"),
+    (["investments"],                                               "BS_INVESTMENTS_CR"),      # Screener's "Investments" row
     (["trade receivables", "debtors"],                              "BS_TRADE_RECV_CR"),
     (["inventories", "inventory"],                                  "BS_INVENTORIES_CR"),
     (["other current assets"],                                      "BS_OTHER_CURR_ASSETS_CR"),
     (["total current assets"],                                      "BS_TOTAL_CURR_ASSETS_CR"),
-    (["net block", "property plant", "ppe"],                        "BS_NET_BLOCK_CR"),
+    (["fixed assets", "net block", "property plant", "ppe"],        "BS_NET_BLOCK_CR"),        # Screener: "Fixed Assets"
     (["gross block"],                                               "BS_GROSS_BLOCK_CR"),
     (["capital work in progress", "cwip"],                          "BS_CWIP_CR"),
     (["goodwill"],                                                   "BS_GOODWILL_CR"),
     (["intangible"],                                                 "BS_INTANGIBLES_CR"),
     (["right-of-use", "right of use", "lease asset", "rou"],       "BS_ROU_ASSETS_CR"),
     (["total assets"],                                              "BS_TOTAL_ASSETS_CR"),
+    (["other assets"],                                              "BS_OTHER_ASSETS_CR"),
+    (["other liabilit"],                                            "BS_OTHER_LIAB_CR"),
     (["short term borrowing", "short-term borrowing"],              "BS_ST_BORROWINGS_CR"),
     (["long term borrowing", "long-term borrowing"],                "BS_LT_BORROWINGS_CR"),
-    (["total borrowing", "total debt"],                             "BS_TOTAL_BORROWINGS_CR"),
+    (["total borrowing", "total debt", "borrowing"],                "BS_TOTAL_BORROWINGS_CR"), # Screener: "Borrowings"
     (["trade payables", "creditors"],                               "BS_TRADE_PAY_CR"),
     (["other current liabilit"],                                    "BS_OTHER_CURR_LIAB_CR"),
     (["total current liabilit"],                                    "BS_TOTAL_CURR_LIAB_CR"),
-    (["share capital", "paid up"],                                   "BS_SHARE_CAPITAL_CR"),
+    (["share capital", "equity capital", "paid up"],                 "BS_SHARE_CAPITAL_CR"),    # Screener: "Equity Capital"
     (["reserves", "surplus", "other equity"],                       "BS_RESERVES_CR"),
     (["total equity", "shareholders", "networth", "net worth"],     "BS_TOTAL_EQUITY_CR"),
 ]

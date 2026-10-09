@@ -106,7 +106,8 @@ MONTH_NUM = {m: i + 1 for i, m in enumerate(MONTHS.split("|"))}
 ANNUAL_FIELDS = ["B_BS_TOTAL_BORROWINGS_CR", "B_BS_SHARE_CAPITAL_CR",            # present once the scraper fix lands
                  "A_PL_EPS_BASIC", "A_PL_PAT_CR", "A_PL_PBT_CR", "A_PL_INTEREST_CR", "A_PL_OTHER_INCOME_CR",
                  "A_PL_DIVIDEND_CR", "A_PL_OPM_PCT", "C_CF_OPERATING_CR", "C_CF_INVESTING_CR",
-                 "B_BS_RESERVES_CR", "B_BS_TOTAL_ASSETS_CR"]
+                 "B_BS_RESERVES_CR", "B_BS_TOTAL_ASSETS_CR",
+                 "B_BS_NET_BLOCK_CR", "B_BS_CWIP_CR", "B_BS_INVESTMENTS_CR"]          # asset backing (fixed assets / investments once scraped)
 ANNUAL_RE = re.compile(r"^(%s)_(%s)(\d{4})$" % ("|".join(ANNUAL_FIELDS), MONTHS))
 QTR_RE = re.compile(r"^(Q_EPS_GENERIC|Q_PL_PAT_CR|Q_PL_REVENUE_CR|Q_PL_EBITDA_CR)_Q(%s)(\d{4})$" % MONTHS)   # EBITDA -> quarterly OPM
 SH_RE = re.compile(r"^SH_(PROMOTER|FII|DII|PUBLIC)_PCT_Q(%s)(\d{4})$" % MONTHS)
@@ -252,6 +253,19 @@ def column_maps(df):
     for k in F:
         F[k].sort(key=lambda x: x[0])
     return F
+
+
+def assets_at(r, F, until=None):
+    """Balance-sheet asset backing from the latest financial year known at `until` (all parts from that same year).
+    ta = total assets, fa = fixed assets (net block incl. land at book cost) + CWIP, inv = investments."""
+    ta = series(r, F.get("B_BS_TOTAL_ASSETS_CR", []), until)
+    if not ta:
+        return {}
+    d = ta[-1][0]
+    same = lambda k: next((p[2] for p in series(r, F.get(k, []), until) if p[0] == d), None)
+    nb, cw = same("B_BS_NET_BLOCK_CR"), same("B_BS_CWIP_CR")
+    return {"ta": ta[-1][2], "fa": (nb + (cw or 0)) if nb is not None else None,
+            "inv": same("B_BS_INVESTMENTS_CR"), "fy": ta[-1][1]}
 
 
 def series(row, cols, until=None):
@@ -669,6 +683,13 @@ def build_record(r, F, inp, fin):
             if ok(mcap) and mcap > 0:
                 fcfy = fcf / mcap * 100
 
+    # asset backing: what the market pays for each rupee of assets on the books (non-financials only;
+    # a lender's "assets" are its loan book). Fixed assets carry land at historical cost, so they understate it.
+    a = assets_at(r, F, acut) if not fin else {}
+    ratio = lambda x: (mcap / x) if (ok(mcap) and x and x > 0) else None
+    pta, pfa = ratio(a.get("ta")), ratio(a.get("fa"))
+    invp = (a["inv"] / mcap * 100) if (a.get("inv") is not None and ok(mcap) and mcap > 0) else None
+
     h = {}
     for key in ("pro", "pub", "fii", "dii"):
         pts = series(r, F.get(key, []), inp["scut"])
@@ -695,6 +716,7 @@ def build_record(r, F, inp, fin):
         "divYrs": num(r["DIVIDEND_CONSECUTIVE_YRS"], 0), "fs": num(r["F_SCORE"], 0),
         "eps": [[p[1], round(p[2], 2)] for p in eps_run[-15:]] if len(eps_run) >= 2 else [],
         "h": h,
+        "pta": num(pta, 2), "pfa": num(pfa, 2), "invp": num(invp), "taFy": a.get("fy"),
         "tr": inp.get("trend"),
         "roceSrc": inp.get("roceSrc"),
     }
@@ -821,26 +843,48 @@ body.day{
 ::-webkit-scrollbar-thumb:hover,::-webkit-scrollbar-thumb:active{background:radial-gradient(circle at center,var(--sdot-hi) 0 3px,transparent 3.5px)}
 @supports (-moz-appearance:none){*{scrollbar-width:thin;scrollbar-color:var(--sdot) transparent}}   /* Firefox has no dot option: thinnest bar instead */
 
-/* smart filter box */
-.fbox{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:12px}
-.fbox .t{font:600 10.5px var(--mono);color:var(--brass);text-transform:uppercase;letter-spacing:1px;margin-right:2px}
-.presets{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid var(--line)}
-.preset{font:600 11.5px var(--mono);padding:5px 11px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--mute);cursor:pointer;letter-spacing:.2px}
+/* smart filter box: Screens row, then a header (title + buttons), then an aligned grid of labelled fields */
+.fbox{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px 14px;margin-bottom:12px}
+.fbox .t{font:600 10.5px var(--mono);color:var(--brass);text-transform:uppercase;letter-spacing:1px;white-space:nowrap}
+.presets{display:flex;align-items:flex-start;gap:12px;padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--line)}
+.presets > .t{line-height:27px;min-width:58px}
+.pchips{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.preset{font:600 11.5px var(--mono);height:27px;padding:0 11px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--mute);cursor:pointer;letter-spacing:.2px;white-space:nowrap;flex-shrink:0}
 .preset:hover{border-color:var(--brass);color:var(--ink)}
 .preset.on{background:var(--brass);border-color:var(--brass);color:var(--bg)}
-.preset-custom{font:600 11px var(--mono);color:var(--faint);padding:0 6px;font-style:italic}
-.frow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px}
-.frow label,.fpanel label{color:var(--mute);font-size:12.5px;display:inline-flex;align-items:center;gap:6px}
-.fbtns{display:inline-flex;gap:6px;margin-left:auto}
+.preset-custom{font:600 11px var(--mono);color:var(--faint);line-height:27px;padding:0 4px;font-style:italic}
+.fhead{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;margin-bottom:10px}
+.fbtns{display:flex;gap:6px;flex-wrap:wrap}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px 14px;align-items:end}
+.fld{display:flex;flex-direction:column;gap:5px;min-width:0;margin:0}
+.fld > span{font:500 10.5px var(--mono);color:var(--faint);letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fld input[type=number]{width:100%;height:32px}
+.fld .fsel{width:100%}
+.fld .fsel-btn.boxed{width:100%;height:32px;justify-content:space-between}
+.fld.chk{flex-direction:row;align-items:center;gap:8px;min-height:32px;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--mute);font-size:12.5px;line-height:1.25;cursor:pointer;user-select:none}
+.fld.chk > span{font:inherit;color:inherit;letter-spacing:0;white-space:normal}
+.fld.chk input{flex-shrink:0;margin:0}
+.fld.chk:has(input:checked){border-color:var(--brass);color:var(--ink);background:var(--brassbg)}
+.fld.chk:hover{border-color:var(--brass)}
 .btn.ghost{background:transparent;height:30px;font-size:11.5px}
 .btn.ghost.open{border-color:var(--brass);color:var(--brass)}
 .btn .car{display:inline-block;transition:transform .15s}
 .btn.open .car{transform:rotate(180deg)}
 .btn .cnt{background:var(--brass);color:var(--bg);border-radius:999px;padding:1px 6px;font-size:10px}
-.fpanel{display:none;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
-.fpanel.open{display:flex}
-.fpanel .bar{margin:0}
-.fpanel .frow{width:100%}
+.fpanel{display:none;margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
+.fpanel.open{display:block}
+.fsub{font:600 10px var(--mono);color:var(--brass);text-transform:uppercase;letter-spacing:1px;margin:0 0 10px;opacity:.85}
+.fpanel .bar{margin:0 0 14px}
+.fpanel .fgrid + .btn{margin-top:12px}
+
+/* day / night toggle: same control as the screener (moon - track - sun), same storage key */
+#theme-toggle{display:flex;align-items:center;gap:6px;flex-shrink:0;cursor:pointer;padding:4px 2px;margin-left:4px}
+.toggle-icon{display:flex;align-items:center;line-height:1;color:var(--faint)}
+body.day .toggle-icon{color:var(--mute)}
+.toggle-track{width:36px;height:20px;background:var(--line);border-radius:10px;position:relative;cursor:pointer;transition:background .3s ease;border:none;flex-shrink:0;padding:0}
+body.day .toggle-track{background:var(--accent)}
+.toggle-thumb{width:14px;height:14px;background:var(--panel2);border-radius:50%;position:absolute;top:3px;left:3px;transition:transform .25s cubic-bezier(.4,0,.2,1);pointer-events:none}
+body.day .toggle-thumb{transform:translateX(16px)}
 
 /* table toolbar: search left, Download CSV right (same outline style as the screener's Export CSV) */
 .tbar{justify-content:space-between}
@@ -866,9 +910,18 @@ body.day{
 .pop .bt b{display:inline;font:inherit;font-weight:700;color:var(--warn)}
 .pop a{color:var(--brass)}
 
-/* desktop: theme lives on the screener (shared setting), so one button less here */
-@media (min-width:701px){#themeBtn{display:none}}
-@media (max-width:700px){.lg{display:none} .fbtns{margin-left:0} .thint{min-width:0} .pop{left:auto;right:-40px}}
+@media (max-width:700px){
+  .lg{display:none} .thint{min-width:0} .pop{left:auto;right:-40px}
+  header.top{position:relative}
+  #theme-toggle{position:absolute;top:14px;right:12px;margin:0}     /* top-right corner, like the screener */
+  .fbox{padding:10px 12px 12px}
+  .presets{flex-direction:column;gap:6px}
+  .presets > .t{line-height:1.2}
+  .pchips{flex-wrap:nowrap;overflow-x:auto;width:100%;padding-bottom:4px;-webkit-overflow-scrolling:touch}   /* one swipeable row */
+  .fgrid{grid-template-columns:1fr 1fr;gap:10px}
+  .fld > span{font-size:10px}
+  .fbtns .btn{padding:0 9px}
+}
 
 /* custom dropdown: replaces the native <select> popup (which ignores the theme) */
 .fsel{position:relative;display:inline-flex;align-items:center}
@@ -940,8 +993,12 @@ input[type=search]::placeholder{color:var(--faint)}
 input[type=checkbox]{accent-color:var(--brass);width:15px;height:15px}
 input:focus,select:focus{border-color:var(--brass);outline:none}
 
-.stats{display:flex;flex-wrap:wrap;margin:6px 0 16px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-.stat{padding:10px 24px 10px 0;margin-right:24px;border-right:1px solid var(--line)}
+/* stat strip: always ONE line; if it is wider than the screen it scrolls sideways instead of wrapping */
+.stats{display:flex;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;margin:6px 0 16px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);-webkit-overflow-scrolling:touch}
+.stats.main + .stats.perf{margin-top:-16px;border-top:1px dashed var(--line)}
+.stat{flex:0 0 auto;white-space:nowrap;padding:10px 18px 10px 0;margin-right:18px;border-right:1px solid var(--line)}
+.stats.perf .stat.cap span{color:var(--brass);font:600 10px var(--mono);text-transform:uppercase;letter-spacing:1px}
+.stats.perf .stat.cap b{font-size:13px;color:var(--mute);font-weight:600}
 .stat:last-child{border-right:0}
 .stat b{display:block;font:700 20px/1.2 var(--mono);color:var(--brass)}
 .stat > span{color:var(--faint);font-size:11.5px}
@@ -1007,8 +1064,9 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
   .box{padding:10px}
   input[type=search]{width:100%!important}
   th,td{padding:7px 9px}
-  .stat{padding:8px 14px 8px 0;margin-right:14px}
-  .stat b{font-size:16px}
+  .stat{padding:8px 12px 8px 0;margin-right:12px}
+  .stat b{font-size:15px}
+  .stat > span{font-size:10.5px}
   .wrap{max-height:72vh}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -1033,10 +1091,14 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
     <label class="chip">List <select id="uniSel"></select></label>
     <label class="chip"><input type="checkbox" id="hidePSU"> Hide PSU</label>
     <label class="chip"><input type="checkbox" id="hideSemi"> Hide semi-PSU</label>
-    <label class="chip" id="sameChip" title="Compute today with the exact engine used for 1Y back (raw yearly / quarterly rows + one price), so the two are directly comparable"><input type="checkbox" id="sameM"> Same method</label>
+    <label class="chip" id="sameChip" title="Same method: rebuild TODAY's numbers with the exact engine used for 1Y back (raw yearly / quarterly rows + one Angel price), instead of Screener's own ratios, so today and 1Y back are like-for-like. Always on in 1Y back."><input type="checkbox" id="sameM"> Same method</label>
     <label class="chip ytoggle" id="backChip"><input type="checkbox" id="back1y"> 1Y back</label>
     <button class="btn primary" id="saveHtml">Save as HTML</button>
-    <button class="btn theme" id="themeBtn" aria-label="Toggle day / night theme" title="Day / night">&#9680;</button>
+    <div id="theme-toggle" title="Day / night">
+      <span class="toggle-icon moon-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
+      <button class="toggle-track" aria-label="Toggle day / night theme"><div class="toggle-thumb"></div></button>
+      <span class="toggle-icon sun-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></span>
+    </div>
   </div>
 </header>
 <nav id="nav">
@@ -1203,7 +1265,7 @@ function perfStats(rows) {
           ['Median ROE change', signPP(medSince(rows,'roeD'))]]);
 }
 /* in 1Y-back mode, price-based columns are dropped and the "since then" columns take the price column's place */
-const PRICE_KEYS = new Set(['qvV','cmp','pe','cpe','prem','indpe','pb','peg','gup','dy','ey','fcfy','from52','cheap','nPE','rEY']);
+const PRICE_KEYS = new Set(['pta','pfa','invp','qvV','cmp','pe','cpe','prem','indpe','pb','peg','gup','dy','ey','fcfy','from52','cheap','nPE','rEY']);
 /* ---------- CSV export: name encodes the tab + active filters, e.g. Value_screen_mcap_20K_RCE_ROE12_MT10.csv ---------- */
 const fnNum = v => String(v).replace('-', 'm').replace('.', 'p');          // filename-safe: -30 -> m30, 0.5 -> 0p5
 const fnK = v => +v >= 1000 ? fnNum(+(v / 1000).toFixed(2)) + 'K' : fnNum(v); // 20000 -> 20K
@@ -1214,6 +1276,7 @@ const FN_CODE = {
   minChg:v=>'CHG'+fnNum(v), minNow:v=>'NOW'+fnNum(v), dir:v=>String(v).toUpperCase(),
   trap:v=>v?'NOTRAPS':'TRAPS', graham:v=>v?'GRAHAM':'', exFin:v=>v?'EXFIN':'INCLFIN',
   smart:v=>v?'SMART':'', hideJump:v=>v?'NOJUMPS':'JUMPS',
+  maxPta:v=>'MA'+fnNum(v), maxPfa:v=>'MFA'+fnNum(v), minInv:v=>'INV'+fnNum(v),
   minRoce:v=>'ROCE'+fnNum(v), minRoe:v=>'ROE'+fnNum(v), minRoeFin:v=>'ROEFIN'+fnNum(v), minIcov:v=>'ICR'+fnNum(v),
   maxProDrop:v=>'PRODROP'+fnNum(v), exPsu:v=>v?'':'WITHPSU', peers:v=>v==='all'?'PEERSALL':'', showFail:v=>v?'WITHFAILS':'',
 };
@@ -1229,6 +1292,9 @@ function csvName(tab, st, def, keys) {
   });
   return parts.join('_').replace(/[^A-Za-z0-9_.-]+/g, '_') + '.csv';
 }
+/* list in the header picker goes first: all_ / N500_ / NS500_ / NM250_ */
+const LIST_CODE = {'all':'all', 'NIFTY 500':'N500', 'Smallcap 500':'NS500', 'Microcap 250':'NM250'};
+const listCode = () => LIST_CODE[GF.uni || 'all'] || String(GF.uni).replace(/[^A-Za-z0-9]+/g, '');
 const csvCell = v => {
   if (v == null || (typeof v === 'number' && !isFinite(v))) return '';
   if (typeof v === 'number') v = Math.round(v * 100) / 100;
@@ -1273,7 +1339,7 @@ function makeTable(id, cols, rows, opt={}) {
     if (inp) { inp.value = searchState[id] || ''; inp.addEventListener('input', () => { searchState[id] = inp.value; draw(); }); }
     if (opt.csv) $('.csv', bar).addEventListener('click', () => {
       const q = (searchState[id] || '').trim();
-      const name = opt.csv().replace(/\.csv$/, '') + (q ? '_q-' + q.replace(/[^A-Za-z0-9]+/g, '') : '') + '.csv';   // search text tagged too
+      const name = listCode() + '_' + opt.csv().replace(/\.csv$/, '') + (q ? '_q-' + q.replace(/[^A-Za-z0-9]+/g, '') : '') + '.csv';   // search text tagged too
       downloadCsv(name, cols, shown, !opt.noIndex);
     });
     box.appendChild(bar);
@@ -1394,6 +1460,12 @@ const C = {
   from52: {k:'from52', label:'vs 52W high', v:s=>pctFrom(s.cmp,s.hi52), f:s=>{const p=pctFrom(s.cmp,s.hi52); return p==null?NA:fmt(p)+'%';}},
   score: {k:'score', label:'Value score', v:s=>s.score, f:scoreCell},
   pb: {k:'pb', label:'PB', v:s=>s.pb, f:s=>s.pb==null?'<span class="na">N/A</span>':fmt(s.pb,2)+(s.pbSrc==='derived'?'<span class="na">*</span>':'')},
+  pta: {k:'pta', label:'Mcap ÷ Assets', tip:'Market cap ÷ total assets on the latest balance sheet (non-financials). Below 1x = the market values the company at less than everything it owns on its books (before debts). Book values are at cost, so land bought long ago is understated.',
+        v:s=>s.pta, f:s=>s.pta==null?NA:`<span class="pill ${s.pta<=1?'disc':s.pta<=3?'':'prem'}" title="Balance sheet ${esc(s.taFy||'')}">${fmt(s.pta,2)}x</span>`},
+  pfa: {k:'pfa', label:'Mcap ÷ Fixed assets', tip:'Market cap ÷ (net block + CWIP): plant, buildings and land at book (historical) cost', v:s=>s.pfa,
+        f:s=>s.pfa==null?NA:`<span class="pill ${s.pfa<=1?'disc':s.pfa<=3?'':'prem'}">${fmt(s.pfa,2)}x</span>`},
+  invp: {k:'invp', label:'Investments % Mcap', tip:'Investments on the balance sheet as % of market cap (holding companies / cash-rich firms score high)', v:s=>s.invp,
+         f:s=>s.invp==null?NA:(s.invp>=50?`<b class="up">${fmt(s.invp,0)}%</b>`:fmt(s.invp,0)+'%')},
   cagr: {k:'cagr', label:'EPS CAGR', v:s=>s.cagr, f:s=>{
     if (s.cagr==null) return NA;
     const y = (s.cagrSrc==='PAT' ? ' <span class="na" title="share base changed (IPO / restructure), profit growth used">(PAT)</span>' : '')
@@ -1414,6 +1486,9 @@ const C = {
           x:s=>s.tr ? `${s.tr.pass}/${s.tr.of}` : '', f:trendCell},
 };
 
+const has = k => S.some(s => s[k] != null);          // fixed assets / investments appear once the scraper collects them
+const assetCols = () => [C.pta].concat(has('pfa') ? [C.pfa] : [], has('invp') ? [C.invp] : []);
+
 /* ---------- views ---------- */
 const view = $('#view');
 function setNav(t){ document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.dataset.t===t)); }
@@ -1429,7 +1504,12 @@ function pePicker() {
   return d;
 }
 const pageTitle = t => view.insertAdjacentHTML('beforeend', `<h2 class="page">${t}</h2>`);
-const stats = (arr, rows) => view.insertAdjacentHTML('beforeend', '<div class="stats">' + arr.concat(perfStats(rows)).map(([l,v]) => `<div class="stat"><span>${l}</span><b>${v}</b></div>`).join('') + '</div>');
+const statTiles = arr => arr.map(([l,v]) => `<div class="stat"><span>${l}</span><b>${v}</b></div>`).join('');
+const stats = (arr, rows) => {                            // list stats on one line; 1Y-back results on a second, separate line
+  const p = perfStats(rows);
+  view.insertAdjacentHTML('beforeend', `<div class="stats main">${statTiles(arr)}</div>`
+    + (p.length ? `<div class="stats perf"><div class="stat cap"><span>Since then</span><b>${esc(D.then.date)}</b></div>${statTiles(p)}</div>` : ''));
+};
 const hint = html => {                                   // help text lives in the table footer, not under the page
   const feet = view.querySelectorAll('.tfoot'), ft = feet[feet.length - 1];
   const h = `<span class="thint">${html} <a href="#/method">Methodology</a></span>`;
@@ -1468,16 +1548,17 @@ function industryView(name) {
   else stats([['Industry PE (selected)', fmt(g.pe[method])], ['Median PE', fmt(g.pe.median)], ['Average PE', fmt(g.pe.mean)],
          ['Cap-weighted PE', fmt(g.pe.weighted)], ['Median PB', fmt(g.medPB,2)], ['Stocks', g.n]], g.stocks.filter(vis));
   view.appendChild(pePicker());
-  view.appendChild(makeTable('ind', [C.sym, C.name, C.cmp, C.pe, C.cpe, C.prem, C.pb, C.score, C.q, C.cagr, C.fcfy, C.dy, C.proChg, C.mcap, C.from52],
+  view.appendChild(makeTable('ind', [C.sym, C.name, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...assetCols(), C.score, C.q, C.cagr, C.fcfy, C.dy, C.proChg, C.mcap, C.from52],
     g.stocks.filter(vis), {sortKey:'pe', sortDir:1, search:true, csv:() => csvName('Industry_' + g.name, {}, {}, [])}));
   hint('Sorted by PE, lowest first. Green = PE below industry PE (discount), red = above (premium).');
 }
 
 /* ---------- smart filter box: screen presets + main fields + collapsible "More filters" / extra panel ---------- */
 const PANEL_OPEN = {};                                    // which panels are expanded, remembered while the page is open
-const fNum = (st, k, label, o={}) => `<label>${label} <input type="number" data-f="${k}"${o.min!=null?` min="${o.min}"`:''}${o.max!=null?` max="${o.max}"`:''} step="${o.step||1}" value="${st[k]}"${o.w?` style="width:${o.w}px"`:''}></label>`;
-const fChk = (st, k, label) => `<label><input type="checkbox" data-f="${k}" ${st[k]?'checked':''}> ${label}</label>`;
-const fSel = (st, k, label, opts) => `<label>${label} <select data-f="${k}">${opts.map(([v,t]) => `<option value="${v}" ${st[k]===v?'selected':''}>${t}</option>`).join('')}</select></label>`;
+/* every field = caption above, control below, so the grid lines up on laptop and phone */
+const fNum = (st, k, label, o={}) => `<label class="fld"><span title="${esc(label)}">${label}</span><input type="number" data-f="${k}"${o.min!=null?` min="${o.min}"`:''}${o.max!=null?` max="${o.max}"`:''} step="${o.step||1}" value="${st[k]}" placeholder="any"></label>`;
+const fChk = (st, k, label) => `<label class="fld chk"><input type="checkbox" data-f="${k}" ${st[k]?'checked':''}><span>${label}</span></label>`;
+const fSel = (st, k, label, opts) => `<label class="fld"><span>${label}</span><select data-f="${k}">${opts.map(([v,t]) => `<option value="${v}" ${st[k]===v?'selected':''}>${t}</option>`).join('')}</select></label>`;
 function filterBox(o, rerender) {
   const {key, def} = o;
   const st = lsJson(key, def);
@@ -1490,14 +1571,15 @@ function filterBox(o, rerender) {
   const nMore = (o.moreKeys || []).filter(k => !same(st[k], def[k])).length;
   const f = document.createElement('div'); f.className = 'fbox';
   f.innerHTML =
-      (presets.length ? `<div class="presets"><span class="t">Screens</span>` + presets.map((p, i) =>
+      (presets.length ? `<div class="presets"><span class="t">Screens</span><div class="pchips">` + presets.map((p, i) =>
         `<button type="button" class="preset${p === active ? ' on' : ''}" data-p="${i}" aria-pressed="${p === active}" title="${esc((p.tip || '') + (p === active ? ' (click again to switch off)' : ''))}">${esc(p.name)}</button>`).join('')
-        + (active || !Object.keys(def).some(k => !same(st[k], def[k])) ? '' : '<span class="preset-custom">Custom</span>') + '</div>' : '')   // defaults = no label
-    + `<div class="frow"><span class="t">Filters</span>${o.main(st)}<span class="fbtns">`
-    + (moreHtml ? `<button type="button" class="btn ghost" data-tog="more">More filters${nMore ? ` <b class="cnt">${nMore}</b>` : ''} <span class="car">▾</span></button>` : '')
+        + (active || !Object.keys(def).some(k => !same(st[k], def[k])) ? '' : '<span class="preset-custom">Custom</span>') + '</div></div>' : '')   // defaults = no label
+    + `<div class="fhead"><span class="t">Filters</span><span class="fbtns">`
+    + (moreHtml ? `<button type="button" class="btn ghost" data-tog="more">More<span class="lg"> filters</span>${nMore ? ` <b class="cnt">${nMore}</b>` : ''} <span class="car">▾</span></button>` : '')
     + (o.extra ? `<button type="button" class="btn ghost" data-tog="extra">${o.extra.label} <span class="car">▾</span></button>` : '')
     + `<button type="button" class="btn ghost" data-reset title="Back to defaults">Reset</button></span></div>`
-    + (moreHtml ? `<div class="fpanel" data-panel="more">${moreHtml}</div>` : '')
+    + `<div class="fgrid">${o.main(st)}</div>`
+    + (moreHtml ? `<div class="fpanel" data-panel="more"><div class="fsub">More filters</div><div class="fgrid">${moreHtml}</div></div>` : '')
     + (o.extra ? `<div class="fpanel" data-panel="extra"></div>` : '');
   if (o.extra) o.extra.build($('[data-panel="extra"]', f));
   f.querySelectorAll('[data-panel]').forEach(p => p.classList.toggle('open', !!PANEL_OPEN[key + p.dataset.panel]));
@@ -1524,7 +1606,7 @@ function filterBox(o, rerender) {
 
 /* ---------- VALUE SCREEN ---------- */
 const VF_DEF = {maxPE:'', maxPB:'', minQ:12, minScore:0, minFcf:'', minMcap:0, maxMcap:'', trap:true, graham:false, minTrend:'',
-                maxPrem:'', maxPeg:'', minDy:'', minCc:''};
+                maxPrem:'', maxPeg:'', minDy:'', minCc:'', maxPta:'', maxPfa:'', minInv:''};
 const VF_PRESETS = [
   {name:'Quality, fair price', tip:'ROCE (ROE for financials) ≥ 15%, Value score ≥ 60, no value-trap flags', st:{minQ:15, minScore:60}},
   {name:'Deep value', price:1, tip:'PE ≤ 15, PB ≤ 2, ROCE ≥ 10%, no value traps', st:{maxPE:15, maxPB:2, minQ:10}},
@@ -1535,6 +1617,7 @@ const VF_PRESETS = [
   {name:'Graham defensive', price:1, tip:'PE × PB ≤ 22.5, pays a dividend, no value traps', st:{graham:true, minDy:0.1, minQ:''}},
   {name:'Cheap & improving', price:1, tip:'PE below industry PE and Trend ≥ 70%, no value traps', st:{maxPrem:0, minTrend:70, minQ:''}},
   {name:'Improving quality', tip:'ROCE ≥ 15% and Trend ≥ 70%, no value traps', st:{minQ:15, minTrend:70}},
+  {name:'Asset-backed', price:1, tip:'Market cap ≤ total assets on the books (Mcap ÷ Assets ≤ 1x), PB ≤ 1.5, ROCE ≥ 10%, no value traps', st:{maxPta:1, maxPB:1.5, minQ:10}},
 ];
 function valueView() {
   setNav('value'); view.innerHTML = '';
@@ -1547,15 +1630,19 @@ function valueView() {
     more: st => (NOPRICE ? '' : fNum(st,'maxPB','Max PB',{min:0,step:0.5}) + fNum(st,'maxPrem','Max vs industry PE %',{step:5})
       + fNum(st,'maxPeg','Max PEG',{min:0,step:0.25}) + fNum(st,'minFcf','Min FCF yield %',{step:0.5})
       + fNum(st,'minDy','Min div yield %',{min:0,step:0.5}))
-      + fNum(st,'minCc','Min cash conv. x',{step:0.1}) + fMcap(st)
-      + (NOPRICE ? '' : fChk(st,'graham','Graham pass (PE × PB ≤ 22.5)')),
-    moreKeys: NOPRICE ? ['minCc','minMcap','maxMcap'] : ['maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','minMcap','maxMcap','graham'],
+      + fNum(st,'minCc','Min cash conv. x',{step:0.1})
+      + (NOPRICE ? '' : fNum(st,'maxPta','Max Mcap ÷ Assets x',{min:0,step:0.25})
+          + (has('pfa') ? fNum(st,'maxPfa','Max Mcap ÷ Fixed assets x',{min:0,step:0.25}) : '')
+          + (has('invp') ? fNum(st,'minInv','Min Investments % Mcap',{min:0,step:10}) : ''))
+      + fMcap(st)
+      + (NOPRICE ? '' : fChk(st,'graham','Graham: PE×PB ≤ 22.5')),
+    moreKeys: NOPRICE ? ['minCc','minMcap','maxMcap'] : ['maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','maxPta','maxPfa','minInv','minMcap','maxMcap','graham'],
     extra: {label:'Scoring', build: el => {                 // industry PE method + score weights, out of the way
       const W = lsJson('vw', W_DEF);
       el.appendChild(pePicker());
-      el.insertAdjacentHTML('beforeend', '<div class="frow"><span class="t">Weights</span>' + Object.keys(W_DEF).filter(k => !NOPRICE || BACK_KEYS.includes(k)).map(k =>
-        `<label>${W_LABEL[k]} <input type="number" data-w="${k}" min="0" max="100" step="5" value="${W[k]}" style="width:60px"></label>`).join('')
-        + '<button type="button" class="btn ghost" data-wr>Reset weights</button></div>');
+      el.insertAdjacentHTML('beforeend', '<div class="fsub">Score weights</div><div class="fgrid">' + Object.keys(W_DEF).filter(k => !NOPRICE || BACK_KEYS.includes(k)).map(k =>
+        `<label class="fld"><span>${W_LABEL[k]}</span><input type="number" data-w="${k}" min="0" max="100" step="5" value="${W[k]}"></label>`).join('')
+        + '</div><button type="button" class="btn ghost" data-wr>Reset weights</button>');
       el.querySelectorAll('[data-w]').forEach(i => i.addEventListener('change', () => {
         W[i.dataset.w] = Math.max(0, +i.value || 0); lsSet('vw', JSON.stringify(W)); route();
       }));
@@ -1572,6 +1659,9 @@ function valueView() {
     && (vf.minQ === '' || (qual(s) != null && qual(s) >= vf.minQ))
     && (NOPRICE || vf.minFcf === '' || s.fin || (s.fcfy != null && s.fcfy >= vf.minFcf))
     && (vf.minCc === '' || s.fin || (s.cc != null && s.cc >= vf.minCc))
+    && (NOPRICE || vf.maxPta === '' || vf.maxPta == null || (s.pta != null && s.pta <= vf.maxPta))
+    && (NOPRICE || vf.maxPfa === '' || vf.maxPfa == null || !has('pfa') || (s.pfa != null && s.pfa <= vf.maxPfa))
+    && (NOPRICE || vf.minInv === '' || vf.minInv == null || !has('invp') || (s.invp != null && s.invp >= vf.minInv))
     && s.score >= (+vf.minScore || 0)
     && mcapOk(s, vf)
     && (!vf.trap || !trapReasons(s).length)
@@ -1582,10 +1672,10 @@ function valueView() {
          ['Median PE of list', fmt(median(rows.map(s=>s.pe)))], ['Median PB of list', fmt(median(rows.map(s=>s.pb)),2)],
          ['Graham pass in list', rows.filter(grahamPass).length]], rows);
   view.appendChild(makeTable('value',
-    [C.score, C.trend, C.sym, C.name, C.ind, C.cmp, C.pe, C.cpe, C.prem, C.pb, C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
+    [C.score, C.trend, C.sym, C.name, C.ind, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
     rows, {sortKey:'score', sortDir:-1, search:true, csv:() => csvName('Value_screen', vf, VF_DEF,
       NOPRICE ? ['minMcap','maxMcap','minQ','minScore','minTrend','minCc','trap']
-           : ['minMcap','maxMcap','maxPE','minQ','minScore','minTrend','maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','trap','graham'])}));
+           : ['minMcap','maxMcap','maxPE','minQ','minScore','minTrend','maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','maxPta','maxPfa','minInv','trap','graham'])}));
   if (NOPRICE) hint('1 year back (no prices.csv yet) the score uses only the quality metrics as they stood then (ROCE / ROE, EPS growth, cash conversion), ranked within each industry. Green / red "since" columns show what the business did after that. Mcap filter uses today\'s market cap.');
   else hint('Value score = weighted percentile rank within the stock\'s own industry (hover a score for each part). Screens are one-click presets; any change turns them into Custom. FCF yield, cash conversion and core PE are not used for financials. Orange core PE = over 20% of profit is other income.');
 }
@@ -1941,7 +2031,11 @@ function methodView() {
   ${row('Holding changes', 'every quarter available; Δ last 1Y', `last ${D.sm.shQ} quarter-ends at both dates (Δ over 3 quarters)`)}
   ${row('Trend checks (quarterly)', '6 year-on-year comparisons, 4 must be green', `${D.sm.trendQ} comparisons, all must be green`)}
   ${row('Industry PE', 'median / average / Mcap-weighted of positive PEs', 'same, on the PEs above')}
+  ${row('Mcap ÷ Assets', '<code>Mcap ÷ total assets</code>, latest balance sheet, non-financials', 'same, balance sheet known at the date')}
+  ${row('Mcap ÷ Fixed assets, Investments % Mcap', has('pfa') || has('invp') ? '<code>Mcap ÷ (net block + CWIP)</code>; <code>investments ÷ Mcap</code>' : 'not in the CSV yet (needs the scraper\'s Fixed assets / Investments rows)', 'same, balance sheet known at the date')}
   </table></div>
+  <p><b>Asset backing.</b> Mcap ÷ Assets below 1x means the market prices the company below everything it owns on its books. Total assets are funded partly by debt, so read it together with PB (equity only) and interest cover.
+  Book values are at historical cost: land bought decades ago sits at its old price, so a company rich in land can look less asset-backed than it really is. Not shown for financials, whose assets are mainly loans.</p>
 
   <h2>Value-trap flags (Value screen, Magic Formula, Quality-Value, Improving)</h2>
   <div class="wrap"><table><tr><th>Flag</th><th>Rule</th></tr>
@@ -1961,8 +2055,8 @@ function methodView() {
   A score needs a positive PE and at least half of the applicable weight. Financials skip FCF yield and cash conversion. Current weights (Scoring ▾):</p>
   <div class="wrap"><table><tr><th>Metric</th><th>Better when</th><th>Weight</th><th>Used 1Y back?</th></tr>
   ${Object.keys(W_DEF).map(k => row(W_LABEL[k], METRICS[k].hi ? 'higher' : 'lower', W[k], (D.then.hasPrice || BACK_KEYS.includes(k)) ? 'yes' : '<b>no</b> (needs prices.csv)')).join('')}</table></div>
-  <p><b>Filters</b> today: Max PE, Min ROCE / ROE, Min score, Min Trend %, Hide value traps; More: Max PB, Max vs industry PE %, Max PEG, Min FCF yield, Min div yield, Min cash conversion, Min / Max Mcap, Graham pass.
-  <b>Screens</b>: Quality at a fair price, Deep value, Cheap vs peers, GARP, Cash machines, Dividend, Graham defensive, Cheap & improving, Improving quality (hover each for its rules; click again to switch off).
+  <p><b>Filters</b> today: Max PE, Min ROCE / ROE, Min score, Min Trend %, Hide value traps; More: Max PB, Max vs industry PE %, Max PEG, Min FCF yield, Min div yield, Min cash conversion, Max Mcap ÷ Assets (plus Mcap ÷ Fixed assets / Investments % once scraped), Min / Max Mcap, Graham pass.
+  <b>Screens</b>: Quality at a fair price, Deep value, Cheap vs peers, GARP, Cash machines, Dividend, Graham defensive, Cheap & improving, Improving quality, Asset-backed (hover each for its rules; click again to switch off).
   <b>1Y back:</b> ${btOf('value').why}${D.then.hasPrice ? '' : ' The score is renamed "Quality score (then)" so it isn\'t mistaken for the Value score; only "Quality, fair price" and "Improving quality" remain as Screens.'}</p>
 
   <h2>Magic Formula</h2>
@@ -1997,7 +2091,7 @@ function methodView() {
   Cyclicals score best here near a peak; use it alongside valuation. <b>1Y back:</b> ${btOf('improving').why}</p>
 
   <h2>CSV download</h2>
-  <p>Exports the rows the table shows (search and sort applied, all rows, not only the 15 in view). The file name encodes the tab and active filters, e.g. <code>Value_screen_mcap_20K_RCE_ROE12_MT10.csv</code>: number filters when set and non-zero, tick boxes only when changed from default, dropdowns always; m = minus, p = decimal point.</p>
+  <p>Exports the rows the table shows (search and sort applied, all rows, not only the 15 in view). The file name starts with the list picked in the header (<code>all</code>, <code>N500</code> = NIFTY 500, <code>NS500</code> = Smallcap 500, <code>NM250</code> = Microcap 250), then the tab and active filters, e.g. <code>N500_Value_screen_mcap_20K_RCE_ROE12_MT10.csv</code> (MA = max Mcap ÷ Assets): number filters when set and non-zero, tick boxes only when changed from default, dropdowns always; m = minus, p = decimal point.</p>
 
   <h2>PSU and semi-PSU</h2>
   <p>Tagged from a fixed list in the script (<code>PSU</code>, <code>SEMI_PSU</code>). <b>PSU</b> (${N.filter(s=>s.psu==='psu').length} stocks): government holds a majority, directly or via another PSU. <b>semi</b> (${N.filter(s=>s.psu==='semi').length}): large non-controlling or joint government / PSU stake.
@@ -2111,7 +2205,7 @@ new MutationObserver(() => view.querySelectorAll('select:not([data-fancy])').for
   .observe(view, {childList:true, subtree:true});            // filter boxes re-render on every change, not only on route
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeFsel(); });
 
-$('#themeBtn').addEventListener('click', () => {
+$('#theme-toggle').addEventListener('click', () => {
   const day = !document.body.classList.contains('day');
   document.body.classList.toggle('day', day); document.body.classList.toggle('night', !day);
   document.documentElement.dataset.theme = day ? 'day' : 'night';   // scrollbar dot + dropdown shadow follow the theme
