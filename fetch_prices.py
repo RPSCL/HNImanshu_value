@@ -31,7 +31,9 @@ import argparse
 import json
 import math
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -47,8 +49,10 @@ SCRIP_URL   = "https://margincalculator.angelbroking.com/OpenAPI_File/files/Open
 BENCH_SYM   = "^NIFTY500"                 # row name used for the benchmark in prices.csv
 BENCH_NAMES = {"nifty500"}               # matched against the index's symbol / name, spaces removed, lower case
 BACK_DAYS   = 365                         # must match fundamentals.BACK_DAYS
-SLEEP       = 0.35                        # seconds between candle requests (Angel throttles historical calls)
-CHUNK_DAYS  = 360                         # some users get max 500 rows per call, so fetch ~1 year per call
+RATE        = 2.5                         # max candle requests per second, shared by all workers (Angel throttles ~3/s)
+WORKERS     = 3                           # parallel fetches; network delay overlaps, the rate limit stays global
+CHUNK_DAYS  = 380                         # 2 years in 2 calls (~255 rows each, under the 500-row cap some users hit)
+RETRY_PASS  = True                        # after the main pass, retry every failed symbol once more, slowly
 SERIES_PREF = ["EQ", "BE", "BZ", "SM", "ST"]   # which NSE series to use when a stock has several
 # standard split / bonus price ratios (new price ÷ old price)
 CA_RATIOS   = {1/2: "1:2 split or 1:1 bonus", 1/3: "1:3 split or 2:1 bonus", 1/4: "1:4 split or 3:1 bonus",
@@ -135,12 +139,35 @@ def build_token_map(master):
 # ─────────────────────────────────────────────────────────────────────────────
 # Angel login + candles
 # ─────────────────────────────────────────────────────────────────────────────
+class RateLimiter:
+	"""Spaces calls at least 1/RATE s apart across all threads; cooldown() pauses everyone after a 'too fast' reply."""
+	def __init__(self, rate):
+		self.gap, self.next, self.lock = 1.0 / rate, 0.0, threading.Lock()
+
+	def wait(self):
+		with self.lock:
+			now = time.monotonic()
+			t = max(self.next, now)
+			self.next = t + self.gap
+		time.sleep(max(0.0, t - now))
+
+	def cooldown(self, sec):
+		with self.lock:
+			self.next = max(self.next, time.monotonic() + sec)
+			self.gap = min(self.gap * 1.1, 1.0)                      # and slow down for good: settles under Angel's real limit
+
+	@property
+	def rate(self):
+		return 1.0 / self.gap
+
+
 class Angel:
 	def __init__(self):
 		from creds import ANGEL, require, totp                       # values from secrets / .env
 		from SmartApi import SmartConnect                            # pip install smartapi-python
 		require(ANGEL)
 		self._c, self._totp, self._api = ANGEL, totp, SmartConnect
+		self.limiter, self.login_lock, self.n_rate = RateLimiter(RATE), threading.Lock(), 0
 		self.login()
 
 	def login(self):
@@ -174,21 +201,29 @@ class Angel:
 			out[str(ts)[:10]] = (float(o), float(c), float(h))
 		return [(datetime.strptime(k, "%Y-%m-%d").date(), *v) for k, v in sorted(out.items())]
 
-	def _call(self, token, s, e, tries=4):
+	def _call(self, token, s, e, tries=6):
 		params = {"exchange": "NSE", "symboltoken": token, "interval": "ONE_DAY",
 		          "fromdate": f"{s:%Y-%m-%d} 09:15", "todate": f"{e:%Y-%m-%d} 15:30"}
+		msg = ""
 		for i in range(tries):
-			time.sleep(SLEEP * (1 + 2 * i))
+			self.limiter.wait()                                      # global pacing across all workers
 			try:
 				res = self.api.getCandleData(params)
-			except Exception as ex:                                  # network / throttling
-				res = {"status": False, "message": str(ex)[:120]}
+			except Exception as ex:                                  # network / throttling (library raises on non-JSON)
+				res = {"status": False, "message": str(ex)[:160]}
 			if res and res.get("status"):
 				return res.get("data") or []
-			msg = str((res or {}).get("message", "")) + str((res or {}).get("errorcode", ""))
-			if "token" in msg.lower() or "AG8001" in msg or "AG8002" in msg:
-				self.login()                                         # session expired → log in again
-		raise RuntimeError(f"candles failed: {msg[:120]}")
+			msg = str((res or {}).get("message", "")) + " " + str((res or {}).get("errorcode", ""))
+			low = msg.lower()
+			if "access rate" in low or "exceeding" in low or "too many" in low or "AB1019" in msg:
+				self.n_rate += 1
+				self.limiter.cooldown(2.0 * (i + 1))                 # "too fast": everyone pauses 2, 4, 6 … s
+			elif "token" in low or "AG8001" in msg or "AG8002" in msg:
+				with self.login_lock:                                # session expired → one thread logs in again
+					self.login()
+			else:
+				time.sleep(0.5 * (i + 1))
+		raise RuntimeError(f"candles failed: {msg.strip()[:120]}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -269,36 +304,70 @@ def main():
 			pass
 
 	api = Angel()
-	rows, n_ok, n_fail = [], 0, 0
 	now_s = datetime.now(IST).strftime("%Y-%m-%d %H:%M")
-	for i, s in enumerate(todo, 1):
+	end = datetime.now(IST).date()
+	n_all = len(todo)
+
+	def fetch_one(i, s):
+		"""→ (row, log line, ok?) for one symbol."""
 		base = {"SYMBOL": s, "BACK_DATE": f"{back:%Y-%m-%d}", "FETCHED_AT": now_s}
 		if s not in tmap:
-			log(f"  [{i:>4}/{len(todo)}] {s:<14} no Angel token (not in scrip master as NSE EQ/BE/BZ/SM/ST)")
-			rows.append({**base, "STATUS": "NO ANGEL TOKEN"}); n_fail += 1
-			continue
+			return ({**base, "STATUS": "NO ANGEL TOKEN"},
+			        f"  [{i:>4}/{n_all}] {s:<14} no Angel token (not in scrip master as NSE EQ/BE/BZ/SM/ST)", None)
 		asym, tok = tmap[s]
 		base.update({"ANGEL_SYMBOL": asym, "ANGEL_TOKEN": tok})
-		tag = f"  [{i:>4}/{len(todo)}] {s:<14} {asym:<18} token {tok:<8}"
+		tag = f"  [{i:>4}/{n_all}] {s:<14} {asym:<18} token {tok:<8}"
 		try:
-			c = api.candles(tok, start, datetime.now(IST).date())
+			c = api.candles(tok, start, end)
 			if not c:
 				raise RuntimeError("no candles")
 			row = summarise(c, back)
-			rows.append({**base, **row}); n_ok += 1
 			p1 = f"1Y {row['PRICE_1Y']:>10,.2f} ({row['PRICE_1Y_DATE']})" if row.get("PRICE_1Y") is not None else "1Y        n/a"
 			ca = f"  split/bonus: {row['CORP_ACTIONS']}" if row.get("CORP_ACTIONS") else ""
-			log(f"{tag} LTP {row['LTP']:>10,.2f} ({row['LTP_DATE']})  {p1}  {len(c)} candles  {row['STATUS']}{ca}")
+			return ({**base, **row},
+			        f"{tag} LTP {row['LTP']:>10,.2f} ({row['LTP_DATE']})  {p1}  {len(c)} candles  {row['STATUS']}{ca}", True)
 		except Exception as ex:
+			return ({**base, "STATUS": f"FAILED: {str(ex)[:80]}"}, f"{tag} FAILED  {str(ex)[:100]}", False)
+
+	t0 = time.monotonic()
+	results, done = {}, 0
+	log(f"Fetching {n_all} symbols  |  {WORKERS} workers  |  max {RATE} requests/s  |  2 requests per symbol")
+	with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+		futs = {pool.submit(fetch_one, i, s): i for i, s in enumerate(todo, 1)}
+		for f in as_completed(futs):
+			row, line, okk = f.result()
+			results[futs[f]] = (row, okk)
+			log(line)
+			done += 1
+			if done % 100 == 0:
+				el = time.monotonic() - t0
+				nok = sum(1 for r, o in results.values() if o)
+				log(f"  ── {done}/{n_all} done in {el/60:.1f} min  |  ok {nok}  |  rate-limit replies so far {api.n_rate}"
+				    f"  |  ~{el / done * (n_all - done) / 60:.1f} min left")
+
+	retry = sorted(i for i, (r, o) in results.items() if o is False)
+	if RETRY_PASS and retry:
+		log(f"Retry pass: {len(retry)} symbols failed, waiting 20 s then retrying one by one …")
+		time.sleep(20)
+		for i in retry:
+			row, line, okk = fetch_one(i, todo[i - 1])
+			results[i] = (row, okk)
+			log("  retry" + line[1:])
+
+	rows, n_ok, n_fail = [], 0, 0
+	for i in range(1, n_all + 1):                                    # keep the original order in the CSV
+		row, okk = results[i]
+		if okk:
+			n_ok += 1
+		else:
 			n_fail += 1
-			log(f"{tag} FAILED  {str(ex)[:100]}")
-			prev = old.get(s)
-			if prev is not None and str(prev.get("STATUS", "")).startswith("OK"):
-				rows.append({**prev, "STATUS": f"STALE (fetch failed {now_s[:10]})"})
-			else:
-				rows.append({**base, "STATUS": f"FAILED: {str(ex)[:80]}"})
-		if i % 100 == 0:
-			log(f"  {i}/{len(todo)}  ok {n_ok}  failed {n_fail}")
+			prev = old.get(row["SYMBOL"])
+			if okk is False and prev is not None and str(prev.get("STATUS", "")).startswith("OK"):
+				row = {**prev, "STATUS": f"STALE (fetch failed {now_s[:10]})"}      # keep last good prices
+		rows.append(row)
+	el = time.monotonic() - t0
+	log(f"Fetch time {el/60:.1f} min ({el / max(n_all, 1):.2f} s per symbol)  |  rate-limit replies: {api.n_rate}"
+	    f"  |  final pace {api.limiter.rate:.2f} requests/s")
 
 	cols = ["SYMBOL", "ANGEL_SYMBOL", "ANGEL_TOKEN", "LTP", "LTP_DATE", "PRICE_1Y", "PRICE_1Y_DATE", "PRICE_1Y_ADJ",
 	        "ADJ_FACTOR", "HIGH_52W_NOW", "HIGH_52W_1Y", "CORP_ACTIONS", "BACK_DATE", "STATUS", "FETCHED_AT"]
