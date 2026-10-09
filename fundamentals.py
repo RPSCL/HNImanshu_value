@@ -1037,7 +1037,7 @@ nav a{padding:11px 14px 9px;color:var(--mute);font:500 12px var(--mono);letter-s
 nav a:hover{color:var(--ink);text-decoration:none}
 nav a.on{color:var(--brass);border-color:var(--brass)}
 
-main{padding:20px 24px 56px;max-width:1680px;margin:0 auto}
+main{padding:20px 24px 56px;max-width:1880px;margin:0 auto}
 h2.page{font:700 18px/1.2 var(--mono);margin:2px 0 14px;letter-spacing:.2px}
 .bar{display:flex;gap:10px 18px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
 .bar label{color:var(--mute);font-size:12.5px;display:inline-flex;align-items:center;gap:6px}
@@ -1056,6 +1056,7 @@ input:focus,select:focus{border-color:var(--brass);outline:none}
 .stat.cap{padding-left:12px;border-left:2px solid var(--brass);border-right:0;margin-right:4px}
 .stat.cap span{color:var(--brass)!important;font:600 9.5px var(--mono)!important;text-transform:uppercase;letter-spacing:1px}
 .stat.cap b{font-size:12px!important;color:var(--mute)!important;font-weight:600}
+.stat.grpcap{margin-left:4px}
 .stat:last-child{border-right:0}
 .stat b{display:block;font:700 16px/1.2 var(--mono);color:var(--brass)}
 .stat > span{color:var(--faint);font-size:10.5px;line-height:1.3}
@@ -1395,6 +1396,21 @@ const mcapOk = (s, st) => (s.mcap || 0) >= (+st.minMcap || 0)
   && (st.maxMcap === '' || st.maxMcap == null || +st.maxMcap === 0 || (s.mcap != null && s.mcap <= +st.maxMcap));   // Max Mcap blank / 0 = no cap
 const fMcap = st => fNum(st,'minMcap','Min Mcap ₹ Cr',{min:0,step:500,w:90}) + fNum(st,'maxMcap','Max Mcap ₹ Cr',{min:0,step:500,w:100});
 
+/* 1Y back: split the table (in its current sort order) into top / middle / bottom thirds and show each third's
+   average price return. Size k = ceil(n / 3), so 10 stocks -> top 4, middle 4, bottom 4 (the middle overlaps). */
+function thirds(data, col) {
+  const st = view.querySelector('.stats'); if (!st || !$('.grp', st)) return;
+  const r = data.filter(s => s.since && ok(s.since.ret));
+  const n = r.length, k = Math.ceil(n / 3), b = D.then.bench ? D.then.bench.ret : null;
+  const parts = n ? [r.slice(0, k), r.slice(Math.floor((n - k) / 2), Math.floor((n - k) / 2) + k), r.slice(n - k)] : [[], [], []];
+  $('.grpby', st).textContent = col ? col.label : 'table order';
+  st.querySelectorAll('.grp').forEach((el, i) => {
+    const x = parts[i], avg = x.length ? x.reduce((a, s) => a + s.since.ret, 0) / x.length : null;
+    $('span', el).textContent = ['Top', 'Mid', 'Low'][i] + (k ? ' ' + k : '') + ', avg';
+    $('b', el).innerHTML = signPct(avg);
+    el.title = x.map(s => s.sym + ' ' + (s.since.ret > 0 ? '+' : '') + fmt(s.since.ret) + '%').join('\n') + (b != null ? '\nNIFTY 500: ' + fmt(b) + '%' : '');
+  });
+}
 const TABLE_ROWS = 15;                                    // visible rows per table, the rest scrolls
 function makeTable(id, cols, rows, opt={}) {
   if (BACK) {
@@ -1465,6 +1481,7 @@ function makeTable(id, cols, rows, opt={}) {
     if (!data.length) tb.innerHTML = `<tr><td class="l na" colspan="${cols.length+1}">No stocks match these filters. Loosen a filter or press Reset.</td></tr>`;
     tbl.appendChild(tb);
     shown = data;
+    if (BACK && D.then.hasPrice) thirds(data, col);
     (window.requestAnimationFrame || setTimeout)(() => {  // window = header + 15 rows, rest scrolls inside the card
       const r = tb.rows[0];
       if (r && r.offsetHeight) wrap.style.maxHeight = (tbl.tHead.offsetHeight + r.offsetHeight * TABLE_ROWS + 1) + 'px';
@@ -1613,7 +1630,11 @@ const statTiles = arr => arr.map(([l,v]) => `<div class="stat"><span>${l}</span>
 const stats = (arr, rows) => {                            // ONE compact strip: list stats, then (1Y back) results since that date
   const p = perfStats(rows);
   view.insertAdjacentHTML('beforeend', `<div class="stats">${statTiles(arr)}`
-    + (p.length ? `<div class="stat cap"><span>Since</span><b>${esc(D.then.date)}</b></div>${statTiles(p)}` : '') + '</div>');
+    + (p.length ? `<div class="stat cap"><span>Since</span><b>${esc(D.then.date)}</b></div>${statTiles(p)}` : '')
+    + (BACK && D.then.hasPrice ? `<div class="stat cap grpcap" title="The table below split into top / middle / bottom thirds in its current order (click a column to re-rank); average 1Y price return of each">`
+        + `<span>Thirds by</span><b class="grpby">–</b></div>`
+        + ['Top', 'Mid', 'Low'].map((n, i) => `<div class="stat grp" data-g="${i}"><span>${n}</span><b>–</b></div>`).join('') : '')
+    + '</div>');
 };
 const hint = () => {};                                   // no help text under tables; it all lives in Methodology
 
