@@ -1597,7 +1597,7 @@ const C = {
   debitda: {k:'debitda', label:'Debt ÷ EBITDA', tip:'Borrowings ÷ operating profit (EBITDA), latest financial year; non-financials. Graham screens: below 1.5x. Gross debt (Screener has no cash figure), so it is stricter than net debt ÷ EBITDA.',
             v:s=>s.fin ? null : s.debitda, f:s=>s.fin || s.debitda==null ? NA : `<span class="pill ${s.debitda <= 1.5 ? 'disc' : s.debitda > 3 ? 'prem' : ''}">${s.debitda >= 99 ? 'loss' : fmt(s.debitda, 1) + 'x'}</span>`},
   de: {k:'de', label:'Debt ÷ Equity', tip:'Borrowings ÷ (reserves + share capital), latest financial year; not used for financials. Graham: below 0.5.',
-       v:s=>s.fin ? null : s.de, f:s=>s.fin || s.de==null ? NA : `<span class="pill ${s.de <= 0.5 ? 'disc' : s.de > 1 ? 'prem' : ''}">${fmt(s.de, 2)}</span>`},
+       v:s=>s.fin ? null : s.de, f:s=>s.fin || s.de==null ? (has('de') || s.fin ? NA : '<span class="na" title="Needs the Borrowings rows: filled after the next full scrape with the updated n500 / ns500 / nm250">soon</span>') : `<span class="pill ${s.de <= 0.5 ? 'disc' : s.de > 1 ? 'prem' : ''}">${fmt(s.de, 2)}</span>`},
   roa: {k:'roa', label:'ROA %', tip:'PAT ÷ total assets, latest financial year. Banks / NBFCs: 1.5%+ is strong.', v:s=>s.roa,
         f:s=>s.roa==null ? NA : (s.fin ? `<span class="pill ${s.roa >= 1.5 ? 'disc' : s.roa < 1 ? 'prem' : ''}">${fmt(s.roa, 2)}</span>` : fmt(s.roa, 1))},
   gnpa: {k:'gnpa', label:'Gross NPA %', tip:'Latest quarterly Gross NPA % (banks). Below 2% is clean.', v:s=>s.gnpa,
@@ -1633,7 +1633,7 @@ const C = {
 };
 
 const has = k => S.some(s => s[k] != null);
-const safeCols = () => [C.q5, C.pup].concat(has('de') ? [C.de, C.debitda] : [], [C.roa], has('gnpa') ? [C.gnpa, C.nnpa, C.pcr] : []);
+const safeCols = () => [C.q5, C.pup, C.de, C.debitda, C.roa].concat( has('gnpa') ? [C.gnpa, C.nnpa, C.pcr] : []);
 const assetCols = () => [C.pta].concat(has('pfa') ? [C.pfa] : [], has('invp') ? [C.invp] : []);
 
 /* ---------- views ---------- */
@@ -1880,7 +1880,7 @@ const VF_DEF = {maxPE:'', maxPB:'', minQ:12, minScore:0, minFcf:'', minMcap:0, m
                 maxPrem:'', maxPeg:'', minDy:0.01, minCc:'', maxPta:'', maxPfa:'', minInv:'', maxDe:'', minUp:'', maxNpa:'', minRoa:'', minQ5:'', maxDebitda:'', maxNnpa:'', minPcr:''};
 const GRAHAM_SAFE = {minQ5:12, minUp:7, maxDe:1, maxDebitda:2.5, minRoa:1.5, maxNpa:2.5, maxNnpa:1, minPcr:70};   // Graham's safety tests, used by both Graham screens
 const VF_PRESETS = [
-  {name:'Asset-backed', price:1, tip:'Market cap ≤ total assets on the books (Mcap ÷ Assets ≤ 1x), PB ≤ 1.5, ROCE ≥ 10%, pays a dividend, no value traps', st:{maxPta:1, maxPB:1.5, minQ:10}},
+  {name:'Asset-backed', price:1, tip:'Market cap ≤ total assets on the books (Mcap ÷ Assets ≤ 1x), PB ≤ 1.5, ROCE ≥ 10%, debt ÷ equity ≤ 0.5 (assets not bought with borrowed money), pays a dividend, no value traps', st:{maxPta:1, maxPB:1.5, minQ:10, maxDe:0.5}},
   {name:'Graham defensive', price:1, tip:'PE × PB ≤ 22.5, pays a dividend, 5-year median ROCE (ROE for financials) ≥ 12%, profit up in 7 of the last 10 years, debt ÷ equity < 1 or debt ÷ EBITDA < 2.5x; banks: Gross NPA < 2.5%, Net NPA < 1%, PCR > 70%; financials: ROA ≥ 1.5%; cash conversion ≥ 0.5x and no equity dilution (value-trap filter)', st:{graham:true, minQ:'', ...GRAHAM_SAFE}},
   {name:'Graham deep value', price:1, tip:'Graham defensive + PE ≤ 15, PB ≤ 2', st:{graham:true, maxPE:15, maxPB:2, minQ:'', ...GRAHAM_SAFE}},
   {name:'Deep value', price:1, tip:'PE ≤ 15, PB ≤ 2, ROCE ≥ 10%, pays a dividend, no value traps', st:{maxPE:15, maxPB:2, minQ:10}},
@@ -1898,7 +1898,7 @@ function valueView() {
       + fNum(st,'minCc','Min cash conv. x',{step:0.1})
       + fNum(st,'minQ5','Min ROCE 5Y median %',{min:0,step:1})
       + fNum(st,'minUp','Min profit-up yrs (of 10)',{min:0,max:10,step:1})
-      + (has('de') ? fNum(st,'maxDe','Max debt ÷ equity',{min:0,step:0.1}) + fNum(st,'maxDebitda','…or max debt ÷ EBITDA x',{min:0,step:0.25}) : '')
+      + fNum(st,'maxDe','Max debt ÷ equity',{min:0,step:0.1}) + fNum(st,'maxDebitda','…or max debt ÷ EBITDA x',{min:0,step:0.25})
       + fNum(st,'minRoa','Financials: min ROA %',{min:0,step:0.25})
       + (has('gnpa') ? fNum(st,'maxNpa','Banks: max Gross NPA %',{min:0,step:0.5}) + fNum(st,'maxNnpa','Banks: max Net NPA %',{min:0,step:0.25})
           + fNum(st,'minPcr','Banks: min PCR %',{min:0,max:100,step:5}) : '')
@@ -2359,7 +2359,7 @@ function methodView() {
   <div class="wrap"><table><tr><th>Metric</th><th>Better when</th><th>Weight</th><th>Used 1Y back?</th></tr>
   ${Object.keys(W_DEF).map(k => row(W_LABEL[k], METRICS[k].hi ? 'higher' : 'lower', W[k], (D.then.hasPrice || BACK_KEYS.includes(k)) ? 'yes' : '<b>no</b> (needs prices.csv)')).join('')}</table></div>
   <p><b>Filters</b> today: Max PE, Min ROCE / ROE, Min score, Min Trend %, Hide value traps; More: Max PB, Max vs industry PE %, Max PEG, Min FCF yield, Min div yield, Min cash conversion, Max Mcap ÷ Assets (plus Mcap ÷ Fixed assets / Investments % once scraped), Min / Max Mcap, Graham pass.
-  <b>Screens</b>: Asset-backed (Mcap ÷ Assets ≤ 1, PB ≤ 1.5, ROCE ≥ 10%), Graham defensive (PE × PB ≤ 22.5 + the safety tests below), Graham deep value (Graham defensive + PE ≤ 15, PB ≤ 2, ROCE ≥ 10%), Deep value (PE ≤ 15, PB ≤ 2, ROCE ≥ 10%); all hide value traps and need a dividend. Click again to switch off.</p>
+  <b>Screens</b>: Asset-backed (Mcap ÷ Assets ≤ 1, PB ≤ 1.5, ROCE ≥ 10%, debt ÷ equity ≤ 0.5), Graham defensive (PE × PB ≤ 22.5 + the safety tests below), Graham deep value (Graham defensive + PE ≤ 15, PB ≤ 2, ROCE ≥ 10%), Deep value (PE ≤ 15, PB ≤ 2, ROCE ≥ 10%); all hide value traps and need a dividend. Click again to switch off.</p>
   <p><b>Graham safety tests</b> (both Graham screens; each also a filter under More filters):</p>
   <div class="wrap"><table><tr><th>Test</th><th>Applies to</th><th>Pass when</th><th>Data</th></tr>
   ${row('Return through the cycle', 'all', 'median ROCE of the last 5 financial years ≥ 12% (ROE for financials); replaces the single-year ROCE floor', S.some(x => !x.fin && x.q5 != null) ? 'yearly, available' : 'financials: available; others use this year\'s ROCE <b>until the next full scrape</b> (Borrowings rows)')}
