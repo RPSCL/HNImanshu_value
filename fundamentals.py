@@ -843,18 +843,28 @@ body.day{
 ::-webkit-scrollbar-thumb:hover,::-webkit-scrollbar-thumb:active{background:radial-gradient(circle at center,var(--sdot-hi) 0 3px,transparent 3.5px)}
 @supports (-moz-appearance:none){*{scrollbar-width:thin;scrollbar-color:var(--sdot) transparent}}   /* Firefox has no dot option: thinnest bar instead */
 
-/* smart filter box: Screens row, then a header (title + buttons), then an aligned grid of labelled fields */
-.fbox{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px 14px;margin-bottom:12px}
+/* filter bar: Screens chips + ONE Filters button; all fields, Scoring and Reset live in its dropdown
+   (laptop: drops down under the button; phone: floating window over the page) */
+.fbox{position:relative;margin-bottom:10px}
 .fbox .t{font:600 10.5px var(--mono);color:var(--brass);text-transform:uppercase;letter-spacing:1px;white-space:nowrap}
-.presets{display:flex;align-items:flex-start;gap:12px;padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--line)}
-.presets > .t{line-height:27px;min-width:58px}
-.pchips{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
-.preset{font:600 11.5px var(--mono);height:27px;padding:0 11px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--mute);cursor:pointer;letter-spacing:.2px;white-space:nowrap;flex-shrink:0}
+.fbar{display:flex;align-items:center;gap:10px}
+.pchips{display:flex;flex-wrap:wrap;gap:6px;min-width:0;flex:1}
+.preset{font:600 11.5px var(--mono);height:28px;padding:0 11px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--mute);cursor:pointer;letter-spacing:.2px;white-space:nowrap;flex-shrink:0}
 .preset:hover{border-color:var(--brass);color:var(--ink)}
 .preset.on{background:var(--brass);border-color:var(--brass);color:var(--bg)}
-.preset-custom{font:600 11px var(--mono);color:var(--faint);line-height:27px;padding:0 4px;font-style:italic}
-.fhead{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;margin-bottom:10px}
+.preset-custom{font:600 11px var(--mono);color:var(--faint);line-height:28px;padding:0 4px;font-style:italic}
+.btn.fbtn{flex-shrink:0;align-self:flex-start;border-color:var(--brass);color:var(--brass);background:transparent}
+.fbox.dopen .btn.fbtn,.btn.fbtn:hover{background:var(--brass);color:var(--bg)}
+.fbox.dopen .btn.fbtn .cnt{background:var(--bg);color:var(--brass)}
+.fdrop{display:none;position:absolute;right:0;top:calc(100% + 8px);z-index:80;width:min(920px,calc(100vw - 48px));max-height:min(72vh,640px);overflow:auto;
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px 16px;
+  box-shadow:0 0 0 1px var(--brassbg),0 8px 24px rgba(0,0,0,.18)}                     /* faint shadow, just enough to lift it */
+:root[data-theme=day] .fdrop{box-shadow:0 0 0 1px var(--brassbg),0 8px 24px rgba(40,30,18,.12)}
+.fbox.dopen .fdrop{display:block}
+.fback{display:none}
+.fdhead{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--line);position:sticky;top:-12px;background:var(--panel);z-index:2;padding-top:2px}
 .fbtns{display:flex;gap:6px;flex-wrap:wrap}
+.btn.done{border-color:var(--brass);color:var(--brass)}
 .fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px 14px;align-items:end}
 .fld{display:flex;flex-direction:column;gap:5px;min-width:0;margin:0}
 .fld > span{font:500 10.5px var(--mono);color:var(--faint);letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -871,10 +881,11 @@ body.day{
 .btn .car{display:inline-block;transition:transform .15s}
 .btn.open .car{transform:rotate(180deg)}
 .btn .cnt{background:var(--brass);color:var(--bg);border-radius:999px;padding:1px 6px;font-size:10px}
-.fpanel{display:none;margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
+.fpanel{display:none;margin:0 0 14px;padding-bottom:14px;border-bottom:1px dashed var(--line)}
 .fpanel.open{display:block}
-.fsub{font:600 10px var(--mono);color:var(--brass);text-transform:uppercase;letter-spacing:1px;margin:0 0 10px;opacity:.85}
-.fpanel .bar{margin:0 0 14px}
+.fsub{font:600 10px var(--mono);color:var(--brass);text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;opacity:.85}
+.fpanel .fsub{margin-top:0}
+.fpanel .bar{margin:0 0 12px}
 .fpanel .fgrid + .btn{margin-top:12px}
 
 /* day / night toggle: same control as the screener (moon - track - sun), same storage key */
@@ -914,10 +925,13 @@ body.day .toggle-thumb{transform:translateX(16px)}
   .lg{display:none} .thint{min-width:0} .pop{left:auto;right:-40px}
   header.top{position:relative}
   #theme-toggle{position:absolute;top:14px;right:12px;margin:0}     /* top-right corner, like the screener */
-  .fbox{padding:10px 12px 12px}
-  .presets{flex-direction:column;gap:6px}
-  .presets > .t{line-height:1.2}
-  .pchips{flex-wrap:nowrap;overflow-x:auto;width:100%;padding-bottom:4px;-webkit-overflow-scrolling:touch}   /* one swipeable row */
+  .pchips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch;scrollbar-width:none}   /* one swipeable row */
+  .pchips::-webkit-scrollbar{display:none}
+  .btn.fbtn{padding:0 10px}
+  .fback{position:fixed;left:0;right:0;bottom:0;top:0;z-index:90;background:rgba(0,0,0,.28)}   /* dims only below the stats strip */
+  .fbox.dopen .fback{display:block}
+  .fdrop{position:fixed;left:10px;right:10px;top:10px;bottom:10px;width:auto;max-height:none;z-index:91;padding:12px 14px 16px;border-radius:14px}
+  body.fmodal{overflow:hidden}
   .fgrid{grid-template-columns:1fr 1fr;gap:10px}
   .fld > span{font-size:10px}
   .fbtns .btn{padding:0 9px}
@@ -994,14 +1008,14 @@ input[type=checkbox]{accent-color:var(--brass);width:15px;height:15px}
 input:focus,select:focus{border-color:var(--brass);outline:none}
 
 /* stat strip: always ONE line; if it is wider than the screen it scrolls sideways instead of wrapping */
-.stats{display:flex;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;margin:6px 0 16px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);-webkit-overflow-scrolling:touch}
-.stats.main + .stats.perf{margin-top:-16px;border-top:1px dashed var(--line)}
-.stat{flex:0 0 auto;white-space:nowrap;padding:10px 18px 10px 0;margin-right:18px;border-right:1px solid var(--line)}
-.stats.perf .stat.cap span{color:var(--brass);font:600 10px var(--mono);text-transform:uppercase;letter-spacing:1px}
-.stats.perf .stat.cap b{font-size:13px;color:var(--mute);font-weight:600}
+.stats{display:flex;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;margin:4px 0 10px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);-webkit-overflow-scrolling:touch}
+.stat{flex:0 0 auto;white-space:nowrap;padding:6px 14px 6px 0;margin-right:14px;border-right:1px solid var(--line)}
+.stat.cap{padding-left:12px;border-left:2px solid var(--brass);border-right:0;margin-right:4px}
+.stat.cap span{color:var(--brass)!important;font:600 9.5px var(--mono)!important;text-transform:uppercase;letter-spacing:1px}
+.stat.cap b{font-size:12px!important;color:var(--mute)!important;font-weight:600}
 .stat:last-child{border-right:0}
-.stat b{display:block;font:700 20px/1.2 var(--mono);color:var(--brass)}
-.stat > span{color:var(--faint);font-size:11.5px}
+.stat b{display:block;font:700 16px/1.2 var(--mono);color:var(--brass)}
+.stat > span{color:var(--faint);font-size:10.5px;line-height:1.3}
 
 .wrap{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:78vh}
 table{border-collapse:separate;border-spacing:0;width:100%}
@@ -1064,9 +1078,9 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
   .box{padding:10px}
   input[type=search]{width:100%!important}
   th,td{padding:7px 9px}
-  .stat{padding:8px 12px 8px 0;margin-right:12px}
-  .stat b{font-size:15px}
-  .stat > span{font-size:10.5px}
+  .stat{padding:5px 10px 5px 0;margin-right:10px}
+  .stat b{font-size:14px}
+  .stat > span{font-size:10px}
   .wrap{max-height:72vh}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -1255,14 +1269,14 @@ function perfStats(rows) {
   if (D.then.hasPrice) {                                   // price-return backtest of this list
     const rr = rows.map(s => sv(s,'ret')).filter(ok), b = D.then.bench ? D.then.bench.ret : null;
     const avg = rr.length ? rr.reduce((a,x) => a + x, 0) / rr.length : null;
-    px.push(['Equal-weight return, this list', signPct(avg)], ['Median return, this list', signPct(median(rr))],
-            ['NIFTY 500 return', signPct(b)]);
-    if (b != null) px.push(['Beat NIFTY 500', rr.length ? `${rr.filter(x => x > b).length} of ${rr.length}` : '–']);
+    px.push(['Return, eq-wt', signPct(avg)], ['Return, median', signPct(median(rr))],
+            ['NIFTY 500', signPct(b)]);
+    if (b != null) px.push(['Beat NIFTY', rr.length ? `${rr.filter(x => x > b).length} of ${rr.length}` : '–']);
   }
-  return px.concat([['Median profit growth since, this list', signPct(medSince(rows,'patG'))],
-          ['Median profit growth, all stocks', signPct(medSince(V(),'patG'))],
-          ['Profit up since then', r.length ? `${up} of ${r.length}` : '–'],
-          ['Median ROE change', signPP(medSince(rows,'roeD'))]]);
+  return px.concat([['Profit growth, list', signPct(medSince(rows,'patG'))],
+          ['Profit growth, all', signPct(medSince(V(),'patG'))],
+          ['Profit up', r.length ? `${up} of ${r.length}` : '–'],
+          ['ROE Δ, median', signPP(medSince(rows,'roeD'))]]);
 }
 /* in 1Y-back mode, price-based columns are dropped and the "since then" columns take the price column's place */
 const PRICE_KEYS = new Set(['pta','pfa','invp','qvV','cmp','pe','cpe','prem','indpe','pb','peg','gup','dy','ey','fcfy','from52','cheap','nPE','rEY']);
@@ -1505,10 +1519,10 @@ function pePicker() {
 }
 const pageTitle = t => view.insertAdjacentHTML('beforeend', `<h2 class="page">${t}</h2>`);
 const statTiles = arr => arr.map(([l,v]) => `<div class="stat"><span>${l}</span><b>${v}</b></div>`).join('');
-const stats = (arr, rows) => {                            // list stats on one line; 1Y-back results on a second, separate line
+const stats = (arr, rows) => {                            // ONE compact strip: list stats, then (1Y back) results since that date
   const p = perfStats(rows);
-  view.insertAdjacentHTML('beforeend', `<div class="stats main">${statTiles(arr)}</div>`
-    + (p.length ? `<div class="stats perf"><div class="stat cap"><span>Since then</span><b>${esc(D.then.date)}</b></div>${statTiles(p)}</div>` : ''));
+  view.insertAdjacentHTML('beforeend', `<div class="stats">${statTiles(arr)}`
+    + (p.length ? `<div class="stat cap"><span>Since</span><b>${esc(D.then.date)}</b></div>${statTiles(p)}` : '') + '</div>');
 };
 const hint = html => {                                   // help text lives in the table footer, not under the page
   const feet = view.querySelectorAll('.tfoot'), ft = feet[feet.length - 1];
@@ -1519,7 +1533,6 @@ const hint = html => {                                   // help text lives in t
 const cheapest = g => g.stocks.filter(s=>s.pe!=null && vis(s)).reduce((a,b)=>!a||b.pe<a.pe?b:a, null);
 function homeView() {
   setNav('home'); view.innerHTML = '';
-  pageTitle('Industries');
   view.appendChild(pePicker());
   const cols = [
     {k:'name', label:'Industry', l:1, v:g=>g.name, f:g=>`<b>${esc(g.name)}</b>`},
@@ -1559,6 +1572,22 @@ const PANEL_OPEN = {};                                    // which panels are ex
 const fNum = (st, k, label, o={}) => `<label class="fld"><span title="${esc(label)}">${label}</span><input type="number" data-f="${k}"${o.min!=null?` min="${o.min}"`:''}${o.max!=null?` max="${o.max}"`:''} step="${o.step||1}" value="${st[k]}" placeholder="any"></label>`;
 const fChk = (st, k, label) => `<label class="fld chk"><input type="checkbox" data-f="${k}" ${st[k]?'checked':''}><span>${label}</span></label>`;
 const fSel = (st, k, label, opts) => `<label class="fld"><span>${label}</span><select data-f="${k}">${opts.map(([v,t]) => `<option value="${v}" ${st[k]===v?'selected':''}>${t}</option>`).join('')}</select></label>`;
+const DROP = {};                                          // which filter dropdown is open (+ its scroll), kept across re-renders
+const isPhone = () => matchMedia('(max-width:700px)').matches;
+/* the dropdown opens BELOW the stats strip, so the list's numbers (returns etc.) stay in view while filtering */
+function placeDrop(f) {
+  const drop = $('.fdrop', f), back = $('.fback', f);
+  let st = f.nextElementSibling;
+  while (st && !st.classList.contains('stats')) st = st.nextElementSibling;
+  const fr = f.getBoundingClientRect(), sb = st ? st.getBoundingClientRect().bottom : fr.bottom;
+  if (isPhone()) {                                        // floating window between the stats strip and the bottom edge
+    const top = sb + 6 < innerHeight - 260 ? Math.max(10, sb + 6) : 10;
+    drop.style.top = back.style.top = top + 'px';
+  } else {
+    drop.style.top = (sb - fr.top + 6) + 'px'; back.style.top = '';
+  }
+}
+const closeDrops = () => { document.querySelectorAll('.fbox.dopen').forEach(f => f.classList.remove('dopen')); for (const k in DROP) DROP[k].open = false; document.body.classList.remove('fmodal'); };
 function filterBox(o, rerender) {
   const {key, def} = o;
   const st = lsJson(key, def);
@@ -1568,20 +1597,36 @@ function filterBox(o, rerender) {
   const isOn = p => Object.entries(Object.assign({}, def, p.st)).every(([k, v]) => same(st[k], v));
   const active = presets.find(isOn);
   const moreHtml = o.more ? o.more(st) : '';
-  const nMore = (o.moreKeys || []).filter(k => !same(st[k], def[k])).length;
-  const f = document.createElement('div'); f.className = 'fbox';
-  f.innerHTML =
-      (presets.length ? `<div class="presets"><span class="t">Screens</span><div class="pchips">` + presets.map((p, i) =>
+  const nOn = Object.keys(def).filter(k => !same(st[k], def[k])).length;  // changes from default, shown on the button
+  const D0 = DROP[key] = DROP[key] || {open:false, top:0};
+  const f = document.createElement('div'); f.className = 'fbox' + (D0.open ? ' dopen' : '');
+  f.innerHTML = `<div class="fbar"><div class="pchips">`
+      + presets.map((p, i) =>
         `<button type="button" class="preset${p === active ? ' on' : ''}" data-p="${i}" aria-pressed="${p === active}" title="${esc((p.tip || '') + (p === active ? ' (click again to switch off)' : ''))}">${esc(p.name)}</button>`).join('')
-        + (active || !Object.keys(def).some(k => !same(st[k], def[k])) ? '' : '<span class="preset-custom">Custom</span>') + '</div></div>' : '')   // defaults = no label
-    + `<div class="fhead"><span class="t">Filters</span><span class="fbtns">`
-    + (moreHtml ? `<button type="button" class="btn ghost" data-tog="more">More<span class="lg"> filters</span>${nMore ? ` <b class="cnt">${nMore}</b>` : ''} <span class="car">▾</span></button>` : '')
+      + (active || !nOn ? '' : '<span class="preset-custom">Custom</span>') + `</div>`
+      + `<button type="button" class="btn fbtn" aria-expanded="${D0.open}" title="All filters, scoring and reset">`
+      + `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 3.5h12M4.5 8h7M7 12.5h2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`
+      + `Filters${nOn ? ` <b class="cnt">${nOn}</b>` : ''}</button></div>`
+    + `<div class="fback"></div><div class="fdrop" role="dialog" aria-label="Filters">`
+    + `<div class="fdhead"><span class="t">Filters</span><span class="fbtns">`
     + (o.extra ? `<button type="button" class="btn ghost" data-tog="extra">${o.extra.label} <span class="car">▾</span></button>` : '')
-    + `<button type="button" class="btn ghost" data-reset title="Back to defaults">Reset</button></span></div>`
+    + `<button type="button" class="btn ghost" data-reset title="Back to defaults">Reset</button>`
+    + `<button type="button" class="btn ghost done" data-close>Done</button></span></div>`
+    + (o.extra ? `<div class="fpanel" data-panel="extra"></div>` : '')
     + `<div class="fgrid">${o.main(st)}</div>`
-    + (moreHtml ? `<div class="fpanel" data-panel="more"><div class="fsub">More filters</div><div class="fgrid">${moreHtml}</div></div>` : '')
-    + (o.extra ? `<div class="fpanel" data-panel="extra"></div>` : '');
+    + (moreHtml ? `<div class="fsub">More filters</div><div class="fgrid">${moreHtml}</div>` : '')
+    + `</div>`;
   if (o.extra) o.extra.build($('[data-panel="extra"]', f));
+  const drop = $('.fdrop', f);
+  const setOpen = v => {
+    if (v) closeDrops();
+    D0.open = v; f.classList.toggle('dopen', v); $('.fbtn', f).setAttribute('aria-expanded', v);
+    if (v) placeDrop(f);
+    document.body.classList.toggle('fmodal', v && isPhone());   // phone: floating window, page locked
+  };
+  $('.fbtn', f).addEventListener('click', () => setOpen(!D0.open));
+  $('[data-close]', f).addEventListener('click', () => setOpen(false));
+  drop.addEventListener('scroll', () => { D0.top = drop.scrollTop; });
   f.querySelectorAll('[data-panel]').forEach(p => p.classList.toggle('open', !!PANEL_OPEN[key + p.dataset.panel]));
   f.querySelectorAll('[data-tog]').forEach(b => {
     const name = b.dataset.tog; b.classList.toggle('open', !!PANEL_OPEN[key + name]);
@@ -1592,7 +1637,7 @@ function filterBox(o, rerender) {
   });
   f.querySelectorAll('[data-f]').forEach(el => el.addEventListener('change', () => {
     st[el.dataset.f] = el.type === 'checkbox' ? el.checked : (el.tagName === 'SELECT' ? el.value : (el.value === '' ? '' : +el.value));
-    lsSet(key, JSON.stringify(st)); rerender();
+    lsSet(key, JSON.stringify(st)); rerender();                          // dropdown stays open (DROP) while you tweak
   }));
   f.querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => {
     const p = presets[+b.dataset.p];
@@ -1601,12 +1646,28 @@ function filterBox(o, rerender) {
   }));
   $('[data-reset]', f).addEventListener('click', () => { lsSet(key, '{}'); rerender(); });
   view.appendChild(f);
+  const on = $('.preset.on', f), pc = $('.pchips', f);               // phone: swipe row starts at the active screen
+  if (on && pc.scrollWidth > pc.clientWidth) pc.scrollLeft = on.offsetLeft - pc.offsetLeft - 8;
+  if (D0.open) {                                          // re-rendered while open: same place, same scroll
+    (window.requestAnimationFrame || setTimeout)(() => { placeDrop(f); drop.scrollTop = D0.top; });   // stats strip is added after this box
+    if (isPhone()) document.body.classList.add('fmodal');
+  }
   return st;
 }
+/* any click outside the dropdown and its Filters button closes it, BEFORE that click does anything else
+   (capture phase), so a Screen bubble, header chip or table click never reopens it on re-render */
+document.addEventListener('click', e => {
+  if (!document.querySelector('.fbox.dopen')) return;
+  const t = e.target;
+  if (t.closest && (t.closest('.fdrop') || t.closest('.fbtn'))) return;
+  closeDrops();
+}, true);
+addEventListener('resize', () => { const f = document.querySelector('.fbox.dopen'); if (f) placeDrop(f); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.querySelector('.fbox.dopen')) closeDrops(); });
 
 /* ---------- VALUE SCREEN ---------- */
 const VF_DEF = {maxPE:'', maxPB:'', minQ:12, minScore:0, minFcf:'', minMcap:0, maxMcap:'', trap:true, graham:false, minTrend:'',
-                maxPrem:'', maxPeg:'', minDy:'', minCc:'', maxPta:'', maxPfa:'', minInv:''};
+                maxPrem:'', maxPeg:'', minDy:0.01, minCc:'', maxPta:'', maxPfa:'', minInv:''};
 const VF_PRESETS = [
   {name:'Quality, fair price', tip:'ROCE (ROE for financials) ≥ 15%, Value score ≥ 60, no value-trap flags', st:{minQ:15, minScore:60}},
   {name:'Deep value', price:1, tip:'PE ≤ 15, PB ≤ 2, ROCE ≥ 10%, no value traps', st:{maxPE:15, maxPB:2, minQ:10}},
@@ -1614,14 +1675,14 @@ const VF_PRESETS = [
   {name:'GARP', price:1, tip:'Growth at a reasonable price: PEG ≤ 1, ROCE ≥ 15%, no value traps', st:{maxPeg:1, minQ:15}},
   {name:'Cash machines', price:1, tip:'FCF yield ≥ 4%, cash conversion ≥ 0.9x, ROCE ≥ 15%, no value traps', st:{minFcf:4, minCc:0.9, minQ:15}},
   {name:'Dividend', price:1, tip:'Dividend yield ≥ 3%, cash conversion ≥ 0.8x, no value traps', st:{minDy:3, minCc:0.8, minQ:''}},
-  {name:'Graham defensive', price:1, tip:'PE × PB ≤ 22.5, pays a dividend, no value traps', st:{graham:true, minDy:0.1, minQ:''}},
+  {name:'Graham defensive', price:1, tip:'PE × PB ≤ 22.5, pays a dividend, no value traps', st:{graham:true, minQ:''}},
+  {name:'Graham deep value', price:1, tip:'Graham pass (PE × PB ≤ 22.5) + Deep value (PE ≤ 15, PB ≤ 2, ROCE ≥ 10%) + pays a dividend, no value traps', st:{graham:true, maxPE:15, maxPB:2, minQ:10}},
   {name:'Cheap & improving', price:1, tip:'PE below industry PE and Trend ≥ 70%, no value traps', st:{maxPrem:0, minTrend:70, minQ:''}},
   {name:'Improving quality', tip:'ROCE ≥ 15% and Trend ≥ 70%, no value traps', st:{minQ:15, minTrend:70}},
   {name:'Asset-backed', price:1, tip:'Market cap ≤ total assets on the books (Mcap ÷ Assets ≤ 1x), PB ≤ 1.5, ROCE ≥ 10%, no value traps', st:{maxPta:1, maxPB:1.5, minQ:10}},
 ];
 function valueView() {
   setNav('value'); view.innerHTML = '';
-  pageTitle(NOPRICE ? 'Quality screen, 1 year back' : BACK ? 'Value screen, 1 year back' : 'Value screen');
   const vf = filterBox({
     key:'vf', def:VF_DEF, presets:VF_PRESETS,
     main: st => (NOPRICE ? '' : fNum(st,'maxPE','Max PE',{min:0})) + fNum(st,'minQ','Min ROCE / ROE %')
@@ -1629,7 +1690,7 @@ function valueView() {
       + fChk(st,'trap','Hide value traps'),
     more: st => (NOPRICE ? '' : fNum(st,'maxPB','Max PB',{min:0,step:0.5}) + fNum(st,'maxPrem','Max vs industry PE %',{step:5})
       + fNum(st,'maxPeg','Max PEG',{min:0,step:0.25}) + fNum(st,'minFcf','Min FCF yield %',{step:0.5})
-      + fNum(st,'minDy','Min div yield %',{min:0,step:0.5}))
+      + fNum(st,'minDy','Min div yield %',{min:0,step:0.01}))
       + fNum(st,'minCc','Min cash conv. x',{step:0.1})
       + (NOPRICE ? '' : fNum(st,'maxPta','Max Mcap ÷ Assets x',{min:0,step:0.25})
           + (has('pfa') ? fNum(st,'maxPfa','Max Mcap ÷ Fixed assets x',{min:0,step:0.25}) : '')
@@ -1667,10 +1728,10 @@ function valueView() {
     && (!vf.trap || !trapReasons(s).length)
     && (NOPRICE || !vf.graham || grahamPass(s))
     && trendOk(s, vf.minTrend));                                       // Trend is a filter here, never part of the score
-  if (NOPRICE) stats([['Stocks passing filters', rows.length], ['Stocks with a quality score', V().filter(s=>s.score!=null).length]], rows);
-  else stats([['Stocks passing filters', rows.length], ['Stocks with a value score', V().filter(s=>s.score!=null).length],
-         ['Median PE of list', fmt(median(rows.map(s=>s.pe)))], ['Median PB of list', fmt(median(rows.map(s=>s.pb)),2)],
-         ['Graham pass in list', rows.filter(grahamPass).length]], rows);
+  if (NOPRICE) stats([['Passing', rows.length], ['Scored', V().filter(s=>s.score!=null).length]], rows);
+  else stats([['Passing', rows.length], ['Scored', V().filter(s=>s.score!=null).length],
+         ['Median PE', fmt(median(rows.map(s=>s.pe)))], ['Median PB', fmt(median(rows.map(s=>s.pb)),2)],
+         ['Graham pass', rows.filter(grahamPass).length]], rows);
   view.appendChild(makeTable('value',
     [C.score, C.trend, C.sym, C.name, C.ind, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
     rows, {sortKey:'score', sortDir:-1, search:true, csv:() => csvName('Value_screen', vf, VF_DEF,
@@ -1689,7 +1750,6 @@ const MF_PRESETS = [
 ];
 function magicView() {
   setNav('magic'); view.innerHTML = '';
-  pageTitle('Magic Formula');
   const mf = filterBox({
     key:'mf', def:MF_DEF, presets:MF_PRESETS,
     main: st => fChk(st,'exFin','Exclude financials') + fNum(st,'top','Show top',{min:5,max:500,step:5}) + fMcap(st),
@@ -1778,7 +1838,6 @@ function qvScore(pass, st) {
 }
 function qvView() {
   setNav('qv'); view.innerHTML = '';
-  pageTitle(BACK ? 'Quality-Value, 1 year back' : 'Quality-Value (strict)');
   const st = filterBox({
     key:'qv', def:QV_DEF, presets:QV_PRESETS,
     main: st => fNum(st,'minRoce','Min ROCE %') + fNum(st,'minRoe','Min ROE %') + fNum(st,'minIcov','Min int. cover x',{step:0.5})
@@ -1851,7 +1910,6 @@ const PR_PRESETS = [
 ];
 function promoterView() {
   setNav('promoter'); view.innerHTML = '';
-  pageTitle('Promoter holding');
   const f = filterBox({
     key:'pr', def:PR_DEF, presets:PR_PRESETS,
     main: st => fSel(st,'dir','Direction',[['up','Increasing'],['down','Decreasing'],['all','All']]) + fNum(st,'minChg','Min change pp',{min:0,step:0.5})
@@ -1886,7 +1944,6 @@ const PU_PRESETS = [
 ];
 function publicView() {
   setNav('public'); view.innerHTML = '';
-  pageTitle('Public holding');
   const f = filterBox({
     key:'pu', def:PU_DEF, presets:PU_PRESETS,
     main: st => fSel(st,'dir','Direction',[['down','Falling'],['up','Rising'],['all','All']]) + fNum(st,'minChg','Min change pp',{min:0,step:0.5})
@@ -1925,7 +1982,6 @@ const IM_PRESETS = [
 ];
 function improvingView() {
   setNav('improving'); view.innerHTML = '';
-  pageTitle(BACK ? 'Improving, 1 year back' : 'Improving fundamentals');
   const f = filterBox({
     key:'im', def:IM_DEF, presets:IM_PRESETS,
     main: st => fNum(st,'minTrend','Min Trend %',{min:0,max:100,step:10}) + (NOPRICE ? '' : fNum(st,'maxPE','Max PE',{min:0})) + fChk(st,'exFin','Exclude financials'),
@@ -1975,7 +2031,6 @@ const btOf = k => {
 const BT_ROUTE = h => h.startsWith('#/industry/') || h === '#/' || h === '' ? 'home' : h.slice(2);
 function methodView() {
   setNav('method'); view.innerHTML = '';
-  pageTitle('Methodology');
   const W = lsJson('vw', W_DEF);
   const avgOf = arr => { const t = arr.filter(s => s.tr); return t.length ? fmt(t.reduce((a,s) => a + s.tr.of, 0) / t.length, 1) : '–'; };
   const nTr = arr => arr.filter(s => s.tr).length;
@@ -2056,7 +2111,7 @@ function methodView() {
   <div class="wrap"><table><tr><th>Metric</th><th>Better when</th><th>Weight</th><th>Used 1Y back?</th></tr>
   ${Object.keys(W_DEF).map(k => row(W_LABEL[k], METRICS[k].hi ? 'higher' : 'lower', W[k], (D.then.hasPrice || BACK_KEYS.includes(k)) ? 'yes' : '<b>no</b> (needs prices.csv)')).join('')}</table></div>
   <p><b>Filters</b> today: Max PE, Min ROCE / ROE, Min score, Min Trend %, Hide value traps; More: Max PB, Max vs industry PE %, Max PEG, Min FCF yield, Min div yield, Min cash conversion, Max Mcap ÷ Assets (plus Mcap ÷ Fixed assets / Investments % once scraped), Min / Max Mcap, Graham pass.
-  <b>Screens</b>: Quality at a fair price, Deep value, Cheap vs peers, GARP, Cash machines, Dividend, Graham defensive, Cheap & improving, Improving quality, Asset-backed (hover each for its rules; click again to switch off).
+  <b>Screens</b>: Quality at a fair price, Deep value, Cheap vs peers, GARP, Cash machines, Dividend, Graham defensive, Graham deep value, Cheap & improving, Improving quality, Asset-backed (hover each for its rules; click again to switch off). Min div yield starts at 0.01%, so every screen keeps only dividend payers unless you clear that box. All fields, Scoring and Reset sit under the Filters button.
   <b>1Y back:</b> ${btOf('value').why}${D.then.hasPrice ? '' : ' The score is renamed "Quality score (then)" so it isn\'t mistaken for the Value score; only "Quality, fair price" and "Improving quality" remain as Screens.'}</p>
 
   <h2>Magic Formula</h2>
