@@ -40,8 +40,8 @@ jobs:
     timeout-minutes: 330          # full run ≈ 1–1.5 h (≈1,250 stocks × 2 pages); GitHub max is 360
     env:
       # Telegram creds come from Settings → Secrets and variables → Actions (never written in this file)
-      TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || vars.TELEGRAM_BOT_TOKEN }}   # Secrets tab first, falls back to the Variables tab
-      TG_CHAT:  ${{ secrets.TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID }}       # chat id isn't sensitive, so a Variable is fine
+      TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || vars.TELEGRAM_BOT_TOKEN }}   # Secrets tab first, falls back to Variables tab
+      TG_CHAT:  ${{ secrets.TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID }}
 
     steps:
       # ───────────────────────────────────────────
@@ -94,44 +94,16 @@ jobs:
 
           echo "mode=light" >> $GITHUB_OUTPUT
 
-            # one-off check: shows whether the Telegram secret arrives, without ever printing it
-      - name: "🔎 Check Telegram secret"
-        continue-on-error: true
-        run: |
-          echo "TG_TOKEN length: ${#TG_TOKEN}  (0 = secret missing / wrong name / wrong tab; a real token is ~46)"
-          echo "TG_CHAT  length: ${#TG_CHAT}"
-          [[ "$TG_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]{30,}$ ]] && echo "format OK" || echo "format WRONG: remove any 'bot' prefix, quotes or spaces"
-          curl -s "https://api.telegram.org/bot${TG_TOKEN}/getMe"; echo   # ok:true + bot name = token works
-
       # ───────────────────────────────────────────
       # 3. RUN SCRIPTS
       #    archive_csv.py → snapshots the 3 CSVs into old_csv.zip as DDMMYY_<name>.csv
       #                     and moves any loose dated CSV into the zip
       #    n500 / nm250 / ns500 → scrape standalone + consolidated (parallel), merge,
       #                     upsert into the master CSV (each also snapshots its own CSV first)
+      #    fetch_prices.py → prices.csv (Angel One: latest close, close 1 year back, 52W highs, splits)
       #    build.py → public/index.html + public/fundamentals.html
       # ───────────────────────────────────────────
-      # Broker credentials are given ONLY to this step (not job-wide), so npm / firebase never see them.
-      # Runs only once fetch_prices.py exists in the repo.
-      - name: "📈 Fetch prices (Angel / Kotak)"
-        if: steps.mode.outputs.mode == 'full' && hashFiles('fetch_prices.py') != ''
-        continue-on-error: true
-        env:
-          ANGEL_API_KEY:         ${{ secrets.ANGEL_API_KEY }}
-          ANGEL_CLIENT_CODE:     ${{ secrets.ANGEL_CLIENT_CODE }}
-          ANGEL_PIN:             ${{ secrets.ANGEL_PIN }}
-          ANGEL_TOTP_SECRET:     ${{ secrets.ANGEL_TOTP_SECRET }}
-          KOTAK_API_KEY:         ${{ secrets.KOTAK_API_KEY }}
-          KOTAK_CONSUMER_SECRET: ${{ secrets.KOTAK_CONSUMER_SECRET }}
-          KOTAK_MOBILE:          ${{ secrets.KOTAK_MOBILE }}
-          KOTAK_MPIN:            ${{ secrets.KOTAK_MPIN }}
-          KOTAK_TOTP_SECRET:     ${{ secrets.KOTAK_TOTP_SECRET }}
-          KOTAK_UCC:             ${{ secrets.KOTAK_UCC }}
-        run: |
-          pip install pyotp
-          python fetch_prices.py
-
-      - name: "🚀 Full run (1)"
+      - name: "🚀 Full run (1) — scrape"
         if: steps.mode.outputs.mode == 'full'
         run: |
           python archive_csv.py
@@ -139,6 +111,26 @@ jobs:
           python n500.py
           python nm250.py
           python ns500.py
+
+      # After the scrape (so the 1Y-back date = this week's data date − 365) and before the build.
+      # Broker credentials go ONLY to this step (not job-wide), so npm / firebase never see them.
+      # continue-on-error: if Angel fails, the build still runs with last week's prices.csv.
+      - name: "📈 Fetch prices (Angel)"
+        if: steps.mode.outputs.mode == 'full' && hashFiles('fetch_prices.py') != ''
+        continue-on-error: true
+        timeout-minutes: 60
+        env:
+          ANGEL_API_KEY:     ${{ secrets.ANGEL_API_KEY }}
+          ANGEL_CLIENT_CODE: ${{ secrets.ANGEL_CLIENT_CODE }}
+          ANGEL_PIN:         ${{ secrets.ANGEL_PIN }}
+          ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
+        run: |
+          pip install smartapi-python pyotp logzero websocket-client
+          python -u fetch_prices.py
+
+      - name: "🏗 Full run (1) — build"
+        if: steps.mode.outputs.mode == 'full'
+        run: |
           python build.py
 
       - name: "⚡ Light run — news + build (0)"
@@ -173,6 +165,7 @@ jobs:
             niftysmallcap500_valuation.csv \
             multi_stock_news.csv \
             public/ || true
+          [ -f prices.csv ] && git add prices.csv          # weekly Angel prices (1Y back + same-method view)
           [ -f old_csv.zip ] && git add old_csv.zip
           # dated CSVs now live inside old_csv.zip → remove any loose ones from git
           git add -u -- '*.csv' || true
@@ -197,7 +190,7 @@ jobs:
       # 6. TELEGRAM  (token + channel id from repo secrets TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)
       #    full  → success message / failure message
       #    light → one-liner
-      #    build → no message
+      #    build → "test run completed" one-liner
       #    continue-on-error: a Telegram hiccup never fails the run
       # ───────────────────────────────────────────
       - name: "📩 Telegram — full run success"
@@ -228,6 +221,14 @@ jobs:
           curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             --data-urlencode chat_id="${TG_CHAT}" \
             --data-urlencode text="https://hnimanshu-value.web.app/ website updated from github."
+
+      - name: "📩 Telegram — test run (-1)"
+        if: steps.mode.outputs.mode == 'build' && success()
+        continue-on-error: true
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            --data-urlencode chat_id="${TG_CHAT}" \
+            --data-urlencode text="🧪 Test run for https://hnimanshu-value.web.app/ completed"
 
       - name: "📩 Telegram — full run failed"
         if: steps.mode.outputs.mode == 'full' && failure()
