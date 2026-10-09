@@ -115,6 +115,33 @@ function computeScores() {
     }
     if (avail && wt >= 0.5*avail) s.score = tot/wt*100;
   });
+  computeAll(uni, byInd);
+}
+/* ---------- All-company score: the SAME 6 metrics, equal weights, for every stock (banks included) ---------- */
+const AC = {
+  pe:   {label:'PE vs industry', v:s=>prem(s), hi:false, price:1},
+  pb:   {label:'PB', v:s=>s.pb, hi:false, price:1},
+  roe:  {label:'ROE', v:s=>s.roe, hi:true},
+  g:    {label:'EPS growth', v:s=>s.cagr, hi:true},
+  dy:   {label:'Div yield', v:s=>s.dy, hi:true, price:1},
+  stab: {label:'Earnings stability', v:s=>s.loss5, hi:false},     // loss years in the last 5 (fewer = steadier)
+};
+function computeAll() {
+  const uni = {}, byInd = {};
+  for (const k in AC) uni[k] = S.map(AC[k].v).filter(ok).sort((a,b)=>a-b);
+  Object.values(industries).forEach(g => { byInd[g.name] = {};
+    for (const k in AC) byInd[g.name][k] = g.stocks.map(AC[k].v).filter(ok).sort((a,b)=>a-b); });
+  const keys = Object.keys(AC).filter(k => !NOPRICE || !AC[k].price);   // no price for this date: the 3 non-price metrics
+  S.forEach(s => {
+    s.acs = null; s.acp = {};
+    let tot = 0, n = 0;
+    keys.forEach(k => {
+      const v = AC[k].v(s); if (!ok(v)) return;
+      const peers = byInd[s.ind][k].length >= 4 ? byInd[s.ind][k] : uni[k];
+      const p = pctl(peers, v, AC[k].hi); s.acp[k] = p; tot += p; n++;
+    });
+    if (n >= Math.ceil(keys.length * 2 / 3)) s.acs = tot / n * 100;     // needs 4 of 6 (2 of 3 without prices)
+  });
 }
 function trapReasons(s) {
   const r = [];
@@ -165,7 +192,7 @@ const FN_CODE = {
   minChg:v=>'CHG'+fnNum(v), minNow:v=>'NOW'+fnNum(v), dir:v=>String(v).toUpperCase(),
   trap:v=>v?'NOTRAPS':'TRAPS', graham:v=>v?'GRAHAM':'', exFin:v=>v?'EXFIN':'INCLFIN',
   smart:v=>v?'SMART':'', hideJump:v=>v?'NOJUMPS':'JUMPS',
-  minF:v=>'F'+fnNum(v), maxPta:v=>'MA'+fnNum(v), maxPfa:v=>'MFA'+fnNum(v), minInv:v=>'INV'+fnNum(v),
+  minF:v=>'F'+fnNum(v), minAc:v=>'AC'+fnNum(v), maxPta:v=>'MA'+fnNum(v), maxPfa:v=>'MFA'+fnNum(v), minInv:v=>'INV'+fnNum(v),
   minRoce:v=>'ROCE'+fnNum(v), minRoe:v=>'ROE'+fnNum(v), minRoeFin:v=>'ROEFIN'+fnNum(v), minIcov:v=>'ICR'+fnNum(v),
   maxProDrop:v=>'PRODROP'+fnNum(v), exPsu:v=>v?'':'WITHPSU', peers:v=>v==='all'?'PEERSALL':'', showFail:v=>v?'WITHFAILS':'',
 };
@@ -223,7 +250,7 @@ function makeTable(id, cols, rows, opt={}) {
     bar.innerHTML = (opt.search ? '<input type="search" placeholder="Filter by symbol / name / industry…" style="width:280px">' : '')
       + (opt.csv ? `<span class="tacts"><button type="button" class="btn icon csv" title="Download this table as CSV" aria-label="Download CSV">
           <svg width="15" height="15" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M6.5 1v7M6.5 8l-2.5-2.5M6.5 8l2.5-2.5M1.5 10.5h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-        <button type="button" class="btn icon copy" title="Copy the symbols in this table (one per line)" aria-label="Copy symbols">
+        <button type="button" class="btn icon copy" title="Copy Symbol, Company, Industry, CMP, PE, PB of every row (pastes into Excel)" aria-label="Copy table">
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="9" rx="1.6" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 10.5h-.4A1.6 1.6 0 0 1 1.5 8.9V3.1c0-.9.7-1.6 1.6-1.6h5.8c.9 0 1.6.7 1.6 1.6v.4" stroke="currentColor" stroke-width="1.5"/></svg></button></span>` : '');
     const inp = $('input', bar);
     if (inp) { inp.value = searchState[id] || ''; inp.addEventListener('input', () => { searchState[id] = inp.value; draw(); }); }
@@ -233,9 +260,16 @@ function makeTable(id, cols, rows, opt={}) {
       downloadCsv(name, cols, shown, !opt.noIndex);
     });
     if (opt.csv) $('.copy', bar).addEventListener('click', e => {           // symbols of the rows on screen, in table order
-      const btn = e.currentTarget, txt = shown.map(r => r.sym).join('\n');
+      const btn = e.currentTarget, n2 = v => v == null || !isFinite(v) ? '' : (Math.round(v * 100) / 100).toString();
+      const cell = v => String(v ?? '').replace(/[\t\n]+/g, ' ');
+      // tab-separated with a header row: pastes straight into Excel / Google Sheets as 6 columns
+      const isInd = shown.length && Array.isArray(shown[0].stocks);           // Industries table: one row per industry
+      const txt = (isInd
+        ? ['Industry\tIndustry PE\tMedian PB\tStocks'].concat(shown.map(g => [g.name, n2(g.pe[method]), n2(g.medPB), g.n].map(cell).join('\t')))
+        : ['Symbol\tCompany\tIndustry\tCMP\tPE\tPB'].concat(shown.map(r => [r.sym, r.name, r.ind, n2(r.cmp), n2(r.pe), n2(r.pb)].map(cell).join('\t'))))
+        .join('\n');
       const done = ok => { btn.classList.add(ok ? 'ok' : 'bad'); btn.title = ok ? `Copied ${shown.length}` : 'Copy failed';
-                           setTimeout(() => { btn.classList.remove('ok', 'bad'); btn.title = 'Copy the symbols in this table (one per line)'; }, 1400); };
+                           setTimeout(() => { btn.classList.remove('ok', 'bad'); btn.title = 'Copy Symbol, Company, Industry, CMP, PE, PB of every row (pastes into Excel)'; }, 1400); };
       const fallback = () => { const t = document.createElement('textarea'); t.value = txt; t.style.position = 'fixed'; t.style.opacity = '0';
         document.body.appendChild(t); t.select(); let r = false; try { r = document.execCommand('copy'); } catch (x) {} t.remove(); done(r); };
       if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(txt).then(() => done(true), fallback); else fallback();
@@ -299,6 +333,11 @@ const symCell = s => (s.url ? `<a class="sym" href="${esc(s.url)}" target="_blan
 const indLink = s => `<a class="ind" href="#/industry/${encodeURIComponent(s.ind)}">${esc(s.ind)}</a>`;
 const premCell = s => { const p = prem(s); if (p==null) return '<span class="na">N/A</span>';
   return `<span class="pill ${p<=0?'disc':'prem'}">${p<=0?'':'+'}${fmt(p)}% ${p<=0?'disc.':'prem.'}</span>`; };
+const acCell = s => {
+  if (s.acs == null) return NA;
+  const tip = Object.entries(s.acp).map(([k,p]) => AC[k].label + ': ' + Math.round(p*100)).join('\n');
+  return `<span class="meter" title="${esc(tip)}"><span>${fmt(s.acs,0)}</span><i><b style="width:${Math.max(3, s.acs).toFixed(0)}%"></b></i></span>`;
+};
 const scoreCell = s => {
   if (s.score == null) return NA;
   const tip = Object.entries(s.parts).map(([k,p]) => W_LABEL[k] + ': ' + Math.round(p*100)).join('\n');
@@ -355,6 +394,7 @@ const C = {
   q: {k:'q', label:'ROCE %', tip:'ROE used for financials', v:qual, f:s=>fmt(qual(s))+(s.fin?' <span class="na">ROE</span>':'')},
   from52: {k:'from52', label:'vs 52W high', v:s=>pctFrom(s.cmp,s.hi52), f:s=>{const p=pctFrom(s.cmp,s.hi52); return p==null?NA:fmt(p)+'%';}},
   score: {k:'score', label:'Value score', v:s=>s.score, f:scoreCell},
+  acs: {k:'acs', label:'All-co score', tip:'Same 6 metrics for every company, banks included: PE vs industry, PB, ROE, EPS growth, dividend yield, earnings stability; each ranked within its industry, equal weights', v:s=>s.acs, f:acCell},
   pb: {k:'pb', label:'PB', v:s=>s.pb, f:s=>s.pb==null?'<span class="na">N/A</span>':fmt(s.pb,2)+(s.pbSrc==='derived'?'<span class="na">*</span>':'')},
   pf: {k:'pf', label:'F-score', tip:'Piotroski F-score, scaled to 9 (tests the CSV supports: profit, cash flow, accruals, ROA trend, dilution, margin, asset turnover, plus leverage once Borrowings are scraped). 7+ = strong, 3 or less = weak.',
        v:fScore, x:s=>s.pf==null?'':`${s.pf}/${s.pfn}`,
@@ -445,7 +485,7 @@ function industryView(name) {
   else stats([['Industry PE (selected)', fmt(g.pe[method])], ['Median PE', fmt(g.pe.median)], ['Average PE', fmt(g.pe.mean)],
          ['Cap-weighted PE', fmt(g.pe.weighted)], ['Median PB', fmt(g.medPB,2)], ['Stocks', g.n]], g.stocks.filter(vis));
   view.appendChild(pePicker());
-  view.appendChild(makeTable('ind', [C.sym, C.name, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...assetCols(), C.score, C.q, C.cagr, C.fcfy, C.dy, C.proChg, C.mcap, C.from52],
+  view.appendChild(makeTable('ind', [C.sym, C.name, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...assetCols(), C.score, C.acs, C.q, C.cagr, C.fcfy, C.dy, C.proChg, C.mcap, C.from52],
     g.stocks.filter(vis), {sortKey:'pe', sortDir:1, search:true, csv:() => csvName('Industry_' + g.name, {}, {}, [])}));
   hint('Sorted by PE, lowest first. Green = PE below industry PE (discount), red = above (premium).');
 }
@@ -552,7 +592,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.q
 
 /* ---------- VALUE SCREEN ---------- */
 const VF_DEF = {maxPE:'', maxPB:'', minQ:12, minScore:0, minFcf:'', minMcap:0, maxMcap:'', trap:true, graham:false, minTrend:'',
-                maxPrem:'', maxPeg:'', minDy:0.01, minCc:'', maxPta:'', maxPfa:'', minInv:'', minF:''};
+                maxPrem:'', maxPeg:'', minDy:0.01, minCc:'', maxPta:'', maxPfa:'', minInv:'', minF:'', minAc:''};
 const VF_PRESETS = [
   {name:'Asset-backed', price:1, tip:'Market cap ≤ total assets on the books (Mcap ÷ Assets ≤ 1x), PB ≤ 1.5, ROCE ≥ 10%, pays a dividend, no value traps', st:{maxPta:1, maxPB:1.5, minQ:10}},
   {name:'Graham defensive', price:1, tip:'PE × PB ≤ 22.5, pays a dividend, no value traps', st:{graham:true, minQ:''}},
@@ -564,7 +604,7 @@ function valueView() {
   const vf = filterBox({
     key:'vf', def:VF_DEF, presets:VF_PRESETS,
     main: st => (NOPRICE ? '' : fNum(st,'maxPE','Max PE',{min:0})) + fNum(st,'minQ','Min ROCE / ROE %')
-      + fNum(st,'minScore','Min score',{min:0,max:100,step:5}) + fNum(st,'minF','Min F-score (0–9)',{min:0,max:9,step:1}) + fNum(st,'minTrend','Min Trend %',{min:0,max:100,step:10})
+      + fNum(st,'minScore','Min score',{min:0,max:100,step:5}) + fNum(st,'minAc','Min All-co score',{min:0,max:100,step:5}) + fNum(st,'minF','Min F-score (0–9)',{min:0,max:9,step:1}) + fNum(st,'minTrend','Min Trend %',{min:0,max:100,step:10})
       + fChk(st,'trap','Hide value traps'),
     more: st => (NOPRICE ? '' : fNum(st,'maxPB','Max PB',{min:0,step:0.5}) + fNum(st,'maxPrem','Max vs industry PE %',{step:5})
       + fNum(st,'maxPeg','Max PEG',{min:0,step:0.25}) + fNum(st,'minFcf','Min FCF yield %',{step:0.5})
@@ -601,6 +641,7 @@ function valueView() {
     && (NOPRICE || vf.maxPta === '' || vf.maxPta == null || (s.pta != null && s.pta <= vf.maxPta))
     && (NOPRICE || vf.maxPfa === '' || vf.maxPfa == null || !has('pfa') || (s.pfa != null && s.pfa <= vf.maxPfa))
     && (NOPRICE || vf.minInv === '' || vf.minInv == null || !has('invp') || (s.invp != null && s.invp >= vf.minInv))
+    && (vf.minAc === '' || vf.minAc == null || (s.acs != null && s.acs >= vf.minAc))
     && (vf.minF === '' || vf.minF == null || (fScore(s) != null && fScore(s) >= vf.minF))
     && s.score >= (+vf.minScore || 0)
     && mcapOk(s, vf)
@@ -612,10 +653,10 @@ function valueView() {
          ['Median PE', fmt(median(rows.map(s=>s.pe)))], ['Median PB', fmt(median(rows.map(s=>s.pb)),2)],
          ['Graham pass', rows.filter(grahamPass).length]], rows);
   view.appendChild(makeTable('value',
-    [C.score, C.pf, C.trend, C.sym, C.name, C.ind, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
+    [C.score, C.acs, C.pf, C.trend, C.sym, C.name, C.ind, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
     rows, {sortKey:'score', sortDir:-1, search:true, csv:() => csvName('Value_screen', vf, VF_DEF,
-      NOPRICE ? ['minMcap','maxMcap','minQ','minScore','minF','minTrend','minCc','trap']
-           : ['minMcap','maxMcap','maxPE','minQ','minScore','minF','minTrend','maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','maxPta','maxPfa','minInv','trap','graham'])}));
+      NOPRICE ? ['minMcap','maxMcap','minQ','minScore','minAc','minF','minTrend','minCc','trap']
+           : ['minMcap','maxMcap','maxPE','minQ','minScore','minAc','minF','minTrend','maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','maxPta','maxPfa','minInv','trap','graham'])}));
   if (NOPRICE) hint('1 year back (no prices.csv yet) the score uses only the quality metrics as they stood then (ROCE / ROE, EPS growth, cash conversion), ranked within each industry. Green / red "since" columns show what the business did after that. Mcap filter uses today\'s market cap.');
   else hint('Value score = weighted percentile rank within the stock\'s own industry (hover a score for each part). Screens are one-click presets; any change turns them into Custom. FCF yield, cash conversion and core PE are not used for financials. Orange core PE = over 20% of profit is other income.');
 }
@@ -1004,6 +1045,13 @@ function methodView() {
   ${row('Cash conversion','Σ CFO ÷ Σ PAT, last 3 FY ≥ the 3 FY before; not financials','annual')}</table></div>
   <p>Profit uses PAT, not quarterly EPS, because quarterly EPS is not split-adjusted. Trend is only a filter, never part of the Value score.
   Cyclicals score best here near a peak; use it alongside valuation.</p>
+
+  <h2>All-company score</h2>
+  <p>One score built the same way for <b>every</b> company, banks and finance companies included: the 6 metrics every business has, each turned into a percentile against its own industry (fewer than 4 peers → all stocks), equal weights, average × 100.</p>
+  <div class="wrap"><table><tr><th>Metric</th><th>Better when</th></tr>
+  ${Object.values(AC).map(m => row(m.label + (m.label === 'Earnings stability' ? ' (loss years in the last 5 FY)' : ''), m.hi ? 'higher' : 'lower')).join('')}</table></div>
+  <p>Needs 4 of the 6. Unlike the Value score, nothing is skipped for financials and nothing is re-weighted, so a bank's 80 and a chemical maker's 80 mean the same thing.
+  1Y back without prices.csv it uses only ROE, EPS growth and stability (needs 2 of 3). Filter: Min All-co score.</p>
 
   <h2>Piotroski F-score</h2>
   <p>Joseph Piotroski (2000) built it to separate the winners from the losers <b>among cheap stocks</b>, which is exactly what these Screens produce. One point per test passed, latest financial year vs the year before:</p>
