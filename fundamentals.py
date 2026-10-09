@@ -268,43 +268,6 @@ def assets_at(r, F, until=None):
             "inv": same("B_BS_INVESTMENTS_CR"), "fy": ta[-1][1]}
 
 
-def piotroski(r, F, until=None, ref=None):
-    """Piotroski F-score from the raw yearly rows known at `until` (same function today and 1 year back).
-    Tests that the CSV can't support are skipped (current ratio: no current assets/liabilities on Screener's summary
-    balance sheet; leverage: until Borrowings are scraped). Returns (passed, tested, detail) or None."""
-    yr = lambda k: {p[0]: p[2] for p in series(r, F.get(k, []), until)}
-    pat, ta = yr("A_PL_PAT_CR"), yr("B_BS_TOTAL_ASSETS_CR")
-    ys = sorted(set(pat) & set(ta))
-    if len(ys) < 2:
-        return None
-    t, t1 = ys[-1], ys[-2]
-    if not (300 <= (t - t1).days <= 430) or ta[t] <= 0 or ta[t1] <= 0:
-        return None
-    if ref is not None and (ref - t).days > MAX_STALE_DAYS:
-        return None
-    cfo, rev, opm, eps, debt = yr("C_CF_OPERATING_CR"), yr("A_PL_REVENUE_CR"), yr("A_PL_OPM_PCT"), yr("A_PL_EPS_BASIC"), yr("B_BS_TOTAL_BORROWINGS_CR")
-    tests = []
-    roa, roa1 = pat[t] / ta[t], pat[t1] / ta[t1]
-    tests.append(("P", roa > 0))
-    if t in cfo:
-        tests.append(("C", cfo[t] > 0))
-        tests.append(("A", cfo[t] > pat[t]))
-    tests.append(("R", roa > roa1))
-    if t in debt and t1 in debt:
-        tests.append(("L", debt[t] / ta[t] <= debt[t1] / ta[t1]))
-    if t in eps and t1 in eps and pat[t] > 0 and pat[t1] > 0 and eps[t] > 0 and eps[t1] > 0:
-        ratio = (pat[t] / eps[t]) / (pat[t1] / eps[t1])               # implied share count change
-        if 0.67 < ratio < 1.5:                                      # outside = split / bonus, not dilution: skip
-            tests.append(("S", ratio <= 1.02))
-    if t in opm and t1 in opm:
-        tests.append(("M", opm[t] > opm[t1]))
-    if t in rev and t1 in rev:
-        tests.append(("T", rev[t] / ta[t] > rev[t1] / ta[t1]))
-    if len(tests) < 6:
-        return None
-    return sum(v for _, v in tests), len(tests), "".join(n + ("1" if v else "0") for n, v in tests) + t.strftime("%b %Y")   # compact: P1C0…Mar 2026
-
-
 def series(row, cols, until=None):
     return [(dt, lab, float(row[c])) for dt, lab, c in cols if pd.notna(row[c]) and (until is None or dt <= until)]
 
@@ -723,7 +686,6 @@ def build_record(r, F, inp, fin):
     # asset backing: what the market pays for each rupee of assets on the books (non-financials only;
     # a lender's "assets" are its loan book). Fixed assets carry land at historical cost, so they understate it.
     a = assets_at(r, F, acut) if not fin else {}
-    pio = piotroski(r, F, acut, ref) if not fin else None             # not meant for banks / lenders
     ratio = lambda x: (mcap / x) if (ok(mcap) and x and x > 0) else None
     pta, pfa = ratio(a.get("ta")), ratio(a.get("fa"))
     invp = (a["inv"] / mcap * 100) if (a.get("inv") is not None and ok(mcap) and mcap > 0) else None
@@ -754,7 +716,6 @@ def build_record(r, F, inp, fin):
         "divYrs": num(r["DIVIDEND_CONSECUTIVE_YRS"], 0), "fs": num(r["F_SCORE"], 0),
         "eps": [[p[1], round(p[2], 2)] for p in eps_run[-15:]] if len(eps_run) >= 2 else [],
         "h": h,
-        "pf": pio[0] if pio else None, "pfn": pio[1] if pio else None, "pfx": pio[2] if pio else None,
         "pta": num(pta, 2), "pfa": num(pfa, 2), "invp": num(invp), "taFy": a.get("fy"),
         "tr": inp.get("trend"),
         "roceSrc": inp.get("roceSrc"),
@@ -1279,33 +1240,6 @@ function computeScores() {
     }
     if (avail && wt >= 0.5*avail) s.score = tot/wt*100;
   });
-  computeAll(uni, byInd);
-}
-/* ---------- All-company score: the SAME 6 metrics, equal weights, for every stock (banks included) ---------- */
-const AC = {
-  pe:   {label:'PE vs industry', v:s=>prem(s), hi:false, price:1},
-  pb:   {label:'PB', v:s=>s.pb, hi:false, price:1},
-  roe:  {label:'ROE', v:s=>s.roe, hi:true},
-  g:    {label:'EPS growth', v:s=>s.cagr, hi:true},
-  dy:   {label:'Div yield', v:s=>s.dy, hi:true, price:1},
-  stab: {label:'Earnings stability', v:s=>s.loss5, hi:false},     // loss years in the last 5 (fewer = steadier)
-};
-function computeAll() {
-  const uni = {}, byInd = {};
-  for (const k in AC) uni[k] = S.map(AC[k].v).filter(ok).sort((a,b)=>a-b);
-  Object.values(industries).forEach(g => { byInd[g.name] = {};
-    for (const k in AC) byInd[g.name][k] = g.stocks.map(AC[k].v).filter(ok).sort((a,b)=>a-b); });
-  const keys = Object.keys(AC).filter(k => !NOPRICE || !AC[k].price);   // no price for this date: the 3 non-price metrics
-  S.forEach(s => {
-    s.acs = null; s.acp = {};
-    let tot = 0, n = 0;
-    keys.forEach(k => {
-      const v = AC[k].v(s); if (!ok(v)) return;
-      const peers = byInd[s.ind][k].length >= 4 ? byInd[s.ind][k] : uni[k];
-      const p = pctl(peers, v, AC[k].hi); s.acp[k] = p; tot += p; n++;
-    });
-    if (n >= Math.ceil(keys.length * 2 / 3)) s.acs = tot / n * 100;     // needs 4 of 6 (2 of 3 without prices)
-  });
 }
 function trapReasons(s) {
   const r = [];
@@ -1351,7 +1285,7 @@ const FN_CODE = {
   minChg:v=>'CHG'+fnNum(v), minNow:v=>'NOW'+fnNum(v), dir:v=>String(v).toUpperCase(),
   trap:v=>v?'NOTRAPS':'TRAPS', graham:v=>v?'GRAHAM':'', exFin:v=>v?'EXFIN':'INCLFIN',
   smart:v=>v?'SMART':'', hideJump:v=>v?'NOJUMPS':'JUMPS',
-  minF:v=>'F'+fnNum(v), minAc:v=>'AC'+fnNum(v), maxPta:v=>'MA'+fnNum(v), maxPfa:v=>'MFA'+fnNum(v), minInv:v=>'INV'+fnNum(v),
+  maxPta:v=>'MA'+fnNum(v), maxPfa:v=>'MFA'+fnNum(v), minInv:v=>'INV'+fnNum(v),
   minRoce:v=>'ROCE'+fnNum(v), minRoe:v=>'ROE'+fnNum(v), minRoeFin:v=>'ROEFIN'+fnNum(v), minIcov:v=>'ICR'+fnNum(v),
   maxProDrop:v=>'PRODROP'+fnNum(v), exPsu:v=>v?'':'WITHPSU', peers:v=>v==='all'?'PEERSALL':'', showFail:v=>v?'WITHFAILS':'',
 };
@@ -1511,11 +1445,6 @@ const symCell = s => (s.url ? `<a class="sym" href="${esc(s.url)}" target="_blan
 const indLink = s => `<a class="ind" href="#/industry/${encodeURIComponent(s.ind)}">${esc(s.ind)}</a>`;
 const premCell = s => { const p = prem(s); if (p==null) return '<span class="na">N/A</span>';
   return `<span class="pill ${p<=0?'disc':'prem'}">${p<=0?'':'+'}${fmt(p)}% ${p<=0?'disc.':'prem.'}</span>`; };
-const acCell = s => {
-  if (s.acs == null) return NA;
-  const tip = Object.entries(s.acp).map(([k,p]) => AC[k].label + ': ' + Math.round(p*100)).join('\n');
-  return `<span class="meter" title="${esc(tip)}"><span>${fmt(s.acs,0)}</span><i><b style="width:${Math.max(3, s.acs).toFixed(0)}%"></b></i></span>`;
-};
 const scoreCell = s => {
   if (s.score == null) return NA;
   const tip = Object.entries(s.parts).map(([k,p]) => W_LABEL[k] + ': ' + Math.round(p*100)).join('\n');
@@ -1572,11 +1501,7 @@ const C = {
   q: {k:'q', label:'ROCE %', tip:'ROE used for financials', v:qual, f:s=>fmt(qual(s))+(s.fin?' <span class="na">ROE</span>':'')},
   from52: {k:'from52', label:'vs 52W high', v:s=>pctFrom(s.cmp,s.hi52), f:s=>{const p=pctFrom(s.cmp,s.hi52); return p==null?NA:fmt(p)+'%';}},
   score: {k:'score', label:'Value score', v:s=>s.score, f:scoreCell},
-  acs: {k:'acs', label:'All-co score', tip:'Same 6 metrics for every company, banks included: PE vs industry, PB, ROE, EPS growth, dividend yield, earnings stability; each ranked within its industry, equal weights', v:s=>s.acs, f:acCell},
   pb: {k:'pb', label:'PB', v:s=>s.pb, f:s=>s.pb==null?'<span class="na">N/A</span>':fmt(s.pb,2)+(s.pbSrc==='derived'?'<span class="na">*</span>':'')},
-  pf: {k:'pf', label:'F-score', tip:'Piotroski F-score, scaled to 9 (tests the CSV supports: profit, cash flow, accruals, ROA trend, dilution, margin, asset turnover, plus leverage once Borrowings are scraped). 7+ = strong, 3 or less = weak.',
-       v:fScore, x:s=>s.pf==null?'':`${s.pf}/${s.pfn}`,
-       f:s=>{ const v = fScore(s); return v==null?NA:`<span class="pill ${v>=7?'disc':v<=3?'prem':''}" title="${esc(s.pf+' of '+s.pfn+' tests passed: '+fDetail(s))}">${v}</span>`; }},
   pta: {k:'pta', label:'Mcap ÷ Assets', tip:'Market cap ÷ total assets on the latest balance sheet (non-financials). Below 1x = the market values the company at less than everything it owns on its books (before debts). Book values are at cost, so land bought long ago is understated.',
         v:s=>s.pta, f:s=>s.pta==null?NA:`<span class="pill ${s.pta<=1?'disc':s.pta<=3?'':'prem'}" title="Balance sheet ${esc(s.taFy||'')}">${fmt(s.pta,2)}x</span>`},
   pfa: {k:'pfa', label:'Mcap ÷ Fixed assets', tip:'Market cap ÷ (net block + CWIP): plant, buildings and land at book (historical) cost', v:s=>s.pfa,
@@ -1604,9 +1529,6 @@ const C = {
 };
 
 const has = k => S.some(s => s[k] != null);
-const F_TEST = {P:'Profit > 0', C:'Operating cash flow > 0', A:'Cash flow > profit', R:'ROA up', L:'Debt ÷ assets down', S:'No new shares', M:'Margin up', T:'Asset turnover up'};
-const fDetail = s => (s.pfx.match(/[A-Z][01]/g) || []).map(t => (t[1] === '1' ? '✓ ' : '✗ ') + F_TEST[t[0]]).join(', ') + ' (FY ' + s.pfx.replace(/^([A-Z][01])+/, '') + ')';
-function fScore(s) { return s.pf == null ? null : Math.round(s.pf / s.pfn * 9); }   // passes scaled to Piotroski's 0–9          // fixed assets / investments appear once the scraper collects them
 const assetCols = () => [C.pta].concat(has('pfa') ? [C.pfa] : [], has('invp') ? [C.invp] : []);
 
 /* ---------- views ---------- */
@@ -1682,7 +1604,7 @@ function industryView(name) {
   else stats([['Industry PE (selected)', fmt(g.pe[method])], ['Median PE', fmt(g.pe.median)], ['Average PE', fmt(g.pe.mean)],
          ['Cap-weighted PE', fmt(g.pe.weighted)], ['Median PB', fmt(g.medPB,2)], ['Stocks', g.n]], g.stocks.filter(vis));
   view.appendChild(pePicker());
-  view.appendChild(makeTable('ind', [C.sym, C.name, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...assetCols(), C.score, C.acs, C.q, C.cagr, C.fcfy, C.dy, C.proChg, C.mcap, C.from52],
+  view.appendChild(makeTable('ind', [C.sym, C.name, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...assetCols(), C.score, C.q, C.cagr, C.fcfy, C.dy, C.proChg, C.mcap, C.from52],
     g.stocks.filter(vis), {sortKey:'pe', sortDir:1, search:true, csv:() => csvName('Industry_' + g.name, {}, {}, [])}));
   hint('Sorted by PE, lowest first. Green = PE below industry PE (discount), red = above (premium).');
 }
@@ -1789,7 +1711,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.q
 
 /* ---------- VALUE SCREEN ---------- */
 const VF_DEF = {maxPE:'', maxPB:'', minQ:12, minScore:0, minFcf:'', minMcap:0, maxMcap:'', trap:true, graham:false, minTrend:'',
-                maxPrem:'', maxPeg:'', minDy:0.01, minCc:'', maxPta:'', maxPfa:'', minInv:'', minF:'', minAc:''};
+                maxPrem:'', maxPeg:'', minDy:0.01, minCc:'', maxPta:'', maxPfa:'', minInv:''};
 const VF_PRESETS = [
   {name:'Asset-backed', price:1, tip:'Market cap ≤ total assets on the books (Mcap ÷ Assets ≤ 1x), PB ≤ 1.5, ROCE ≥ 10%, pays a dividend, no value traps', st:{maxPta:1, maxPB:1.5, minQ:10}},
   {name:'Graham defensive', price:1, tip:'PE × PB ≤ 22.5, pays a dividend, no value traps', st:{graham:true, minQ:''}},
@@ -1801,7 +1723,7 @@ function valueView() {
   const vf = filterBox({
     key:'vf', def:VF_DEF, presets:VF_PRESETS,
     main: st => (NOPRICE ? '' : fNum(st,'maxPE','Max PE',{min:0})) + fNum(st,'minQ','Min ROCE / ROE %')
-      + fNum(st,'minScore','Min score',{min:0,max:100,step:5}) + fNum(st,'minAc','Min All-co score',{min:0,max:100,step:5}) + fNum(st,'minF','Min F-score (0–9)',{min:0,max:9,step:1}) + fNum(st,'minTrend','Min Trend %',{min:0,max:100,step:10})
+      + fNum(st,'minScore','Min score',{min:0,max:100,step:5}) + fNum(st,'minTrend','Min Trend %',{min:0,max:100,step:10})
       + fChk(st,'trap','Hide value traps'),
     more: st => (NOPRICE ? '' : fNum(st,'maxPB','Max PB',{min:0,step:0.5}) + fNum(st,'maxPrem','Max vs industry PE %',{step:5})
       + fNum(st,'maxPeg','Max PEG',{min:0,step:0.25}) + fNum(st,'minFcf','Min FCF yield %',{step:0.5})
@@ -1838,8 +1760,6 @@ function valueView() {
     && (NOPRICE || vf.maxPta === '' || vf.maxPta == null || (s.pta != null && s.pta <= vf.maxPta))
     && (NOPRICE || vf.maxPfa === '' || vf.maxPfa == null || !has('pfa') || (s.pfa != null && s.pfa <= vf.maxPfa))
     && (NOPRICE || vf.minInv === '' || vf.minInv == null || !has('invp') || (s.invp != null && s.invp >= vf.minInv))
-    && (vf.minAc === '' || vf.minAc == null || (s.acs != null && s.acs >= vf.minAc))
-    && (vf.minF === '' || vf.minF == null || (fScore(s) != null && fScore(s) >= vf.minF))
     && s.score >= (+vf.minScore || 0)
     && mcapOk(s, vf)
     && (!vf.trap || !trapReasons(s).length)
@@ -1850,10 +1770,10 @@ function valueView() {
          ['Median PE', fmt(median(rows.map(s=>s.pe)))], ['Median PB', fmt(median(rows.map(s=>s.pb)),2)],
          ['Graham pass', rows.filter(grahamPass).length]], rows);
   view.appendChild(makeTable('value',
-    [C.score, C.acs, C.pf, C.trend, C.sym, C.name, C.ind, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
+    [C.score, C.trend, C.sym, C.name, C.ind, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
     rows, {sortKey:'score', sortDir:-1, search:true, csv:() => csvName('Value_screen', vf, VF_DEF,
-      NOPRICE ? ['minMcap','maxMcap','minQ','minScore','minAc','minF','minTrend','minCc','trap']
-           : ['minMcap','maxMcap','maxPE','minQ','minScore','minAc','minF','minTrend','maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','maxPta','maxPfa','minInv','trap','graham'])}));
+      NOPRICE ? ['minMcap','maxMcap','minQ','minScore','minTrend','minCc','trap']
+           : ['minMcap','maxMcap','maxPE','minQ','minScore','minTrend','maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','maxPta','maxPfa','minInv','trap','graham'])}));
   if (NOPRICE) hint('1 year back (no prices.csv yet) the score uses only the quality metrics as they stood then (ROCE / ROE, EPS growth, cash conversion), ranked within each industry. Green / red "since" columns show what the business did after that. Mcap filter uses today\'s market cap.');
   else hint('Value score = weighted percentile rank within the stock\'s own industry (hover a score for each part). Screens are one-click presets; any change turns them into Custom. FCF yield, cash conversion and core PE are not used for financials. Orange core PE = over 20% of profit is other income.');
 }
@@ -2226,7 +2146,7 @@ function methodView() {
   A score needs a positive PE and at least half of the applicable weight. Financials skip FCF yield and cash conversion. Current weights (Scoring ▾):</p>
   <div class="wrap"><table><tr><th>Metric</th><th>Better when</th><th>Weight</th><th>Used 1Y back?</th></tr>
   ${Object.keys(W_DEF).map(k => row(W_LABEL[k], METRICS[k].hi ? 'higher' : 'lower', W[k], (D.then.hasPrice || BACK_KEYS.includes(k)) ? 'yes' : '<b>no</b> (needs prices.csv)')).join('')}</table></div>
-  <p><b>Filters</b> today: Max PE, Min ROCE / ROE, Min score, Min F-score, Min Trend %, Hide value traps; More: Max PB, Max vs industry PE %, Max PEG, Min FCF yield, Min div yield, Min cash conversion, Max Mcap ÷ Assets (plus Mcap ÷ Fixed assets / Investments % once scraped), Min / Max Mcap, Graham pass.
+  <p><b>Filters</b> today: Max PE, Min ROCE / ROE, Min score, Min Trend %, Hide value traps; More: Max PB, Max vs industry PE %, Max PEG, Min FCF yield, Min div yield, Min cash conversion, Max Mcap ÷ Assets (plus Mcap ÷ Fixed assets / Investments % once scraped), Min / Max Mcap, Graham pass.
   <b>Screens</b>: Asset-backed (Mcap ÷ Assets ≤ 1, PB ≤ 1.5, ROCE ≥ 10%), Graham defensive (PE × PB ≤ 22.5), Graham deep value (Graham + PE ≤ 15, PB ≤ 2, ROCE ≥ 10%), Deep value (PE ≤ 15, PB ≤ 2, ROCE ≥ 10%); all hide value traps. Click again to switch off. Min div yield starts at 0.01%, so every screen keeps only dividend payers unless you clear that box. All fields, Scoring and Reset sit under the Filters button.
   <b>1Y back:</b> ${btOf('value').why}${D.then.hasPrice ? '' : ' The score is renamed "Quality score (then)" so it isn\'t mistaken for the Value score; the Screens need prices, so they are hidden.'}</p>
 
@@ -2242,24 +2162,6 @@ function methodView() {
   ${row('Cash conversion','Σ CFO ÷ Σ PAT, last 3 FY ≥ the 3 FY before; not financials','annual')}</table></div>
   <p>Profit uses PAT, not quarterly EPS, because quarterly EPS is not split-adjusted. Trend is only a filter, never part of the Value score.
   Cyclicals score best here near a peak; use it alongside valuation.</p>
-
-  <h2>All-company score</h2>
-  <p>One score built the same way for <b>every</b> company, banks and finance companies included: the 6 metrics every business has, each turned into a percentile against its own industry (fewer than 4 peers → all stocks), equal weights, average × 100.</p>
-  <div class="wrap"><table><tr><th>Metric</th><th>Better when</th></tr>
-  ${Object.values(AC).map(m => row(m.label + (m.label === 'Earnings stability' ? ' (loss years in the last 5 FY)' : ''), m.hi ? 'higher' : 'lower')).join('')}</table></div>
-  <p>Needs 4 of the 6. Unlike the Value score, nothing is skipped for financials and nothing is re-weighted, so a bank's 80 and a chemical maker's 80 mean the same thing.
-  1Y back without prices.csv it uses only ROE, EPS growth and stability (needs 2 of 3). Filter: Min All-co score.</p>
-
-  <h2>Piotroski F-score</h2>
-  <p>Joseph Piotroski (2000) built it to separate the winners from the losers <b>among cheap stocks</b>, which is exactly what these Screens produce. One point per test passed, latest financial year vs the year before:</p>
-  <div class="wrap"><table><tr><th>Test</th><th>Point when</th></tr>
-  ${row('Profit','PAT ÷ total assets &gt; 0')}${row('Operating cash flow','CFO &gt; 0')}${row('Accruals','CFO &gt; PAT (profit backed by cash)')}
-  ${row('ROA trend','PAT ÷ total assets higher than the year before')}${row('Leverage','borrowings ÷ total assets not higher (needs the scraper\'s Borrowings rows; skipped until then)')}
-  ${row('No dilution','share count (PAT ÷ EPS) up ≤ 2%; a 1.5x+ jump is a split / bonus and is skipped')}
-  ${row('Margin','OPM higher (Piotroski uses gross margin; Screener has no gross profit)')}${row('Asset turnover','revenue ÷ total assets higher')}
-  ${row('Current ratio','<b>not tested</b>: Screener\'s summary balance sheet has no current assets / liabilities')}</table></div>
-  <p>Score = tests passed ÷ tests possible × 9, rounded, so stocks are comparable on Piotroski's 0–9 scale (hover a score for the passed / failed tests). 7–9 strong, 4–6 average, 0–3 weak. Needs at least 6 testable items; not computed for financials.
-  1 year back it runs on the financial year known then (same function), so it can be backtested with the 1Y back switch.</p>
 
   <h2>CSV download</h2>
   <p>Exports the rows the table shows (search and sort applied, all rows, not only the 15 in view). The file name starts with the list picked in the header (<code>all</code>, <code>N500</code> = NIFTY 500, <code>NS500</code> = Smallcap 500, <code>NM250</code> = Microcap 250), then the tab and active filters, e.g. <code>N500_Value_screen_mcap_20K_RCE_ROE12_MT10.csv</code> (MA = max Mcap ÷ Assets): number filters when set and non-zero, tick boxes only when changed from default, dropdowns always; m = minus, p = decimal point.</p>
