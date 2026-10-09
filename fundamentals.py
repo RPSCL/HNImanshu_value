@@ -858,8 +858,8 @@ body.day{
 .fbox.dopen .btn.fbtn .cnt{background:var(--bg);color:var(--brass)}
 .fdrop{display:none;position:absolute;right:0;top:calc(100% + 8px);z-index:80;width:min(920px,calc(100vw - 48px));max-height:min(72vh,640px);overflow:auto;
   background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px 16px;
-  box-shadow:0 0 0 1px var(--brassbg),0 8px 24px rgba(0,0,0,.18)}                     /* faint shadow, just enough to lift it */
-:root[data-theme=day] .fdrop{box-shadow:0 0 0 1px var(--brassbg),0 8px 24px rgba(40,30,18,.12)}
+  border-color:rgba(212,180,122,.45);box-shadow:0 0 0 1px rgba(212,180,122,.18),0 14px 34px rgba(0,0,0,.55),0 0 22px rgba(212,180,122,.10)}   /* lifted + faint brass glow */
+:root[data-theme=day] .fdrop{border-color:rgba(76,46,10,.45);box-shadow:0 0 0 1px rgba(76,46,10,.15),0 14px 32px rgba(40,30,18,.28)}
 .fbox.dopen .fdrop{display:block}
 .fback{display:none}
 .fdhead{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--line);position:sticky;top:-12px;background:var(--panel);z-index:2;padding-top:2px}
@@ -899,8 +899,12 @@ body.day .toggle-thumb{transform:translateX(16px)}
 
 /* table toolbar: search left, Download CSV right (same outline style as the screener's Export CSV) */
 .tbar{justify-content:space-between}
-.btn.csv{border-color:var(--brass);color:var(--brass);background:transparent;margin-left:auto}
-.btn.csv:hover{background:var(--brass);color:var(--bg)}
+.tacts{display:inline-flex;gap:6px;margin-left:auto;flex-shrink:0}
+.btn.icon{width:34px;padding:0;justify-content:center;border-color:var(--brass);color:var(--brass);background:transparent;position:relative}
+.btn.icon:hover{background:var(--brass);color:var(--bg)}
+.btn.icon.ok{background:var(--good);border-color:var(--good);color:var(--bg)}
+.btn.icon.bad{border-color:var(--bad);color:var(--bad)}
+.btn.icon.ok::after{content:"Copied";position:absolute;top:calc(100% + 6px);right:0;font:600 10.5px var(--mono);color:var(--good);white-space:nowrap}
 @media (max-width:700px){.tbar{flex-wrap:nowrap}.tbar input[type=search]{flex:1;min-width:0}}
 
 /* table card: 15-row window + footer with count and help text */
@@ -922,15 +926,15 @@ body.day .toggle-thumb{transform:translateX(16px)}
 .pop a{color:var(--brass)}
 
 @media (max-width:700px){
-  .lg{display:none} .thint{min-width:0} .pop{left:auto;right:-40px}
+  .lg{display:none} .pop{left:0;right:auto;width:calc(100vw - 24px)}
   header.top{position:relative}
   #theme-toggle{position:absolute;top:14px;right:12px;margin:0}     /* top-right corner, like the screener */
   .pchips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch;scrollbar-width:none}   /* one swipeable row */
   .pchips::-webkit-scrollbar{display:none}
   .btn.fbtn{padding:0 10px}
-  .fback{position:fixed;left:0;right:0;bottom:0;top:0;z-index:90;background:rgba(0,0,0,.28)}   /* dims only below the stats strip */
+  .fback{position:fixed;inset:0;z-index:90;background:transparent}   /* invisible: only catches the tap that closes it */
   .fbox.dopen .fback{display:block}
-  .fdrop{position:fixed;left:10px;right:10px;top:10px;bottom:10px;width:auto;max-height:none;z-index:91;padding:12px 14px 16px;border-radius:14px}
+  .fdrop{position:fixed;left:10px;right:10px;top:10px;bottom:auto;width:auto;z-index:91;padding:12px 14px 16px;border-radius:14px}
   body.fmodal{overflow:hidden}
   .fgrid{grid-template-columns:1fr 1fr;gap:10px}
   .fld > span{font-size:10px}
@@ -1346,9 +1350,10 @@ function makeTable(id, cols, rows, opt={}) {
   if (opt.search || opt.csv) {
     const bar = document.createElement('div'); bar.className='bar tbar';
     bar.innerHTML = (opt.search ? '<input type="search" placeholder="Filter by symbol / name / industry…" style="width:280px">' : '')
-      + (opt.csv ? `<button type="button" class="btn csv" title="Download the stocks in this table as CSV">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M6.5 1v7M6.5 8l-2.5-2.5M6.5 8l2.5-2.5M1.5 10.5h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span class="lg">Download </span>CSV</button>` : '');
+      + (opt.csv ? `<span class="tacts"><button type="button" class="btn icon csv" title="Download this table as CSV" aria-label="Download CSV">
+          <svg width="15" height="15" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M6.5 1v7M6.5 8l-2.5-2.5M6.5 8l2.5-2.5M1.5 10.5h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button type="button" class="btn icon copy" title="Copy the symbols in this table (one per line)" aria-label="Copy symbols">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="9" rx="1.6" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 10.5h-.4A1.6 1.6 0 0 1 1.5 8.9V3.1c0-.9.7-1.6 1.6-1.6h5.8c.9 0 1.6.7 1.6 1.6v.4" stroke="currentColor" stroke-width="1.5"/></svg></button></span>` : '');
     const inp = $('input', bar);
     if (inp) { inp.value = searchState[id] || ''; inp.addEventListener('input', () => { searchState[id] = inp.value; draw(); }); }
     if (opt.csv) $('.csv', bar).addEventListener('click', () => {
@@ -1356,13 +1361,20 @@ function makeTable(id, cols, rows, opt={}) {
       const name = listCode() + '_' + opt.csv().replace(/\.csv$/, '') + (q ? '_q-' + q.replace(/[^A-Za-z0-9]+/g, '') : '') + '.csv';   // search text tagged too
       downloadCsv(name, cols, shown, !opt.noIndex);
     });
+    if (opt.csv) $('.copy', bar).addEventListener('click', e => {           // symbols of the rows on screen, in table order
+      const btn = e.currentTarget, txt = shown.map(r => r.sym).join('\n');
+      const done = ok => { btn.classList.add(ok ? 'ok' : 'bad'); btn.title = ok ? `Copied ${shown.length}` : 'Copy failed';
+                           setTimeout(() => { btn.classList.remove('ok', 'bad'); btn.title = 'Copy the symbols in this table (one per line)'; }, 1400); };
+      const fallback = () => { const t = document.createElement('textarea'); t.value = txt; t.style.position = 'fixed'; t.style.opacity = '0';
+        document.body.appendChild(t); t.select(); let r = false; try { r = document.execCommand('copy'); } catch (x) {} t.remove(); done(r); };
+      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(txt).then(() => done(true), fallback); else fallback();
+    });
     box.appendChild(bar);
   }
   const card = document.createElement('div'); card.className = 'card';      // table + footer (count, help text)
   const wrap = document.createElement('div'); wrap.className='wrap';
   const tbl = document.createElement('table'); wrap.appendChild(tbl); card.appendChild(wrap);
-  const foot = document.createElement('div'); foot.className = 'tfoot';
-  foot.innerHTML = '<span class="tcount"></span>'; card.appendChild(foot); box.appendChild(card);
+  box.appendChild(card);
   const st = sortState[id] = sortState[id] || {k: opt.sortKey, dir: opt.sortDir || 1};
   function draw() {
     const q = (searchState[id]||'').toLowerCase();
@@ -1385,7 +1397,6 @@ function makeTable(id, cols, rows, opt={}) {
     if (!data.length) tb.innerHTML = `<tr><td class="l na" colspan="${cols.length+1}">No stocks match these filters. Loosen a filter or press Reset.</td></tr>`;
     tbl.appendChild(tb);
     shown = data;
-    $('.tcount', foot).textContent = data.length + (data.length === 1 ? ' stock' : ' stocks') + (data.length > TABLE_ROWS ? ' · scroll for more' : '');
     (window.requestAnimationFrame || setTimeout)(() => {  // window = header + 15 rows, rest scrolls inside the card
       const r = tb.rows[0];
       if (r && r.offsetHeight) wrap.style.maxHeight = (tbl.tHead.offsetHeight + r.offsetHeight * TABLE_ROWS + 1) + 'px';
@@ -1524,11 +1535,7 @@ const stats = (arr, rows) => {                            // ONE compact strip: 
   view.insertAdjacentHTML('beforeend', `<div class="stats">${statTiles(arr)}`
     + (p.length ? `<div class="stat cap"><span>Since</span><b>${esc(D.then.date)}</b></div>${statTiles(p)}` : '') + '</div>');
 };
-const hint = html => {                                   // help text lives in the table footer, not under the page
-  const feet = view.querySelectorAll('.tfoot'), ft = feet[feet.length - 1];
-  const h = `<span class="thint">${html} <a href="#/method">Methodology</a></span>`;
-  if (ft) ft.insertAdjacentHTML('beforeend', h); else view.insertAdjacentHTML('beforeend', `<div class="hint">${h}</div>`);
-};
+const hint = () => {};                                   // no help text under tables; it all lives in Methodology
 
 const cheapest = g => g.stocks.filter(s=>s.pe!=null && vis(s)).reduce((a,b)=>!a||b.pe<a.pe?b:a, null);
 function homeView() {
@@ -1582,9 +1589,10 @@ function placeDrop(f) {
   const fr = f.getBoundingClientRect(), sb = st ? st.getBoundingClientRect().bottom : fr.bottom;
   if (isPhone()) {                                        // floating window between the stats strip and the bottom edge
     const top = sb + 6 < innerHeight - 260 ? Math.max(10, sb + 6) : 10;
-    drop.style.top = back.style.top = top + 'px';
+    drop.style.top = top + 'px'; back.style.top = '';
+    drop.style.maxHeight = Math.min(innerHeight - top - 10, Math.round(innerHeight * 0.55)) + 'px';   // table stays visible below
   } else {
-    drop.style.top = (sb - fr.top + 6) + 'px'; back.style.top = '';
+    drop.style.top = (sb - fr.top + 6) + 'px'; back.style.top = ''; drop.style.maxHeight = '';
   }
 }
 const closeDrops = () => { document.querySelectorAll('.fbox.dopen').forEach(f => f.classList.remove('dopen')); for (const k in DROP) DROP[k].open = false; document.body.classList.remove('fmodal'); };
@@ -2188,11 +2196,19 @@ function route() {
   meta();
   window.scrollTo(0,0);
 }
+function nowInfo() {                                     // (i) popover for the current view
+  const T = D.then || {};
+  return `<b>As on ${esc(D.asOf)}</b>Fundamentals from Screener, downloaded ${esc(D.asOf)}. `
+    + (SAME ? 'Same method is on: every ratio is rebuilt from the raw yearly / quarterly rows + one price, exactly like 1Y back. '
+            : "Ratios are Screener's own (PE, ROE, ROCE, yields). Tick Same method to compute them the 1Y-back way. ")
+    + (T.hasPrice ? `Prices: Angel close ${esc(T.priceDate || '–')}.` : 'Prices: CMP from the CSV.')
+    + ' <a href="#/method">Methodology</a>';
+}
 function meta() {
-  $('#meta').innerHTML = `<b>${V().length}</b> stocks in <b>${Object.keys(industries).length}</b> sectors, data downloaded <b>${esc(D.asOf)}</b>`
-    + (SAME && !BACK ? ', <b>same method</b>' : '')
-    + (BACK ? `<span class="backnote">, showing <b>${esc(D.then.date)}</b> <button type="button" class="info" id="backInfo" aria-label="About the 1Y back view">i</button>`
-            + `<span class="pop" id="backPop">${backInfo()}</span></span>` : '');
+  const day = BACK ? D.then.date : D.asOf;
+  $('#meta').innerHTML = `<span class="backnote"><b>${V().length}</b> stocks in <b>${Object.keys(industries).length}</b> sectors as on <b>${esc(day)}</b> `
+    + `<button type="button" class="info" id="backInfo" aria-label="About this data">i</button>`
+    + `<span class="pop" id="backPop">${BACK ? backInfo() : nowInfo()}</span></span>`;
   const b = $('#backInfo');
   if (b) b.addEventListener('click', e => { e.stopPropagation(); $('#backPop').classList.toggle('open'); });
 }
