@@ -190,7 +190,7 @@ jobs:
       # 6. TELEGRAM  (token + channel id from repo secrets TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)
       #    full  → success message / failure message
       #    light → one-liner
-      #    build → "test run completed" one-liner
+      #    build → no message
       #    continue-on-error: a Telegram hiccup never fails the run
       # ───────────────────────────────────────────
       - name: "📩 Telegram — full run success"
@@ -221,14 +221,6 @@ jobs:
           curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             --data-urlencode chat_id="${TG_CHAT}" \
             --data-urlencode text="https://hnimanshu-value.web.app/ website updated from github."
-
-      - name: "📩 Telegram — test run (-1)"
-        if: steps.mode.outputs.mode == 'build' && success()
-        continue-on-error: true
-        run: |
-          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-            --data-urlencode chat_id="${TG_CHAT}" \
-            --data-urlencode text="🧪 Test run for https://hnimanshu-value.web.app/ completed"
 
       - name: "📩 Telegram — full run failed"
         if: steps.mode.outputs.mode == 'full' && failure()
