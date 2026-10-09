@@ -996,8 +996,8 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
     <div class="hstat"><div class="hstat-val" id="hs-dv">—</div><div class="hstat-lbl">Deep Value</div></div>
     <div class="hstat"><div class="hstat-val" id="hs-best">—</div><div class="hstat-lbl">A/B+</div></div>
   </div>
-  <!-- Fundamentals page link — href gets ?uni=<active tab> from updateFundLink() -->
-  <a class="fund-btn" id="fund-btn" href="fundamentals.html" title="Industry PE, value screen, Magic Formula, promoter and public holding">
+  <!-- Fundamentals page link — clean URL (firebase.json cleanUrls), no ?uni=: the page remembers the user's own List pick -->
+  <a class="fund-btn" id="fund-btn" href="fundamentals" title="Industries, value screen and methodology">
     <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M2 11V7M5 11V4M8 11V6M11 11V2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
     <span>Fundamentals</span>
   </a>
@@ -1429,7 +1429,7 @@ function toggleTheme(){
 var FUND_UNI = {n500:'NIFTY 500', sc250:'Smallcap 500', mc250:'Microcap 250', all:'all'};
 function updateFundLink(){
   var a = document.getElementById('fund-btn'); if(!a) return;
-  a.href = 'fundamentals.html?uni=' + encodeURIComponent(FUND_UNI[universe] || 'all');
+  a.href = 'fundamentals';   // clean URL; fundamentals opens on "All lists" first, then remembers the user's own pick
 }
 
 function switchUniverse(u){

@@ -898,13 +898,16 @@ body.day .toggle-track{background:var(--accent)}
 body.day .toggle-thumb{transform:translateX(16px)}
 
 /* table toolbar: search left, Download CSV right (same outline style as the screener's Export CSV) */
-.tbar{justify-content:space-between}
+.tbar{justify-content:space-between;position:relative;z-index:6}
 .tacts{display:inline-flex;gap:6px;margin-left:auto;flex-shrink:0}
 .btn.icon{width:34px;padding:0;justify-content:center;border-color:var(--brass);color:var(--brass);background:transparent;position:relative}
 .btn.icon:hover{background:var(--brass);color:var(--bg)}
-.btn.icon.ok{background:var(--good);border-color:var(--good);color:var(--bg)}
+.btn.icon .tick{display:none}
+.btn.icon.ok .ico{display:none}
+.btn.icon.ok .tick{display:block;color:var(--good);animation:tickfade 1.4s ease forwards}
+.btn.icon.ok,.btn.icon.ok:hover{background:transparent;border-color:var(--good)}
+@keyframes tickfade{0%{opacity:0;transform:scale(.6)}15%{opacity:1;transform:scale(1.1)}25%{transform:scale(1)}70%{opacity:1}100%{opacity:0}}
 .btn.icon.bad{border-color:var(--bad);color:var(--bad)}
-.btn.icon.ok::after{content:"Copied";position:absolute;top:calc(100% + 6px);right:0;font:600 10.5px var(--mono);color:var(--good);white-space:nowrap}
 @media (max-width:700px){.tbar{flex-wrap:nowrap}.tbar input[type=search]{flex:1;min-width:0}}
 
 /* table card: 15-row window + footer with count and help text */
@@ -1015,11 +1018,13 @@ input:focus,select:focus{border-color:var(--brass);outline:none}
 .stats{position:relative;display:flex;flex-wrap:nowrap;overflow-x:auto;scroll-snap-type:x proximity;overflow-y:hidden;margin:4px 0 10px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);-webkit-overflow-scrolling:touch}
 .stat{flex:0 0 auto;white-space:nowrap;scroll-snap-align:start;padding:6px 14px 6px 0;margin-right:14px;border-right:1px solid var(--line)}
 .stat.cap{padding-left:12px;border-left:2px solid var(--brass);border-right:0;margin-right:4px}
+.stat:has(+ .stat.cap){border-right:0;margin-right:0}   /* the yellow line IS the divider between families */
 .stat.cap span{color:var(--brass)!important;font:600 9.5px var(--mono)!important;text-transform:uppercase;letter-spacing:1px}
 .stat.cap b{font-size:12px!important;color:var(--mute)!important;font-weight:600}
-.stat.grpcap{margin-left:4px}
+.stat.grpcap{margin-left:0}
 .stat:last-child{border-right:0}
 .stat b{display:block;font:700 16px/1.2 var(--mono);color:var(--brass)}
+.stat b small{font:600 11px var(--mono);margin-left:7px}
 .stat > span{color:var(--faint);font-size:10.5px;line-height:1.3}
 
 .wrap{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:78vh}
@@ -1066,6 +1071,24 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
 .doc p{margin:6px 0;max-width:80ch}
 .doc code{background:var(--panel2);border:1px solid var(--line);padding:1px 6px;border-radius:5px;font:12px var(--mono)}
 .doc .wrap{max-height:none;margin:8px 0 12px}
+/* Same method diagram */
+.smd{display:grid;gap:12px;margin:10px 0 14px}
+.smd .lane{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--panel)}
+.smd .tag{display:inline-block;font:700 10.5px var(--mono);letter-spacing:1px;text-transform:uppercase;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--mute);margin-bottom:10px}
+.smd .tag.on{background:var(--brass);border-color:var(--brass);color:var(--bg)}
+.smd .flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.smd .nd{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--bg);min-width:120px;max-width:230px}
+.smd .nd b{display:block;font:700 12px var(--mono);color:var(--ink)}
+.smd .nd span{display:block;font-size:11.5px;color:var(--faint);line-height:1.4;margin-top:2px}
+.smd .nd.eng{border-color:var(--brass);background:var(--brassbg)}
+.smd .nd.out{border-color:var(--brass)}
+.smd .nd.good{border-color:var(--good);background:var(--goodbg)}
+.smd .ar,.smd .plus{font:700 18px var(--mono);color:var(--brass)}
+.smd .pair{display:flex;flex-direction:column;align-items:center;gap:4px}
+.smd .eq{font:600 10.5px var(--mono);color:var(--good)}
+.smd .use{margin-top:10px;font-size:12.5px;color:var(--good)}
+.smd .use b{color:var(--ink)}
+@media (max-width:700px){.smd .flow{flex-direction:column;align-items:stretch}.smd .nd{max-width:none}.smd .ar{transform:rotate(90deg);align-self:center}.smd .plus{align-self:center}}
 .doc td,.doc th{text-align:left;white-space:normal;cursor:default;position:static;vertical-align:top}
 .doc td{font-family:var(--sans)}
 @media (max-width:700px){
@@ -1099,14 +1122,14 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
 </script>
 <header class="top">
   <div class="brand">
-    <a class="logo" href="index.html" id="homeLink" aria-label="HNImanshu screener">
+    <a class="logo" href="./" id="homeLink" aria-label="HNImanshu screener">
       <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="7" fill="var(--panel2)"/><text x="16" y="23" font-family="Georgia,serif" font-size="18" font-weight="bold" fill="var(--brass)" text-anchor="middle">H</text></svg>
       <div><div class="wm"><span class="hni">HNI</span><span class="manshu">manshu</span></div><div class="tagline">Fundamentals</div></div>
     </a>
     <div class="sub" id="meta"></div>
   </div>
   <div class="global">
-    <a class="btn back" id="backBtn" href="index.html"><span class="lg">Back to </span>Screener</a>
+    <a class="btn back" id="backBtn" href="./"><span class="lg">Back to </span>Screener</a>
     <label class="chip">List <select id="uniSel"></select></label>
     <label class="chip"><input type="checkbox" id="hidePSU"> Hide PSU</label>
     <label class="chip"><input type="checkbox" id="hideSemi"> Hide semi-PSU</label>
@@ -1146,7 +1169,7 @@ let method = lsGet('pemethod') || 'median';
 /* global PSU filter: applies to every tab (industry benchmarks still use all stocks) */
 const GF = lsJson('gf', {psu:false, semi:false, back:false, same:false, uni:'all'});
 const QP = new URLSearchParams(location.search);
-if (QP.get('uni')) GF.uni = QP.get('uni');               // list passed from the screener's active tab
+if (QP.has('uni') && history.replaceState) history.replaceState(null, '', location.pathname + location.hash);   // old ?uni= links: ignored, URL cleaned
 const vis = s => !(GF.psu && s.psu === 'psu') && !(GF.semi && s.psu === 'semi')
   && (!GF.uni || GF.uni === 'all' || (s.uni || []).includes(GF.uni));
 const V = () => S.filter(vis);
@@ -1360,7 +1383,8 @@ function makeTable(id, cols, rows, opt={}) {
       + (opt.csv ? `<span class="tacts"><button type="button" class="btn icon csv" title="Download this table as CSV" aria-label="Download CSV">
           <svg width="15" height="15" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M6.5 1v7M6.5 8l-2.5-2.5M6.5 8l2.5-2.5M1.5 10.5h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <button type="button" class="btn icon copy" title="Copy Symbol, Company, Industry, CMP, PE, PB of every row (pastes into Excel)" aria-label="Copy table">
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="9" rx="1.6" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 10.5h-.4A1.6 1.6 0 0 1 1.5 8.9V3.1c0-.9.7-1.6 1.6-1.6h5.8c.9 0 1.6.7 1.6 1.6v.4" stroke="currentColor" stroke-width="1.5"/></svg></button></span>` : '');
+          <svg class="tick" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg class="ico" width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="9" rx="1.6" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 10.5h-.4A1.6 1.6 0 0 1 1.5 8.9V3.1c0-.9.7-1.6 1.6-1.6h5.8c.9 0 1.6.7 1.6 1.6v.4" stroke="currentColor" stroke-width="1.5"/></svg></button></span>` : '');
     const inp = $('input', bar);
     if (inp) { inp.value = searchState[id] || ''; inp.addEventListener('input', () => { searchState[id] = inp.value; draw(); }); }
     if (opt.csv) $('.csv', bar).addEventListener('click', () => {
@@ -1561,9 +1585,33 @@ function holdStrip(st) {
     STAT_ANCHOR = st.scrollLeft > 2 && t ? {key: t.dataset.key, end: st.scrollLeft >= st.scrollWidth - st.clientWidth - 2} : null;
   }, {passive: true});
 }
-const stats = (arr, rows) => {                            // ONE compact strip: list stats, then (1Y back) results since that date
+const THEN_BY = new Map(D.then ? D.then.stocks.map(s => [s.sym, s]) : []);
+/* same stocks, 1 year ago vs now: medians over stocks that have the value at BOTH dates (listed < 1Y = ignored) */
+function yoyOf(rows) {
+  const both = rows.map(s => [s, THEN_BY.get(s.sym)]).filter(x => x[1]);
+  const pair = (fa, okv) => { const p = both.map(([n, t]) => [fa(t), fa(n)]).filter(([a, b]) => okv(a) && okv(b));
+    return p.length ? [median(p.map(q => q[0])), median(p.map(q => q[1])), p.length] : null; };   // median: one PE of 900 can't swing it
+  const pos = v => ok(v) && v > 0, px = D.then && D.then.hasPrice;
+  return {n: both.length, pe: px ? pair(s => s.pe, pos) : null, pb: px ? pair(s => s.pb, pos) : null, roe: pair(s => s.roe, ok)};
+}
+const yoyPct = r => r ? (r[1] / r[0] - 1) * 100 : null;          // PE / PB change, %
+const yoyPP = r => r ? r[1] - r[0] : null;                       // ROE change, pp
+function yoyTiles(rows) {                                 // current view only: these stocks a year ago vs now
+  if (BACK || !rows || !THEN_BY.size) return '';
+  const Y = yoyOf(rows), both = {length: Y.n};
+  const tile = (label, r, d, pp) => {
+    if (!r) return '';
+    const ch = pp ? r[1] - r[0] : (r[1] / r[0] - 1) * 100;
+    return `<div class="stat" data-key="yoy${label}" title="Median of the ${r[2]} stocks with a value at both dates">`
+      + `<span>${label}, 1Y ago → now</span><b>${fmt(r[0], d)} → ${fmt(r[1], d)}<small class="${ch >= 0 ? 'up' : 'dn'}">${ch > 0 ? '+' : ''}${fmt(ch, 1)}${pp ? ' pp' : '%'}</small></b></div>`;
+  };
+  const html = tile('Median PE', Y.pe, 1) + tile('Median PB', Y.pb, 2) + tile('Median ROE %', Y.roe, 1, true);
+  return html ? `<div class="stat cap" data-key="yoy" title="Stocks in this list that also existed 1 year ago (${both.length} of ${rows.length}); newer listings are left out. 1Y-ago values use the same-method engine; tick Same method for an exact like-for-like.">`
+    + `<span>vs 1Y ago</span><b>${both.length} stocks</b></div>${html}` : '';
+}
+const stats = (arr, rows, extra) => {                            // ONE compact strip: list stats, then (1Y back) results since that date
   const p = perfStats(rows);
-  view.insertAdjacentHTML('beforeend', `<div class="stats">${statTiles(arr)}`
+  view.insertAdjacentHTML('beforeend', `<div class="stats">${statTiles(arr)}` + (extra || '')
     + (p.length ? `<div class="stat cap" data-key="since"><span>Since</span><b>${esc(D.then.date)}</b></div>${statTiles(p)}` : '')
     + (BACK && D.then.hasPrice ? `<div class="stat cap grpcap" data-key="grpcap" title="The table below split into top / middle / bottom thirds in its current order (click a column to re-rank); average 1Y price return of each">`
         + `<span>Thirds by</span><b class="grpby">–</b></div>`
@@ -1577,12 +1625,20 @@ const cheapest = g => g.stocks.filter(s=>s.pe!=null && vis(s)).reduce((a,b)=>!a|
 function homeView() {
   setNav('home'); view.innerHTML = '';
   view.appendChild(pePicker());
+  const showYoy = !BACK && THEN_BY.size;
+  if (showYoy) Object.values(industries).forEach(g => g.yoy = yoyOf(g.stocks.filter(vis)));
+  const yTip = 'Median of the stocks in this industry that existed 1 year ago (newer listings ignored), value at both dates';
   const cols = [
     {k:'name', label:'Industry', l:1, v:g=>g.name, f:g=>`<b>${esc(g.name)}</b>`},
     {k:'pe', label:'Industry PE', v:g=>g.pe[method], f:g=>`<b>${fmt(g.pe[method])}</b>`},
     {k:'pb', label:'Median PB', v:g=>g.medPB, f:g=>fmt(g.medPB,2)},
     {k:'roe', label:'Median ROE %', v:g=>g.medROE, f:g=>fmt(g.medROE)},
     {k:'dy', label:'Median div yield %', v:g=>g.medDY, f:g=>fmt(g.medDY,2)},
+    ...(showYoy ? [
+      {k:'pe1', label:'PE 1Y ago', tip:yTip, v:g=>g.yoy.pe && g.yoy.pe[0], f:g=>g.yoy.pe ? fmt(g.yoy.pe[0]) : NA},
+      {k:'peD', label:'PE Δ 1Y', tip:yTip, v:g=>yoyPct(g.yoy.pe), f:g=>pctPill(yoyPct(g.yoy.pe), v=>v<=0)},      // cheaper = green
+      {k:'pbD', label:'PB Δ 1Y', tip:yTip, v:g=>yoyPct(g.yoy.pb), f:g=>pctPill(yoyPct(g.yoy.pb), v=>v<=0)},
+      {k:'roeD1', label:'ROE Δ 1Y', tip:yTip, v:g=>yoyPP(g.yoy.roe), f:g=>ppPill(yoyPP(g.yoy.roe), true)}] : []),
     ...(BACK ? [{k:'patG', label:'Median profit growth since', v:g=>medSince(g.stocks.filter(vis),'patG'), f:g=>pctPill(medSince(g.stocks.filter(vis),'patG'), v=>v>=0)},
                 {k:'roeD', label:'Median ROE Δ', v:g=>medSince(g.stocks.filter(vis),'roeD'), f:g=>ppPill(medSince(g.stocks.filter(vis),'roeD'), true)}] : []),
     {k:'n', label:'Stocks', v:g=>g.n, f:g=>g.n},
@@ -1602,7 +1658,7 @@ function industryView(name) {
   view.insertAdjacentHTML('beforeend', `<a class="back-link" href="#/">&#8592; All industries</a><h2 class="page">${esc(g.name)}</h2>`);
   if (NOPRICE) stats([['Stocks', g.n], ['Median ROE then', fmt(g.medROE) + '%']], g.stocks.filter(vis));
   else stats([['Industry PE (selected)', fmt(g.pe[method])], ['Median PE', fmt(g.pe.median)], ['Average PE', fmt(g.pe.mean)],
-         ['Cap-weighted PE', fmt(g.pe.weighted)], ['Median PB', fmt(g.medPB,2)], ['Stocks', g.n]], g.stocks.filter(vis));
+         ['Cap-weighted PE', fmt(g.pe.weighted)], ['Median PB', fmt(g.medPB,2)], ['Stocks', g.n]], g.stocks.filter(vis), yoyTiles(g.stocks.filter(vis)));
   view.appendChild(pePicker());
   view.appendChild(makeTable('ind', [C.sym, C.name, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...assetCols(), C.score, C.q, C.cagr, C.fcfy, C.dy, C.proChg, C.mcap, C.from52],
     g.stocks.filter(vis), {sortKey:'pe', sortDir:1, search:true, csv:() => csvName('Industry_' + g.name, {}, {}, [])}));
@@ -1707,7 +1763,12 @@ document.addEventListener('click', e => {
   closeDrops();
 }, true);
 addEventListener('resize', () => { const f = document.querySelector('.fbox.dopen'); if (f) placeDrop(f); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.querySelector('.fbox.dopen')) closeDrops(); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (document.querySelector('.fbox.dopen')) { closeDrops(); return; }
+  if (document.querySelector('.fsel.open, .pop.open')) return;            // Esc closes those first
+  if ((location.hash || '').startsWith('#/industry/')) location.hash = '#/';  // industry page -> All industries
+});
 
 /* ---------- VALUE SCREEN ---------- */
 const VF_DEF = {maxPE:'', maxPB:'', minQ:12, minScore:0, minFcf:'', minMcap:0, maxMcap:'', trap:true, graham:false, minTrend:'',
@@ -2077,6 +2138,44 @@ function methodView() {
   <p>Everything comes from the screener's valuation CSVs (downloaded ${esc(D.asOf)}): ${D.lists.map(esc).join(', ')}. Consolidated figures (standalone for companies that do not publish consolidated accounts; both pages are scraped and merged weekly), ${N.length} unique stocks (a stock in two lists is kept once, with the row that has the most data).
   Prices for 1Y back and the Same method view come from prices.csv (Angel One, fetched in the weekly run). "Financials" = industries matching bank / finance / NBFC / insurance / broking / AMC; they skip metrics that don't apply to them.
   Stocks whose latest annual figure is older than ${D.staleDays} days are treated as having no history. The <b>List</b> picker and the <b>Hide PSU</b> switches apply to both tabs; industry benchmarks and Value score peers always use every stock.</p>
+
+  <h2>Same method: ticked vs not ticked</h2>
+  <div class="smd">
+    <div class="lane">
+      <div class="tag">Not ticked</div>
+      <div class="flow">
+        <div class="nd src"><b>Screener's own ratios</b><span>PE · PB · ROE · ROCE · div yield, as Screener publishes them</span></div>
+        <div class="ar">→</div>
+        <div class="nd out good"><b>Today</b><span>full data: true ROCE, profit that belongs to shareholders, latest book value</span></div>
+      </div>
+      <div class="use">✓ Use to <b>pick stocks today</b>, the most accurate figures</div>
+    </div>
+    <div class="lane">
+      <div class="tag on">Ticked</div>
+      <div class="flow">
+        <div class="nd src"><b>Raw rows</b><span>yearly + quarterly results, balance sheet, shareholding</span></div>
+        <div class="plus">+</div>
+        <div class="nd src"><b>One price</b><span>Angel close for that date</span></div>
+        <div class="ar">→</div>
+        <div class="nd eng"><b>One engine</b><span>same formulas, same windows</span></div>
+        <div class="ar">→</div>
+        <div class="pair">
+          <div class="nd out"><b>Today (ticked)</b></div>
+          <div class="eq">⇅ like-for-like</div>
+          <div class="nd out"><b>1Y back</b><span>${D.then ? esc(D.then.date) : ''}</span></div>
+        </div>
+      </div>
+      <div class="use">✓ Use to <b>compare today with 1Y back</b>, the only way both dates are computed identically</div>
+    </div>
+  </div>
+  <p>The filters never change between the two. Only these inputs do, which moves stocks near a cut-off in or out:</p>
+  <div class="wrap"><table><tr><th>Input</th><th>Not ticked</th><th>Ticked</th><th>Typical effect</th></tr>
+  ${row('ROCE', 'EBIT ÷ (equity + borrowings), Screener', (D.smNow && D.smNow.stocks.some(s => s.roceSrc === 'ta')) ? 'EBIT ÷ total assets until Borrowings are scraped ("proxy")' : 'EBIT ÷ (equity + borrowings) from the raw rows', 'proxy reads ~30% lower, so stocks near ROCE 10% drop out')}
+  ${row('PE', 'Screener PE', 'last 4 quarters\' PAT ÷ today\'s shares, at the Angel close', 'a few % either way')}
+  ${row('PB', 'latest book value (can be the half-year balance sheet)', 'reserves + share capital, last annual balance sheet', 'small; can push PE × PB just over 22.5')}
+  ${row('ROE', 'Screener ROE', 'PAT ÷ average equity, last financial year', 'small')}
+  ${row('Holding companies', 'profit that belongs to the shareholders', 'group profit incl. subsidiaries\' outside shareholders', 'PE looks too cheap, ROE too high (e.g. a holding company at PE 4 instead of 10)')}
+  ${row('Dividend yield', 'Screener', 'payout % × PAT ÷ market cap', 'small')}</table></div>
 
   <h2>Backtesting with 1Y back: read this first</h2>
   <p><b>One engine, two dates.</b> 1Y back rebuilds each company as it stood on ${D.then ? esc(D.then.date) : '–'} with the <b>same function</b> that computes the <b>Same method</b> view of today:
