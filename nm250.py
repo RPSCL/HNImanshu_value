@@ -20,6 +20,9 @@ M-3  The output CSV is a MASTER file: one row per stock, upserted every run.
        • a failed scrape keeps the stock's previous good row (STALE flag)
 M-4  Before the CSV is touched, the previous file is snapshotted into
      old_csv.zip as DDMMYY_<name>.csv (archive_csv.py).
+M-6  Shared scrape cache: every good scrape is saved raw to .screener_cache.jsonl; the other index
+     scripts reuse any stock scraped there in the last REUSE_DAYS days instead of re-scraping it
+     (n500 → nm250 → ns500: Smallcap 500 is almost entirely reused). Scores are still computed per index.
 M-5  Removed the "delete CSV at 15:00/16:00 IST" block — the run is weekly now
      and the master merge replaces it.  Progress is checkpointed to
      .<name>_inprogress.jsonl so an interrupted run resumes.
@@ -127,6 +130,14 @@ NSE_CSV_URL  = f"https://nsearchives.nseindia.com/content/indices/ind_{INDEX}_li
 #NSE_CSV_URL  = f"https://nsearchives.nseindia.com/content/indices/ind_{INDEX}list.csv"
 
 OUTPUT_FILE = f"{INDEX}_valuation.csv"
+
+# ── Shared scrape cache (M-6): n500.py, nm250.py and ns500.py overlap heavily
+#    (NIFTY 500 ranks 251-500 are in Smallcap 500; Microcap 250 sits inside Smallcap 500).
+#    Every good scrape is also saved RAW (before any index-specific scoring) to this file, and a
+#    later script takes a stock from it instead of hitting screener.in again.
+#    Run order n500 → nm250 → ns500 means Smallcap 500 needs almost no fresh scraping.
+SCRAPE_CACHE = Path(__file__).resolve().parent / ".screener_cache.jsonl"
+REUSE_DAYS   = 2         # reuse a cached scrape only if it is at most this many days old
 
 # ── (M-5) No more "delete CSV at startup" — the CSV is now a master file that is
 #    snapshotted to old_csv.zip and then upserted.  See build_master_csv().
@@ -1045,6 +1056,35 @@ def merge_into_master(old_df: pd.DataFrame, new_rows: dict, nse_df: pd.DataFrame
     return master
 
 
+def _load_scrape_cache(max_age_days: int = REUSE_DAYS) -> dict:
+    """{SYMBOL: raw scraped row} from .screener_cache.jsonl, newest per symbol, only good rows
+    scraped within max_age_days. Older lines are dropped from the file at the same time."""
+    if not SCRAPE_CACHE.exists():
+        return {}
+    cutoff = (datetime.now() - timedelta(days=max_age_days)).strftime("%Y-%m-%d")
+    keep, out = [], {}
+    with open(SCRAPE_CACHE, encoding="utf-8") as fh:
+        for line in fh:
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            if str(rec.get("DATE_DOWNLOADED", "")) < cutoff or not _is_good(rec):
+                continue
+            keep.append(line if line.endswith("\n") else line + "\n")
+            out[str(rec["SYMBOL"]).upper()] = rec                 # later lines win → newest scrape
+    with open(SCRAPE_CACHE, "w", encoding="utf-8") as fh:          # prune stale lines
+        fh.writelines(keep)
+    return out
+
+
+def _save_to_scrape_cache(row: dict):
+    """Append one good raw scrape so the other index scripts can reuse it."""
+    if _is_good(row):
+        with open(SCRAPE_CACHE, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, default=str) + "\n")
+
+
 def build_master_csv(nse_df, symbols, output_path,
                      delay=REQUEST_DELAY, force_refresh=False, index_symbols=None):
     """
@@ -1084,6 +1124,23 @@ def build_master_csv(nse_df, symbols, output_path,
     elif ckpt.exists():
         ckpt.unlink()
 
+    # ── (M-6) reuse stocks another index script already scraped in this run ──
+    reused = []
+    if not force_refresh:
+        cache = _load_scrape_cache()
+        for s in symbols:
+            S = str(s).upper()
+            if S not in done and S in cache:
+                done[S] = cache[S]
+                reused.append(S)
+        if reused:
+            with open(ckpt, "a", encoding="utf-8") as fh:             # so a resumed run keeps them too
+                for S in reused:
+                    fh.write(json.dumps(done[S], default=str) + "\n")
+        log.info(f"  Reused {len(reused)} stocks already scraped by another index script "
+                 f"(≤{REUSE_DAYS} days old, {SCRAPE_CACHE.name})"
+                 + (f": {', '.join(reused[:10])}{' …' if len(reused) > 10 else ''}" if reused else ""))
+
     todo = [s for s in symbols if str(s).upper() not in done]
     n_links = len(unique_links("X"))
     log.info(f"  Need: {len(todo)}  |  Done: {len(done)}  |  links per stock: {n_links}")
@@ -1097,6 +1154,7 @@ def build_master_csv(nse_df, symbols, output_path,
                 row["DATE_DOWNLOADED"] = today
                 fh.write(json.dumps(row, default=str) + "\n")
                 fh.flush()
+                _save_to_scrape_cache(row)                            # (M-6) for the other index scripts
                 done[str(sym).upper()] = row
                 if not _is_good(row):
                     errors += 1
@@ -1106,7 +1164,7 @@ def build_master_csv(nse_df, symbols, output_path,
                     f"{out_path.name} was NOT changed.")
         sys.exit(1)
 
-    log.info(f"  ✓ scraped {len(todo)}  |  failed: {errors}")
+    log.info(f"  ✓ scraped {len(todo)}  |  reused {len(reused)} from other indices  |  failed: {errors}")
 
     # ── 3. upsert into master ────────────────────────────────────────────────
     old_df = None
