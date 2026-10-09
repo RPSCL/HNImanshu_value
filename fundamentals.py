@@ -1051,8 +1051,8 @@ input[type=checkbox]{accent-color:var(--brass);width:15px;height:15px}
 input:focus,select:focus{border-color:var(--brass);outline:none}
 
 /* stat strip: always ONE line; if it is wider than the screen it scrolls sideways instead of wrapping */
-.stats{display:flex;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;margin:4px 0 10px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);-webkit-overflow-scrolling:touch}
-.stat{flex:0 0 auto;white-space:nowrap;padding:6px 14px 6px 0;margin-right:14px;border-right:1px solid var(--line)}
+.stats{position:relative;display:flex;flex-wrap:nowrap;overflow-x:auto;scroll-snap-type:x proximity;overflow-y:hidden;margin:4px 0 10px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);-webkit-overflow-scrolling:touch}
+.stat{flex:0 0 auto;white-space:nowrap;scroll-snap-align:start;padding:6px 14px 6px 0;margin-right:14px;border-right:1px solid var(--line)}
 .stat.cap{padding-left:12px;border-left:2px solid var(--brass);border-right:0;margin-right:4px}
 .stat.cap span{color:var(--brass)!important;font:600 9.5px var(--mono)!important;text-transform:uppercase;letter-spacing:1px}
 .stat.cap b{font-size:12px!important;color:var(--mute)!important;font-weight:600}
@@ -1331,18 +1331,13 @@ function perfStats(rows) {
   if (!BACK || !rows) return [];
   const r = rows.filter(s => sv(s,'patG') != null || sv(s,'patL'));
   const up = r.filter(s => sv(s,'patG') > 0 || sv(s,'patL') === 'turned profitable').length;
-  const px = [];
   if (D.then.hasPrice) {                                   // price-return backtest of this list
     const rr = rows.map(s => sv(s,'ret')).filter(ok), b = D.then.bench ? D.then.bench.ret : null;
     const avg = rr.length ? rr.reduce((a,x) => a + x, 0) / rr.length : null;
-    px.push(['Return, eq-wt', signPct(avg)], ['Return, median', signPct(median(rr))],
-            ['NIFTY 500', signPct(b)]);
-    if (b != null) px.push(['Beat NIFTY', rr.length ? `${rr.filter(x => x > b).length} of ${rr.length}` : '–']);
+    return [['Return, eq-wt', signPct(avg)], ['NIFTY 500', signPct(b)]];   // kept short: the whole strip fits without scrolling
   }
-  return px.concat([['Profit growth, list', signPct(medSince(rows,'patG'))],
-          ['Profit growth, all', signPct(medSince(V(),'patG'))],
-          ['Profit up', r.length ? `${up} of ${r.length}` : '–'],
-          ['ROE Δ, median', signPP(medSince(rows,'roeD'))]]);
+  return [['Profit growth, list', signPct(medSince(rows,'patG'))],          // no prices.csv: business results only
+          ['Profit up', r.length ? `${up} of ${r.length}` : '–']];
 }
 /* in 1Y-back mode, price-based columns are dropped and the "since then" columns take the price column's place */
 const PRICE_KEYS = new Set(['pta','pfa','invp','qvV','cmp','pe','cpe','prem','indpe','pb','peg','gup','dy','ey','fcfy','from52','cheap','nPE','rEY']);
@@ -1411,7 +1406,8 @@ function thirds(data, col) {
     el.title = x.map(s => s.sym + ' ' + (s.since.ret > 0 ? '+' : '') + fmt(s.since.ret) + '%').join('\n') + (b != null ? '\nNIFTY 500: ' + fmt(b) + '%' : '');
   });
 }
-const TABLE_ROWS = 15;                                    // visible rows per table, the rest scrolls
+const TABLE_ROWS = 15;
+const TSCROLL = {};                                       // table sideways scroll, kept while filters re-render the table                                    // visible rows per table, the rest scrolls
 function makeTable(id, cols, rows, opt={}) {
   if (BACK) {
     const add = (D.then.hasPrice ? [C.ret] : []).concat(opt.sinceCols || [C.patG, C.revG, C.roeD, C.opmD]);
@@ -1460,6 +1456,7 @@ function makeTable(id, cols, rows, opt={}) {
   const tbl = document.createElement('table'); wrap.appendChild(tbl); card.appendChild(wrap);
   box.appendChild(card);
   const st = sortState[id] = sortState[id] || {k: opt.sortKey, dir: opt.sortDir || 1};
+  wrap.addEventListener('scroll', () => { TSCROLL[id] = wrap.scrollLeft; }, {passive: true});
   function draw() {
     const q = (searchState[id]||'').toLowerCase();
     let data = rows.filter(r => !q || (r.sym+' '+r.name+' '+(r.ind||'')).toLowerCase().includes(q));
@@ -1485,6 +1482,7 @@ function makeTable(id, cols, rows, opt={}) {
     (window.requestAnimationFrame || setTimeout)(() => {  // window = header + 15 rows, rest scrolls inside the card
       const r = tb.rows[0];
       if (r && r.offsetHeight) wrap.style.maxHeight = (tbl.tHead.offsetHeight + r.offsetHeight * TABLE_ROWS + 1) + 'px';
+      if (TSCROLL[id]) wrap.scrollLeft = TSCROLL[id];
     });
     tbl.querySelectorAll('th[data-k]').forEach(th => th.addEventListener('click', () => {
       const k = th.dataset.k; st.dir = (st.k===k) ? -st.dir : 1; st.k = k; draw();
@@ -1626,15 +1624,30 @@ function pePicker() {
   return d;
 }
 const pageTitle = t => view.insertAdjacentHTML('beforeend', `<h2 class="page">${t}</h2>`);
-const statTiles = arr => arr.map(([l,v]) => `<div class="stat"><span>${l}</span><b>${v}</b></div>`).join('');
+const statTiles = arr => arr.map(([l,v]) => `<div class="stat" data-key="${esc(l)}"><span>${l}</span><b>${v}</b></div>`).join('');
+let STAT_ANCHOR = null;                                  // {key, off}: first tile in view + its offset, survives re-renders
+function holdStrip(st) {
+  const restore = () => {
+    if (!STAT_ANCHOR) return;
+    if (STAT_ANCHOR.end) { st.scrollLeft = st.scrollWidth; return; }   // was scrolled to the end (Thirds): stay there
+    const t = st.querySelector(`[data-key="${(window.CSS && CSS.escape ? CSS.escape(STAT_ANCHOR.key) : STAT_ANCHOR.key)}"]`);
+    if (t) st.scrollLeft = t.offsetLeft;
+  };
+  restore(); (window.requestAnimationFrame || setTimeout)(restore);    // again once the Thirds tiles are filled
+  st.addEventListener('scroll', () => {
+    const t = [...st.children].find(c => c.offsetLeft + c.offsetWidth / 2 >= st.scrollLeft);   // tile now at the left edge
+    STAT_ANCHOR = st.scrollLeft > 2 && t ? {key: t.dataset.key, end: st.scrollLeft >= st.scrollWidth - st.clientWidth - 2} : null;
+  }, {passive: true});
+}
 const stats = (arr, rows) => {                            // ONE compact strip: list stats, then (1Y back) results since that date
   const p = perfStats(rows);
   view.insertAdjacentHTML('beforeend', `<div class="stats">${statTiles(arr)}`
-    + (p.length ? `<div class="stat cap"><span>Since</span><b>${esc(D.then.date)}</b></div>${statTiles(p)}` : '')
-    + (BACK && D.then.hasPrice ? `<div class="stat cap grpcap" title="The table below split into top / middle / bottom thirds in its current order (click a column to re-rank); average 1Y price return of each">`
+    + (p.length ? `<div class="stat cap" data-key="since"><span>Since</span><b>${esc(D.then.date)}</b></div>${statTiles(p)}` : '')
+    + (BACK && D.then.hasPrice ? `<div class="stat cap grpcap" data-key="grpcap" title="The table below split into top / middle / bottom thirds in its current order (click a column to re-rank); average 1Y price return of each">`
         + `<span>Thirds by</span><b class="grpby">–</b></div>`
-        + ['Top', 'Mid', 'Low'].map((n, i) => `<div class="stat grp" data-g="${i}"><span>${n}</span><b>–</b></div>`).join('') : '')
+        + ['Top', 'Mid', 'Low'].map((n, i) => `<div class="stat grp" data-g="${i}" data-key="grp${i}"><span>${n}</span><b>–</b></div>`).join('') : '')
     + '</div>');
+  const all = view.querySelectorAll('.stats'); holdStrip(all[all.length - 1]);
 };
 const hint = () => {};                                   // no help text under tables; it all lives in Methodology
 
