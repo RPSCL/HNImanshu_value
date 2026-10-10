@@ -932,6 +932,16 @@ HTML = r"""<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141414'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='18' font-weight='bold' fill='%23a89060' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E">
 <style>
+/* Buy / Sell check card */
+.ckcard{background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--sc);border-radius:10px;padding:14px 16px;margin:4px 0 14px}
+.ckhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.cksym{font:700 18px var(--mono);margin-right:6px}
+.ckverdict{font-size:14px;padding:6px 12px}
+.cknote{margin:8px 0 10px;color:var(--mute);font-size:13px}
+.ckgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px 20px}
+.ckgrid ul{list-style:none;margin:0;padding:0;font-size:12.5px;line-height:1.75}
+.ckgrid li.up{color:var(--good)} .ckgrid li.dn{color:var(--bad)} .ckgrid li.na{color:var(--faint)}
+@media (max-width:700px){.ckgrid{grid-template-columns:1fr}}
 :root{--mono:'IBM Plex Mono',ui-monospace,monospace;--serif:var(--mono);--sans:'DM Sans',system-ui,-apple-system,"Segoe UI",sans-serif}
 body.night{
   --bg:#0e0e0f;--panel:#141416;--panel2:#1a1a1d;--line:#323238;--ink:#f0ece4;--mute:#c0b8ae;--faint:#807870;
@@ -1276,6 +1286,7 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
   <a href="#/value" data-t="value">Value screen</a>
   <a href="#/method" data-t="method">Methodology</a>
   <a href="#/all" data-t="all">All Stocks</a>
+  <a href="#/check" data-t="check">Buy / Sell check</a>
 </nav>
 <main id="view"></main>
 
@@ -1944,11 +1955,26 @@ document.addEventListener('click', e => {
   closeDrops();
 }, true);
 addEventListener('resize', () => { const f = document.querySelector('.fbox.dopen'); if (f) placeDrop(f); });
+const pageSearch = () => view.querySelector('.tbar input[type=search]');
+const typingIn = t => t && (t.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName));
 document.addEventListener('keydown', e => {
-  if (e.key !== 'Escape') return;
-  if (document.querySelector('.fbox.dopen')) { closeDrops(); return; }
-  if (document.querySelector('.fsel.open, .pop.open')) return;            // Esc closes those first
-  if ((location.hash || '').startsWith('#/industry/')) location.hash = '#/';  // industry page -> All industries
+  if (e.key === 'Escape') {
+    if (document.querySelector('.fbox.dopen')) { closeDrops(); return; }
+    if (document.querySelector('.fsel.open, .pop.open')) return;            // Esc closes those first
+    const q = pageSearch();
+    if (q && (document.activeElement === q || q.value)) {                   // Esc: clear the search, cursor off
+      if (q.value) { q.value = ''; q.dispatchEvent(new Event('input')); }
+      q.blur(); return;
+    }
+    if ((location.hash || '').startsWith('#/industry/')) location.hash = '#/';  // industry page -> All industries
+    return;
+  }
+  // any letter / digit typed while not in a field goes straight into the page's search box
+  if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey || typingIn(e.target) || document.querySelector('.fbox.dopen')) return;
+  if (e.key === ' ' && !(pageSearch() && pageSearch().value)) return;       // space alone still scrolls the page
+  const q = pageSearch(); if (!q) return;
+  e.preventDefault();
+  q.focus(); q.value += e.key; q.dispatchEvent(new Event('input'));
 });
 
 /* ---------- VALUE SCREEN ---------- */
@@ -2344,6 +2370,79 @@ const btOf = k => {
 };
 const BT_ROUTE = h => h.startsWith('#/industry/') || h === '#/' || h === '' ? 'home' : h.slice(2);
 /* ---------- ALL STOCKS: no screen, no filter; every stock in the chosen list that has a price on the date shown ---------- */
+/* ---------- BUY / SELL CHECK: one verdict per stock from value + quality + momentum ---------- */
+const SIG_SAFE = {minUp:6, maxDe:1, maxDebitda:2.5, minRoa:1, maxNpa:4};      // looser than the Graham screens: a sanity floor
+const SIG = {
+  buy:   {label:'BUY',          cls:'disc', rank:1, note:'Cheap vs its industry, sound business, price already turning up.'},
+  wait:  {label:'BUY ON STRENGTH', cls:'',  rank:2, note:'Cheap and sound, but the price is still falling: wait for momentum ≥ 40 instead of catching a falling knife.'},
+  hold:  {label:'HOLD',         cls:'',     rank:3, note:'Fairly valued, nothing broken: keep it, no fresh money.'},
+  run:   {label:'HOLD · TRAIL STOP', cls:'warn', rank:4, note:'No longer cheap but the trend is strong: let it run, exit if it falls 20% from its 52-week high.'},
+  book:  {label:'BOOK PROFIT',  cls:'prem', rank:5, note:'Re-rated to expensive vs peers and momentum is fading: if you own it, take profits (all, or half and trail the rest); if not, don\'t buy.'},
+  sell:  {label:'SELL / AVOID', cls:'prem', rank:6, note:'The business is weakening (value-trap flags or failed safety: debt, profit record, ROA / NPA): the reason to own it is gone.'},
+  exit:  {label:'EXIT · TREND BROKEN', cls:'prem', rank:6, note:'Down 25%+ from its 52-week high with weak momentum: cut it, whatever the valuation says.'},
+  na:    {label:'NO DATA',      cls:'',     rank:8, note:'No price or not enough history for a value score on this date, so no verdict.'},
+};
+/* hard flags = the business is deteriorating (sell); soft flags = caution only (missing growth history,
+   EPS near a 5Y low, other-income heavy): they stop a BUY but don't trigger a SELL */
+const HARD_FLAG = /EPS shrinking|loss now|loss yr|weak cash conversion|equity dilution|low interest cover/;
+function signal(s) {
+  const v = s.score, m = HAS_MOM ? s.momS : null, traps = trapReasons(s), safe = safeOk(s, SIG_SAFE);
+  const off = pctFrom(s.cmp, s.hi52), hard = traps.some(t => HARD_FLAG.test(t)), soft = traps.length && !hard;
+  if (v == null) return 'na';
+  if (hard || !safe) return 'sell';
+  if (m != null && m < 20 && off != null && off <= -25) return 'exit';
+  if (v >= 60 && soft) return 'hold';
+  if (v >= 60) return (m == null || m >= 40) ? 'buy' : 'wait';
+  if (v >= 40) return (m != null && m < 20) ? 'book' : 'hold';
+  if (m != null && m >= 60) return 'run';
+  return (m == null || m < 50) ? 'book' : 'hold';
+}
+C.sig = {k:'sig', label:'Signal', tip:'Buy / sell verdict from value score, business quality / safety and momentum (see the Buy / Sell check tab)',
+         v:s=>SIG[signal(s)].rank, x:s=>SIG[signal(s)].label,
+         f:s=>{ const g = SIG[signal(s)]; return `<span class="pill ${g.cls}" title="${esc(g.note)}">${g.label}</span>`; }};
+function checkCard(s) {
+  const g = SIG[signal(s)], m = HAS_MOM ? s.momS : null, traps = trapReasons(s), off = pctFrom(s.cmp, s.hi52);
+  const li = (okv, t) => `<li class="${okv == null ? 'na' : okv ? 'up' : 'dn'}">${okv == null ? '–' : okv ? '✓' : '✗'} ${t}</li>`;
+  const p = s.prem != null ? s.prem : prem(s);
+  return `<div class="ckcard" style="--sc:${secColor(s.ind) || 'transparent'}">
+    <div class="ckhead"><div><b class="cksym">${esc(s.sym)}</b>${psuTag(s)} <span class="na">${esc(s.name)} · ${esc(s.ind)}</span></div>
+      <span class="pill ${g.cls} ckverdict">${g.label}</span></div>
+    <p class="cknote">${g.note}${m == null && /buy|hold|book/.test(signal(s)) ? ' <span class="na">Momentum isn\'t in prices.csv yet, so this verdict uses value and business quality only.</span>' : ''}${BACK ? ` <span class="na">(as on ${esc(D.then.date)}; price since: ${sv(s,'ret') == null ? '–' : signPct(sv(s,'ret'))})</span>` : ''}</p>
+    <div class="ckgrid">
+      <div><div class="fsub">Value</div><ul>
+        ${li(s.score != null ? s.score >= 60 : null, `Value score ${fmt(s.score, 0)} (60+ cheap, under 40 expensive)`)}
+        ${li(p != null ? p <= 0 : null, `PE ${fmt(s.pe)} vs industry ${fmt(indPE(s.ind))} (${p == null ? '–' : (p > 0 ? '+' : '') + fmt(p, 0) + '%'})`)}
+        ${li(s.pb != null ? s.pb <= 3 : null, `PB ${fmt(s.pb, 2)}`)}
+        ${li(s.pe != null && s.pb != null ? grahamPass(s) : null, `Graham PE × PB ${s.pe != null && s.pb != null ? fmt(s.pe * s.pb) : '–'} (≤ 22.5)`)}
+      </ul></div>
+      <div><div class="fsub">Business</div><ul>
+        ${li(!traps.some(t => HARD_FLAG.test(t)), traps.length ? 'Flags: ' + esc(traps.join(', ')) : 'No value-trap flags')}
+        ${li(s.q5 != null ? s.q5 >= 12 : (qual(s) != null ? qual(s) >= 12 : null), `${s.fin ? 'ROE' : 'ROCE'} 5Y median ${fmt(s.q5 != null ? s.q5 : qual(s))}%`)}
+        ${li(s.pup ? s.pup[0] / s.pup[1] >= 0.6 : null, `Profit up ${s.pup ? s.pup.join('/') : '–'} years`)}
+        ${s.fin ? li(s.roa != null ? s.roa >= 1 : null, `ROA ${fmt(s.roa, 2)}%`) : li(s.de != null ? s.de <= 1 : null, `Debt ÷ equity ${fmt(s.de, 2)}`)}
+        ${li(s.tr ? s.tr.pct >= 50 : null, `Trend ${s.tr ? s.tr.pass + '/' + s.tr.of : '–'} improving`)}
+      </ul></div>
+      <div><div class="fsub">Momentum</div><ul>
+        ${li(m != null ? m >= 40 : null, `Momentum ${m == null ? 'not fetched yet' : fmt(m, 0)} (40+ turning up, under 20 weak)`)}
+        ${s.mom ? ['3M', '6M', '12-1M'].map((l, i) => li(ok(s.mom[i]) ? s.mom[i] > 0 : null, `${l} return ${ok(s.mom[i]) ? signPct(s.mom[i]) : '–'}`)).join('') : ''}
+        ${li(off != null ? off > -25 : null, `${off == null ? '–' : fmt(off) + '%'} from 52-week high`)}
+      </ul></div>
+    </div></div>`;
+}
+function checkView() {
+  setNav('check'); view.innerHTML = '';
+  const rows = V();                                       // every stock can be looked up; no price / score = NO DATA
+  const cnt = k => rows.filter(s => signal(s) === k).length;
+  stats([['Buy', cnt('buy')], ['Buy on strength', cnt('wait')], ['Hold', cnt('hold') + cnt('run')], ['Book profit', cnt('book')],
+         ['Sell / avoid', cnt('sell')], ['Exit, trend broken', cnt('exit')]], rows);
+  const slot = document.createElement('div'); slot.id = 'ckslot'; view.appendChild(slot);
+  const show = s => { lsSet('check', s.sym); slot.innerHTML = checkCard(s); };
+  const pick = rows.find(s => s.sym === lsGet('check'));
+  slot.innerHTML = pick ? checkCard(pick) : '<p class="hint">Type a symbol or name (anywhere on the page) and click a row to see its full check.</p>';
+  view.appendChild(makeTable('check', [C.sym, C.ind, C.sig, C.score, C.mom, C.name, C.trend, C.cmp, C.pe, C.prem, C.pb, C.q5, C.pup, C.from52, C.flags],
+    rows, {sortKey:'sig', sortDir:1, search:true, csv:() => 'Buy_sell_check.csv', onRow: s => { show(s); slot.scrollIntoView({block:'nearest'}); }}));
+}
+
 const AF_DEF = Object.assign({}, VF_DEF, {minQ:'', minDy:'', trap:false, minMom:''});   // All Stocks: every filter off by default
 function allView() {
   setNav('all'); view.innerHTML = '';
@@ -2513,6 +2612,19 @@ function methodView() {
   <p>Profit uses PAT, not quarterly EPS, because quarterly EPS is not split-adjusted. Trend is only a filter, never part of the Value score.
   Cyclicals score best here near a peak; use it alongside valuation.</p>
 
+  <h2>Buy / Sell check</h2>
+  <p>One verdict per stock, checked in this order (first rule that matches wins):</p>
+  <div class="wrap"><table><tr><th>Signal</th><th>When</th><th>What to do</th></tr>
+  ${row('SELL / AVOID', 'a hard value-trap flag (EPS shrinking, a loss in 5 years, cash conversion &lt; 0.5x, equity dilution &gt; 6%/yr, interest cover &lt; 2) or failed safety: profit up &lt; 6 of 10 years, debt ÷ equity &gt; 1 and debt ÷ EBITDA &gt; 2.5, financials ROA &lt; 1%, Gross NPA &gt; 4%', 'exit if you own it; don\'t buy')}
+  ${row('EXIT · TREND BROKEN', 'momentum &lt; 20 and price 25%+ below its 52-week high', 'cut it, whatever the valuation')}
+  ${row('BUY', 'Value score ≥ 60, no flags, momentum ≥ 40 (or momentum not fetched yet)', 'buy, equal weight')}
+  ${row('BUY ON STRENGTH', 'Value score ≥ 60, no flags, momentum &lt; 40', 'cheap but still falling: wait until momentum reaches 40')}
+  ${row('HOLD', 'Value score 40–60; or ≥ 60 with a soft flag (no growth history, EPS near its 5Y low, other-income heavy)', 'keep, no fresh money')}
+  ${row('HOLD · TRAIL STOP', 'Value score &lt; 40 but momentum ≥ 60', 'let the winner run; exit on a 20% fall from its 52-week high')}
+  ${row('BOOK PROFIT', 'Value score &lt; 40 and momentum &lt; 60 (or score 40–60 with momentum &lt; 20)', 'take profits: all, or half and trail the rest')}</table></div>
+  <p>Buy needs a high bar (≥ 60) but selling on valuation needs a low one (&lt; 40): the gap stops a stock that drifts from 61 to 58 from being sold and bought back every week.
+  Use it on a fixed review day (monthly or quarterly), not daily. With Historical on, every verdict is as of that date, next to the price return since.</p>
+
   <h2>CSV download</h2>
   <p>Exports the rows the table shows (search and sort applied, all rows, not only the 15 in view). The file name starts with the list picked in the header (<code>all</code>, <code>N500</code> = NIFTY 500, <code>NS500</code> = Smallcap 500, <code>NM250</code> = Microcap 250), then the tab and active filters, e.g. <code>N500_Value_screen_mcap_20K_RCE_ROE12_MT10.csv</code> (MA = max Mcap ÷ Assets): number filters when set and non-zero, tick boxes only when changed from default, dropdowns always; m = minus, p = decimal point.</p>
 
@@ -2548,6 +2660,7 @@ function route() {
   else if (h === '#/value') valueView();
   else if (h === '#/method') methodView();
   else if (h === '#/all') allView();
+  else if (h === '#/check') checkView();
   else homeView();
   meta();
   window.scrollTo(0,0);
