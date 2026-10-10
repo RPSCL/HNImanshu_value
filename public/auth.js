@@ -1,4 +1,4 @@
-// auth.js — HNImanshu login (username + password, or Google) on Firebase Authentication (project nfsxcas).
+// auth.js — HNImanshu login (username + password, or Google) on Firebase Authentication (project hnimanshu).
 //
 // One file for both pages:
 //   • Screener (index.html): clicking an element with [data-auth-link] (the Fundamentals button) opens the
@@ -23,16 +23,12 @@ import {
   getFirestore, doc, setDoc, getDoc, getDocs, collection, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
-  getDatabase, ref, set, onValue, onDisconnect, runTransaction,
+  getDatabase, ref, set, onValue, onDisconnect, increment,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
 
-// Same Firebase project as RollbackCAS, so one account works on both sites. These values are public by design.
-const firebaseConfig = {
-  apiKey: "AIzaSyANIaWhY5RfhjaBYJLjfFcIKxGwJUapD44",
-  authDomain: "nfsxcas.firebaseapp.com",
-  projectId: "nfsxcas",
-  databaseURL: "https://nfsxcas-default-rtdb.asia-southeast1.firebasedatabase.app",
-};
+// Project config comes from Firebase Hosting itself (/__/firebase/init.json = the project that hosts this site,
+// i.e. hnimanshu). Nothing project-specific is hard-coded here, so this file can never talk to another project.
+const firebaseConfig = await fetch("/__/firebase/init.json").then((r) => r.json());
 const USER_DOMAIN = "users.hnimanshu.app";        // username → hidden email for Firebase
 const SESSION_DAYS = 7;                           // log out a week after the last sign-in
 const ADMIN_EMAIL = "admin@" + USER_DOMAIN;       // username "admin" (created by you in the Firebase console)
@@ -43,7 +39,7 @@ const GATED = document.documentElement.dataset.auth === "required";
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const rtdb = getDatabase(app);                   // only for the live online / visitor counters (hni/... paths)
+const rtdb = firebaseConfig.databaseURL ? getDatabase(app) : null;   // live online / visitor counters (hni/...); skipped if no Realtime DB
 const google = new GoogleAuthProvider();
 google.setCustomParameters({ prompt: "select_account" });
 
@@ -233,11 +229,12 @@ function showUser(u) {
   host.insertBefore(el, host.querySelector("#theme-toggle"));
 }
 
-// ---------- online now + total visitors (same method as RollbackCAS, separate hni/ paths) ----------
+// ---------- online now + total visitors (admin-only readout) ----------
 // Every open tab of the screener or Fundamentals adds hni/presence/<random id>; Firebase deletes it by itself the
 // moment the tab closes or the connection drops (onDisconnect). Each IP is counted once ever (SHA-256 hash, never the
 // raw IP) into hni/meta/visitors. Only the admin's browser reads these numbers; everyone else just writes.
 function presence() {
+  if (!rtdb) return;
   try {
     const sid = (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2)).replace(/[^a-z0-9-]/gi, "");
     const me = ref(rtdb, "hni/presence/" + sid);
@@ -249,6 +246,7 @@ function presence() {
   } catch (e) { console.warn("presence off:", e); }
 }
 async function countVisitor() {
+  if (!rtdb) return;
   try {
     if (localStorage.getItem("hni_counted")) return;   // this browser already counted, skip the IP lookup
   } catch (e) {}
@@ -258,14 +256,15 @@ async function countVisitor() {
     if (!ip) return;
     const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("hni:" + ip));
     const key = Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-    const res = await runTransaction(ref(rtdb, "hni/visitors/" + key), (cur) => (cur === true ? undefined : true));
-    if (res.committed) await runTransaction(ref(rtdb, "hni/meta/visitors"), (n) => (n || 0) + 1);
+    let isNew = true;
+    await set(ref(rtdb, "hni/visitors/" + key), true).catch(() => { isNew = false; });   // rules refuse an IP seen before
+    if (isNew) await set(ref(rtdb, "hni/meta/visitors"), increment(1));                    // +1 on the server, no read needed
     try { localStorage.setItem("hni_counted", "1"); } catch (e) {}
   } catch (e) { console.warn("visitor count skipped:", e); }
 }
 let adminDot = null;
 function showAdminDot() {
-  if (adminDot) return;
+  if (adminDot || !rtdb) return;
   adminDot = document.createElement("div");
   adminDot.className = "au-online";
   adminDot.innerHTML = '<i></i><span>… online</span>';
