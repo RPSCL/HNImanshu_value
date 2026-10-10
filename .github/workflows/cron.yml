@@ -37,7 +37,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to Ubuntu 26 from 19 Oct 2026
     timeout-minutes: 330          # full run ≈ 1–1.5 h (≈1,250 stocks × 2 pages); GitHub max is 360
     env:
       # Telegram creds come from Settings → Secrets and variables → Actions (never written in this file)
@@ -49,10 +49,10 @@ jobs:
       # 1. SETUP
       # ───────────────────────────────────────────
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -113,11 +113,15 @@ jobs:
           python nm250.py
           python ns500.py
 
-      # After the scrape (so the 1Y-back date = this week's data date − 365) and before the build.
+      # Angel prices, at most once a week: fetch_prices.py --is-due checks prices.csv's FETCHED_AT and
+      # says "due" only when it is ≥ 5 days old. Runs in full AND light runs, so whichever run comes first
+      # after 5 days does it. Full run: after the scrape (1Y-back date = this week's data date − 365), before the build.
+      # Mode 2 (manual prices test) passes --force so it always fetches.
       # Broker credentials go ONLY to this step (not job-wide), so npm / firebase never see them.
       # continue-on-error: if Angel fails, the build still runs with last week's prices.csv.
-      - name: "📈 Fetch prices (Angel)"
-        if: (steps.mode.outputs.mode == 'full' || steps.mode.outputs.mode == 'prices') && hashFiles('fetch_prices.py') != ''
+      - name: "📈 Fetch prices (Angel, weekly)"
+        id: fetchpx
+        if: (steps.mode.outputs.mode == 'full' || steps.mode.outputs.mode == 'light' || steps.mode.outputs.mode == 'prices') && hashFiles('fetch_prices.py') != ''
         continue-on-error: true
         timeout-minutes: 60
         env:
@@ -126,10 +130,18 @@ jobs:
           ANGEL_PIN:         ${{ secrets.ANGEL_PIN }}
           ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
         run: |
-          pip install smartapi-python pyotp logzero websocket-client
-          # prices-only run: archive first (a full run already did this before scraping)
-          if [ "${{ steps.mode.outputs.mode }}" = "prices" ]; then python archive_csv.py; fi
-          python -u fetch_prices.py          # also snapshots the old prices.csv into old_csv.zip before overwriting it
+          FORCE=""
+          if [ "${{ steps.mode.outputs.mode }}" = "prices" ]; then FORCE="--force"; fi
+          if python fetch_prices.py --is-due $FORCE; then
+            echo "fetched=1" >> $GITHUB_OUTPUT
+            pip install smartapi-python pyotp logzero websocket-client
+            # prices-only run: archive first (a full run already did this before scraping)
+            if [ "${{ steps.mode.outputs.mode }}" = "prices" ]; then python archive_csv.py; fi
+            python -u fetch_prices.py $FORCE      # snapshots the old prices.csv into old_csv.zip, then writes the new one
+          else
+            echo "fetched=0" >> $GITHUB_OUTPUT
+            echo "Angel fetch skipped: prices.csv is less than 5 days old"
+          fi
 
       # summary of prices.csv (counts + first rows) in the log, and a one-line result for Telegram
       - name: "📊 prices.csv summary"
