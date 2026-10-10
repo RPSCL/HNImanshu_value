@@ -1,0 +1,70 @@
+/* auth.css — HNImanshu login / register popup + the Fundamentals login gate.
+   Shared by the screener (index.html) and the Fundamentals page; picks up whichever page's theme colours exist,
+   so it follows day / night on both. */
+:root{
+  --au-bg: var(--panel, var(--bg2, #141416));
+  --au-field: var(--bg, #0e0e0f);
+  --au-ink: var(--ink, var(--text, #f0ece4));
+  --au-mute: var(--mute, var(--text2, #c0b8ae));
+  --au-faint: var(--faint, var(--text3, #807870));
+  --au-line: var(--line, var(--border, #323238));
+  --au-acc: var(--brass, var(--accent, #d4b47a));
+  --au-bad: var(--bad, var(--orange, #e09878));
+  --au-mono: var(--mono, 'IBM Plex Mono', ui-monospace, monospace);
+  --au-sans: var(--sans, 'DM Sans', system-ui, sans-serif);
+}
+
+/* Fundamentals gate: nothing of the page shows until auth.js confirms a login (html.auth-ok) */
+html[data-auth="required"]:not(.auth-ok) body > *:not(.au-wait){visibility:hidden}
+.au-wait{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;gap:10px;
+  font:500 13px var(--au-mono);color:var(--au-faint);background:var(--bg, #0e0e0f);z-index:200}
+html.auth-ok .au-wait{display:none}
+.au-wait i{width:14px;height:14px;border-radius:50%;border:2px solid var(--au-line);border-top-color:var(--au-acc);animation:au-spin .8s linear infinite}
+@keyframes au-spin{to{transform:rotate(360deg)}}
+
+/* popup */
+.au-back{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;padding:16px;
+  background:rgba(0,0,0,.55);backdrop-filter:blur(2px)}
+.au-back.open{display:flex}
+.au-box{width:min(380px,100%);background:var(--au-bg);color:var(--au-ink);border:1px solid var(--au-line);border-radius:14px;
+  padding:20px 22px 18px;box-shadow:0 18px 50px rgba(0,0,0,.5);font-family:var(--au-sans);position:relative}
+.au-x{position:absolute;top:10px;right:10px;width:30px;height:30px;border:0;background:transparent;color:var(--au-faint);
+  font-size:20px;line-height:1;cursor:pointer;border-radius:6px}
+.au-x:hover{color:var(--au-ink);background:var(--au-field)}
+.au-title{font:700 16px var(--au-mono);margin:0 0 4px;letter-spacing:.3px}
+.au-sub{font-size:12.5px;color:var(--au-mute);margin:0 0 14px;line-height:1.5}
+.au-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--au-field);border:1px solid var(--au-line);
+  border-radius:9px;padding:3px;margin-bottom:14px}
+.au-tab{border:0;background:transparent;color:var(--au-mute);font:600 12.5px var(--au-mono);padding:8px 0;border-radius:6px;cursor:pointer}
+.au-tab.on{background:var(--au-acc);color:var(--au-field)}
+.au-form{display:flex;flex-direction:column;gap:10px}
+.au-fld{display:flex;flex-direction:column;gap:5px}
+.au-fld span{font:500 11px var(--au-mono);color:var(--au-faint);letter-spacing:.3px}
+.au-fld input{height:38px;padding:0 12px;border:1px solid var(--au-line);border-radius:8px;background:var(--au-field);
+  color:var(--au-ink);font:14px var(--au-sans);outline:none}
+.au-fld input:focus{border-color:var(--au-acc)}
+.au-pw{position:relative}
+.au-pw input{width:100%;padding-right:52px}
+.au-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--au-faint);
+  font:600 11px var(--au-mono);cursor:pointer;padding:6px}
+.au-hint{font-size:11.5px;color:var(--au-faint);margin-top:-4px}
+.au-err{min-height:16px;font-size:12.5px;color:var(--au-bad)}
+.au-btn{height:40px;border-radius:9px;border:1px solid var(--au-acc);background:var(--au-acc);color:var(--au-field);
+  font:700 13px var(--au-mono);letter-spacing:.3px;cursor:pointer}
+.au-btn:disabled{opacity:.6;cursor:progress}
+.au-or{display:flex;align-items:center;gap:10px;color:var(--au-faint);font-size:11.5px;margin:4px 0}
+.au-or::before,.au-or::after{content:"";flex:1;height:1px;background:var(--au-line)}
+.au-google{height:40px;border-radius:9px;border:1px solid var(--au-line);background:var(--au-field);color:var(--au-ink);
+  font:600 13px var(--au-sans);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px}
+.au-google:hover{border-color:var(--au-acc)}
+.au-foot{font-size:11px;color:var(--au-faint);margin-top:12px;text-align:center;line-height:1.5}
+
+/* signed-in chip on the Fundamentals header */
+.au-user{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 6px 0 4px;border:1px solid var(--au-line);
+  border-radius:8px;background:var(--au-field);color:var(--au-mute);font:12.5px var(--au-sans);flex-shrink:0}
+.au-user b{width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;
+  background:var(--au-acc);color:var(--au-field);font:700 12px var(--au-mono)}
+.au-user .au-name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--au-ink)}
+.au-user button{border:0;background:transparent;color:var(--au-faint);font:600 11.5px var(--au-mono);cursor:pointer;padding:4px 6px;border-radius:5px}
+.au-user button:hover{color:var(--au-bad);background:var(--au-bg)}
+@media (max-width:700px){.au-user .au-name{display:none}}

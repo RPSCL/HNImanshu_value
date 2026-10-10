@@ -924,7 +924,7 @@ def write_csvs(df):
 # HTML TEMPLATE  (HNImanshu palette, shares the screener's day / night theme)
 # ----------------------------------------------------------------------------
 HTML = r"""<!DOCTYPE html>
-<html lang="en">
+<html lang="en"__AUTH_ATTR__>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1067,7 +1067,7 @@ body.day .toggle-thumb{transform:translateX(16px)}
 .fsel-opt{display:block;width:100%;text-align:left;white-space:nowrap;padding:8px 12px;border:0;border-radius:5px;background:transparent;color:var(--mute);font:inherit;font-size:12.5px;cursor:pointer}
 .fsel-opt:hover,.fsel-opt:focus-visible{background:var(--hover);color:var(--ink);outline:none}
 .fsel-opt.on{color:var(--brass);background:var(--brassbg);font-weight:600}
-html{-webkit-text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;overflow-y:scroll;scrollbar-gutter:stable}   /* scrollbar space always kept: a shorter page (fewer rows) no longer widens the view and shifts the header */
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans);font-variant-numeric:tabular-nums}
 a{color:inherit;text-decoration:none}
 a:hover{text-decoration:underline;text-underline-offset:3px}
@@ -1240,9 +1240,9 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
-</head>
+__AUTH_HEAD__</head>
 <body class="night">
-<script>
+__AUTH_BODY__<script>
 (function(){ var t = 'night'; try { if (localStorage.getItem('hnimanshu_theme') === 'day') t = 'day'; } catch(e){}
   document.body.classList.remove('night', 'day'); document.body.classList.add(t);
   document.documentElement.dataset.theme = t;   /* scrollbar + dropdown shadow read this */ })();
@@ -1944,11 +1944,26 @@ document.addEventListener('click', e => {
   closeDrops();
 }, true);
 addEventListener('resize', () => { const f = document.querySelector('.fbox.dopen'); if (f) placeDrop(f); });
+const pageSearch = () => view.querySelector('.tbar input[type=search]');
+const typingIn = t => t && (t.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName));
 document.addEventListener('keydown', e => {
-  if (e.key !== 'Escape') return;
-  if (document.querySelector('.fbox.dopen')) { closeDrops(); return; }
-  if (document.querySelector('.fsel.open, .pop.open')) return;            // Esc closes those first
-  if ((location.hash || '').startsWith('#/industry/')) location.hash = '#/';  // industry page -> All industries
+  if (e.key === 'Escape') {
+    if (document.querySelector('.fbox.dopen')) { closeDrops(); return; }
+    if (document.querySelector('.fsel.open, .pop.open')) return;            // Esc closes those first
+    const q = pageSearch();
+    if (q && (document.activeElement === q || q.value)) {                   // Esc: clear the search, cursor off
+      if (q.value) { q.value = ''; q.dispatchEvent(new Event('input')); }
+      q.blur(); return;
+    }
+    if ((location.hash || '').startsWith('#/industry/')) location.hash = '#/';  // industry page -> All industries
+    return;
+  }
+  // any letter / digit typed while not in a field goes straight into the page's search box
+  if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey || typingIn(e.target) || document.querySelector('.fbox.dopen')) return;
+  if (e.key === ' ' && !(pageSearch() && pageSearch().value)) return;       // space alone still scrolls the page
+  const q = pageSearch(); if (!q) return;
+  e.preventDefault();
+  q.focus(); q.value += e.key; q.dispatchEvent(new Event('input'));
 });
 
 /* ---------- VALUE SCREEN ---------- */
@@ -2709,6 +2724,18 @@ route();
 # ----------------------------------------------------------------------------
 # RENDER / BUILD
 # ----------------------------------------------------------------------------
+# Login gate (website only). auth.css / auth.js sit next to index.html in public/ and are shared with the screener.
+# The inline rule hides the page even if auth.css is slow or blocked; auth.js adds html.auth-ok once a login is confirmed.
+AUTH_WEB = {
+    "__AUTH_ATTR__": ' data-auth="required"',
+    "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait){visibility:hidden}</style>\n'
+                     '<link rel="stylesheet" href="auth.css">\n'
+                     '<script type="module" src="auth.js"></script>\n',
+    "__AUTH_BODY__": '<div class="au-wait"><i></i>Checking login…</div>\n',
+}
+AUTH_OFF = {k: "" for k in AUTH_WEB}
+
+
 def render_html(now, backs, asof, web=False, smnow=None, embed_all=False):
     """Fill the HTML template with the computed records. The default back period is embedded; the others are
     listed in "backs" and (web) loaded on demand from fundamentals_back_<key>.json, or (embed_all) inlined."""
@@ -2733,6 +2760,8 @@ def render_html(now, backs, asof, web=False, smnow=None, embed_all=False):
     }
     data = json.dumps(clean(payload), allow_nan=False, separators=(",", ":")).replace("</", "<\\/")
     html = HTML.replace("__WEB__", "true" if web else "false")     # flag first, data can't contain it then
+    for k, v in (AUTH_WEB if web else AUTH_OFF).items():            # login gate: website only, offline file stays open
+        html = html.replace(k, v)
     return html.replace("__DATA__", data), span
 
 

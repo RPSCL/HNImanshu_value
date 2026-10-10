@@ -931,6 +931,9 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
 #wm-btn:hover { background: #b49458; }
 #wm-btn:active { transform: scale(0.98); }
 </style>
+<!-- login popup for the Fundamentals button (shared with the Fundamentals page) -->
+<link rel="stylesheet" href="auth.css">
+<script type="module" src="auth.js"></script>
 </head>
 <body class="night">
 <script>
@@ -997,7 +1000,7 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
     <div class="hstat"><div class="hstat-val" id="hs-best">—</div><div class="hstat-lbl">A/B+</div></div>
   </div>
   <!-- Fundamentals page link — clean URL (firebase.json cleanUrls), no ?uni=: the page remembers the user's own List pick -->
-  <a class="fund-btn" id="fund-btn" href="fundamentals" title="Industries, value screen and methodology">
+  <a class="fund-btn" id="fund-btn" href="fundamentals" data-auth-link title="Industries, value screen and methodology">
     <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M2 11V7M5 11V4M8 11V6M11 11V2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
     <span>Fundamentals</span>
   </a>
