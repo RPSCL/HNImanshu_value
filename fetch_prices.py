@@ -7,9 +7,13 @@ daily candles and writes ONE row per symbol:
 
     SYMBOL, ANGEL_SYMBOL, ANGEL_TOKEN,
     LTP, LTP_DATE                         latest close
-    PRICE_1Y, PRICE_1Y_DATE               raw close on the last trading day on/before BACK_DATE
-    PRICE_1Y_ADJ                          same price on TODAY's share basis (splits / bonuses after it divided out)
-    HIGH_52W_NOW, HIGH_52W_1Y             52-week high now / as of BACK_DATE (both on today's share basis)
+    PRICE_<P>, PRICE_<P>_DATE             raw close on the last trading day on/before (data date − P), for every
+                                          back period P = 3M, 6M, 9M, 1Y, 1_25Y, 1_5Y (the site's "Back" dropdown)
+    PRICE_<P>_ADJ                         same price on TODAY's share basis (splits / bonuses after it divided out)
+    HIGH_52W_NOW, HIGH_52W_<P>            52-week high now / as of each back date (today's share basis)
+    LISTED_FROM                           first candle fetched (a stock listed after a back date is left out there)
+    MOM_<P>_R3, MOM_<P>_R6, MOM_<P>_R12   price momentum as of today (P = NOW) and as of each back date:
+                                          3-month, 6-month and 12-minus-1-month returns, %, split-adjusted
     ADJ_FACTOR, CORP_ACTIONS              detected split / bonus factor after BACK_DATE, and every event found
     BACK_DATE, STATUS, FETCHED_AT
 
@@ -51,9 +55,10 @@ SCRIP_URL   = "https://margincalculator.angelbroking.com/OpenAPI_File/files/Open
 BENCH_SYM   = "^NIFTY500"                 # row name used for the benchmark in prices.csv
 BENCH_NAMES = {"nifty500"}               # matched against the index's symbol / name, spaces removed, lower case
 BACK_DAYS   = 365                         # must match fundamentals.BACK_DAYS
+PERIODS     = {"3M": 91, "6M": 182, "9M": 273, "1Y": 365, "1_25Y": 456, "1_5Y": 548}   # must match fundamentals.PERIODS
 RATE        = 2.5                         # max candle requests per second, shared by all workers (Angel throttles ~3/s)
 WORKERS     = 3                           # parallel fetches; network delay overlaps, the rate limit stays global
-CHUNK_DAYS  = 380                         # 2 years in 2 calls (~255 rows each, under the 500-row cap some users hit)
+CHUNK_DAYS  = 380                         # ~2.5 years in 3 calls (~255 rows each, under the 500-row cap some users hit)
 RETRY_PASS  = True                        # after the main pass, retry every failed symbol once more, slowly
 MIN_AGE_DAYS = 5                          # weekly: skip the fetch if prices.csv is younger than this (--force overrides)
 SERIES_PREF = ["EQ", "BE", "BZ", "SM", "ST"]   # which NSE series to use when a stock has several
@@ -248,26 +253,39 @@ def corporate_actions(c):
 	return ev
 
 
-def summarise(c, back: date):
-	"""Numbers for one symbol from its candles (oldest → newest)."""
+def summarise(c, asof: date):
+	"""Numbers for one symbol from its candles (oldest → newest): latest close + one price per back period."""
 	ev = corporate_actions(c)
 	def factor_after(d):                                             # product of events strictly after day d
 		return math.prod(f for e, f, _ in ev if e > d) if ev else 1.0
 	adj = [(d, cl * factor_after(d), hi * factor_after(d)) for d, _, cl, hi in c]
 	last = adj[-1]
-	before = [x for x in adj if x[0] <= back]
-	row = {"LTP": round(c[-1][2], 2), "LTP_DATE": f"{c[-1][0]:%Y-%m-%d}",
+	row = {"LTP": round(c[-1][2], 2), "LTP_DATE": f"{c[-1][0]:%Y-%m-%d}", "LISTED_FROM": f"{c[0][0]:%Y-%m-%d}",
 	       "HIGH_52W_NOW": round(max(h for d, _, h in adj if d > last[0] - timedelta(days=365)), 2),
 	       "CORP_ACTIONS": "; ".join(f"{d:%Y-%m-%d} ×{f:.4g} ({lab})" for d, f, lab in ev)}
-	if before:
-		d1y = before[-1][0]
-		raw = next(cl for d, _, cl, _ in c if d == d1y)
-		row.update({"PRICE_1Y": round(raw, 2), "PRICE_1Y_DATE": f"{d1y:%Y-%m-%d}",
-		            "PRICE_1Y_ADJ": round(before[-1][1], 4), "ADJ_FACTOR": round(factor_after(d1y), 6),
-		            "HIGH_52W_1Y": round(max(h for d, _, h in before if d > back - timedelta(days=365)), 2)})
-		row["STATUS"] = "OK"
-	else:
-		row["STATUS"] = "NOT LISTED ON BACK DATE"                    # listed after it → not in the 1Y-back universe
+	for k, days in PERIODS.items():
+		back = asof - timedelta(days=days)
+		before = [x for x in adj if x[0] <= back]
+		if not before:
+			continue                                                 # not listed yet on that date
+		d0 = before[-1][0]
+		raw = next(cl for d, _, cl, _ in c if d == d0)
+		row.update({f"PRICE_{k}": round(raw, 2), f"PRICE_{k}_DATE": f"{d0:%Y-%m-%d}",
+		            f"PRICE_{k}_ADJ": round(before[-1][1], 4),
+		            f"HIGH_52W_{k}": round(max(h for d, _, h in before if d > back - timedelta(days=365)), 2)})
+		if k == "1Y":
+			row["ADJ_FACTOR"] = round(factor_after(d0), 6)
+	# momentum as of today and as of every back date (only prices on / before that date: no look-ahead)
+	def px(days):                                                    # adjusted close on / before (asof − days)
+		t = asof - timedelta(days=days)
+		b = [x for x in adj if x[0] <= t]
+		return b[-1][1] if b and (t - b[-1][0]).days <= 10 else None
+	pct = lambda a, b: round((a / b - 1) * 100, 2) if (a and b) else None
+	for k, d in [("NOW", 0)] + list(PERIODS.items()):
+		now_p = last[1] if d == 0 else px(d)
+		row.update({f"MOM_{k}_R3": pct(now_p, px(d + 91)), f"MOM_{k}_R6": pct(now_p, px(d + 182)),
+		            f"MOM_{k}_R12": pct(px(d + 30), px(d + 365))})       # 12-1: skips the last month (short-term reversal)
+	row["STATUS"] = "OK" if "PRICE_1Y" in row else "NOT LISTED ON BACK DATE"   # 1Y status kept for older readers
 	return row
 
 
@@ -302,6 +320,12 @@ def is_due(force=False):
 	if age is None:
 		log("prices.csv: none yet  →  fetch is due")
 		return True
+	try:                                                             # older file without the 3M … 1.5Y prices → refresh once
+		if "MOM_NOW_R12" not in pd.read_csv(OUT_CSV, nrows=1).columns:
+			log("prices.csv has no 3M … 1.5Y prices / momentum yet  →  fetch is due")
+			return True
+	except Exception:
+		pass
 	due = age >= MIN_AGE_DAYS
 	log(f"prices.csv is {age:.1f} days old (weekly rule: fetch when ≥ {MIN_AGE_DAYS} days)  →  "
 	    + ("fetch is due" if due else "skipping, still fresh"))
@@ -323,7 +347,7 @@ def main():
 
 	syms, asof = load_symbols()
 	back = asof - timedelta(days=BACK_DAYS)
-	start = back - timedelta(days=380)                               # enough for the 52-week high as of BACK_DATE
+	start = asof - timedelta(days=max(PERIODS.values()) + 380)       # oldest back date + its 52-week high / 12-month momentum
 	log(f"{len(syms)} symbols  |  data date {asof}  |  BACK_DATE {back}  |  candles from {start}")
 
 	tmap = build_token_map(scrip_master())
@@ -367,7 +391,7 @@ def main():
 			c = api.candles(tok, start, end)
 			if not c:
 				raise RuntimeError("no candles")
-			row = summarise(c, back)
+			row = summarise(c, asof)
 			p1 = f"1Y {row['PRICE_1Y']:>10,.2f} ({row['PRICE_1Y_DATE']})" if row.get("PRICE_1Y") is not None else "1Y        n/a"
 			ca = f"  split/bonus: {row['CORP_ACTIONS']}" if row.get("CORP_ACTIONS") else ""
 			return ({**base, **row},
@@ -377,7 +401,7 @@ def main():
 
 	t0 = time.monotonic()
 	results, done = {}, 0
-	log(f"Fetching {n_all} symbols  |  {WORKERS} workers  |  max {RATE} requests/s  |  2 requests per symbol")
+	log(f"Fetching {n_all} symbols  |  {WORKERS} workers  |  max {RATE} requests/s  |  3 requests per symbol")
 	with ThreadPoolExecutor(max_workers=WORKERS) as pool:
 		futs = {pool.submit(fetch_one, i, s): i for i, s in enumerate(todo, 1)}
 		for f in as_completed(futs):
@@ -415,8 +439,12 @@ def main():
 	log(f"Fetch time {el/60:.1f} min ({el / max(n_all, 1):.2f} s per symbol)  |  rate-limit replies: {api.n_rate}"
 	    f"  |  final pace {api.limiter.rate:.2f} requests/s")
 
-	cols = ["SYMBOL", "ANGEL_SYMBOL", "ANGEL_TOKEN", "LTP", "LTP_DATE", "PRICE_1Y", "PRICE_1Y_DATE", "PRICE_1Y_ADJ",
-	        "ADJ_FACTOR", "HIGH_52W_NOW", "HIGH_52W_1Y", "CORP_ACTIONS", "BACK_DATE", "STATUS", "FETCHED_AT"]
+	cols = ["SYMBOL", "ANGEL_SYMBOL", "ANGEL_TOKEN", "LTP", "LTP_DATE", "HIGH_52W_NOW", "LISTED_FROM"]
+	for k in PERIODS:
+		cols += [f"PRICE_{k}", f"PRICE_{k}_DATE", f"PRICE_{k}_ADJ", f"HIGH_52W_{k}"]
+	for k in ["NOW"] + list(PERIODS):
+		cols += [f"MOM_{k}_R3", f"MOM_{k}_R6", f"MOM_{k}_R12"]
+	cols += ["ADJ_FACTOR", "CORP_ACTIONS", "BACK_DATE", "STATUS", "FETCHED_AT"]
 	out = pd.DataFrame(rows).reindex(columns=cols)
 	out.to_csv(OUT_CSV, index=False)
 	n_ca = int(out["CORP_ACTIONS"].fillna("").str.len().gt(0).sum())

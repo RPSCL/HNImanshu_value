@@ -56,6 +56,10 @@ MAX_GAP_DAYS = 490        # a gap bigger than this between two annual points bre
 MAX_STALE_DAYS = 400      # latest annual figure must be newer than this vs the reference date
 JUMP_PP = 10              # a single-quarter holding move bigger than this = likely merger / OFS / listing
 BACK_DAYS = 365           # the "1Y back" snapshot date = download date minus this
+# every back period on the site's "Back" dropdown: key (prices.csv column suffix) -> (label, days)
+PERIODS = {"3M": ("3M", 91), "6M": ("6M", 182), "9M": ("9M", 273), "1Y": ("1Y", 365),
+           "1_25Y": ("1.25Y", 456), "1_5Y": ("1.5Y", 548)}
+DEFAULT_BACK = "1Y"       # embedded in the page; the others load on demand (fundamentals_back_<key>.json)
 # Trend score (improving fundamentals) - separate from Value score and Magic Formula
 TREND_QTRS = 6            # quarterly checks look at the last 6 quarter-ends
 TREND_SHARE = 2 / 3       # "consistently green" = TTM up year-on-year in >= 2/3 of those quarters (4 of 6)
@@ -277,7 +281,7 @@ def safety(r, F, acut, ref, fin):
     yr = lambda k: {p[0]: p[2] for p in series(r, F.get(k, []), acut)}
     pat, ta, debt, res, cap = (yr(k) for k in ("A_PL_PAT_CR", "B_BS_TOTAL_ASSETS_CR", "B_BS_TOTAL_BORROWINGS_CR",
                                                  "B_BS_RESERVES_CR", "B_BS_SHARE_CAPITAL_CR"))
-    out = {"de": None, "pup": None, "roa": None, "gnpa": None, "nnpa": None, "pcr": None, "q5": None, "q5n": 0, "debitda": None}
+    out = {"cfop": None, "de": None, "pup": None, "roa": None, "gnpa": None, "nnpa": None, "pcr": None, "q5": None, "q5n": 0, "debitda": None}
     ys = sorted(pat)
     if ys and (ref - ys[-1]).days <= MAX_STALE_DAYS:
         run = [ys[-1]]                                              # unbroken yearly run, newest first
@@ -300,6 +304,19 @@ def safety(r, F, acut, ref, fin):
             ebitda = yr("A_PL_EBITDA_CR").get(t)
             if ebitda is not None:
                 out["debitda"] = debt[t] / ebitda if ebitda > 0 else (0.0 if debt[t] <= 0 else 99.0)   # loss-making + debt = fail
+        # cash-flow consistency: years with positive operating cash flow, last 10 FY (non-financials:
+        # a lender's CFO swings with deposits and loans given, so it says nothing about quality)
+        cfo = yr("C_CF_OPERATING_CR")
+        cy = sorted(cfo)
+        if not fin and cy and (ref - cy[-1]).days <= MAX_STALE_DAYS:
+            run = [cy[-1]]
+            for d in reversed(cy[:-1]):
+                if 300 <= (run[-1] - d).days <= 430 and len(run) < 10:
+                    run.append(d)
+                else:
+                    break
+            if len(run) >= 5:
+                out["cfop"] = (sum(cfo[d] > 0 for d in run), len(run))
         # 5-year median ROCE (ROE for financials): one good year at the top of a cycle can't carry it
         pbt, intr = yr("A_PL_PBT_CR"), yr("A_PL_INTEREST_CR")
         vals = []
@@ -777,6 +794,7 @@ def build_record(r, F, inp, fin):
         "divYrs": num(r["DIVIDEND_CONSECUTIVE_YRS"], 0), "fs": num(r["F_SCORE"], 0),
         "eps": [[p[1], round(p[2], 2)] for p in eps_run[-15:]] if len(eps_run) >= 2 else [],
         "h": h,
+        "cfop": list(sf["cfop"]) if sf["cfop"] else None,
         "q5": num(sf["q5"]), "debitda": num(sf["debitda"]),
         "de": num(sf["de"]), "pup": list(sf["pup"]) if sf["pup"] else None, "roa": num(sf["roa"]), "gnpa": num(sf["gnpa"]), "nnpa": num(sf["nnpa"]), "pcr": num(sf["pcr"]),
         "pta": num(pta, 2), "pfa": num(pfa, 2), "invp": num(invp), "taFy": a.get("fy"),
@@ -788,66 +806,95 @@ def build_record(r, F, inp, fin):
 def build_all(df, asof, prices=None, bench=None):
     """now   = today, Screener's own figures (default view)
        smnow = today, SAME-METHOD engine (LTP from Angel if available, else CSV CMP)
-       then  = 1 year back, SAME-METHOD engine (price then from Angel, if available)
+       backs = one snapshot per back period (3M … 1.5Y), SAME-METHOD engine (price then from Angel, if available)
        So "same method today" vs "1Y back" differ only in their inputs, never in their formulas."""
     F = column_maps(df)
-    back = asof - pd.Timedelta(days=BACK_DAYS)
     prices = prices or {}
     tol = pd.Timedelta(days=PRICE_TOL_DAYS)
 
     def near(d, target):                                  # price date within ±PRICE_TOL_DAYS of the date it stands for
         d = pd.to_datetime(d, errors="coerce")
         return pd.notna(d) and abs(d - target) <= tol
-    n_far1 = n_farL = 0
-    now, smnow, then = [], [], []
+    n_farL = 0
+    now, smnow, ltps = [], [], {}
     for _, r in df.iterrows():
         fin = bool(FIN_RE.search(str(r["INDUSTRY"])))
         sym = str(r["SYMBOL"]).upper()
         px = prices.get(sym, {})
         g = lambda k: px.get(k) if ok(px.get(k)) else None
-        now.append(build_record(r, F, inputs_now(r, F, asof, fin), fin))
+        rec0 = build_record(r, F, inputs_now(r, F, asof, fin), fin)
+        rec0["mom"] = momentum(px, "NOW")
+        now.append(rec0)
 
         ltp_ok = g("LTP") and near(px.get("LTP_DATE"), asof)
         n_farL += bool(g("LTP") and not ltp_ok)
         ltp, ltp_src = (g("LTP"), "angel") if ltp_ok else (r["CMP"], "csv")   # too far from the data date → CSV CMP
         rec_n = build_record(r, F, inputs_sm(r, F, asof, fin, ltp, g("HIGH_52W_NOW") or r["HIGH_52W"]), fin)
         rec_n["pxSrc"] = ltp_src
+        rec_n["mom"] = rec0["mom"]
         smnow.append(rec_n)
+        ltps[sym] = (ltp, ltp_src)
 
-        if str(px.get("STATUS", "")).startswith("NOT LISTED"):
-            continue                                      # listed after the 1Y-back date: not in that universe
-        p1 = g("PRICE_1Y_ADJ")
-        if p1 and not near(px.get("PRICE_1Y_DATE"), back):
-            p1, n_far1 = None, n_far1 + 1                 # 1Y price from a different week → not used
-        rec = build_record(r, F, inputs_sm(r, F, back, fin, p1, g("HIGH_52W_1Y") if p1 else None), fin)
+    if prices and n_farL:
+        print("Prices: %d LTPs too far from %s → CSV CMP used" % (n_farL, asof.date()))
+    backs = {k: build_back(df, F, asof, k, prices, bench, ltps) for k in PERIODS}
+    return now, smnow, backs
+
+
+def momentum(px, key):
+    """[3M, 6M, 12-1M] % returns as of today (key NOW) or a back date, from prices.csv; None if not fetched yet."""
+    v = [px.get("MOM_%s_%s" % (key, k)) for k in ("R3", "R6", "R12")]
+    v = [round(float(x), 2) if ok(x) else None for x in v]
+    return v if any(x is not None for x in v) else None
+
+
+def build_back(df, F, asof, key, prices, bench, ltps):
+    """One back snapshot: every company as it stood (data date − PERIODS[key] days), SAME-METHOD engine,
+    priced with prices.csv's PRICE_<key> columns, plus how each business and price did since."""
+    label, days = PERIODS[key]
+    back = asof - pd.Timedelta(days=days)
+    tol = pd.Timedelta(days=PRICE_TOL_DAYS)
+    near = lambda d, t: pd.notna(pd.to_datetime(d, errors="coerce")) and abs(pd.to_datetime(d) - t) <= tol
+    then, n_far = [], 0
+    for _, r in df.iterrows():
+        fin = bool(FIN_RE.search(str(r["INDUSTRY"])))
+        sym = str(r["SYMBOL"]).upper()
+        px = prices.get(sym, {})
+        g = lambda k: px.get(k) if ok(px.get(k)) else None
+        lf = pd.to_datetime(px.get("LISTED_FROM"), errors="coerce")
+        if (pd.notna(lf) and lf > back) or (key == "1Y" and pd.isna(lf) and str(px.get("STATUS", "")).startswith("NOT LISTED")):
+            continue                                      # listed after the back date: not in that universe
+        p1 = g("PRICE_%s_ADJ" % key)
+        if p1 and not near(px.get("PRICE_%s_DATE" % key), back):
+            p1, n_far = None, n_far + 1                   # price from a different week → not used
+        rec = build_record(r, F, inputs_sm(r, F, back, fin, p1, g("HIGH_52W_%s" % key) if p1 else None), fin)
         if rec["mcap"] is None:
             rec["mcap"] = num(r["MARKET_CAP_CR"], 0)      # no price then: today's size, only for the Mcap filters
             rec["mcapToday"] = True
+        rec["mom"] = momentum(px, key) if p1 else None   # momentum as of the back date (prices up to then only)
         a, b = inputs_fund(r, F, back, fin, with_trend=False)["fund"], inputs_fund(r, F, asof, fin, with_trend=False)["fund"]
         patG, patL = growth_pct(a["pat"], b["pat"])
         revG, _ = growth_pct(a["rev"], b["rev"])
         d = lambda k: round(b[k] - a[k], 2) if (a[k] is not None and b[k] is not None) else None
-        ret = round((ltp / p1 - 1) * 100, 2) if (p1 and ltp and ltp_src == "angel") else None   # same source both ends
+        ltp, src = ltps.get(sym, (None, None))
+        ret = round((ltp / p1 - 1) * 100, 2) if (p1 and ltp and src == "angel") else None   # same source both ends
         rec["since"] = {"patG": patG, "patL": patL, "revG": revG, "roeD": d("roe"), "roceD": d("roce"),
                         "opmD": d("opm"), "proD": d("pro"), "qThen": a["q"], "qNow": b["q"],
                         "fyThen": a["fy"], "fyNow": b["fy"], "ret": ret}
         then.append(rec)
     n_px = sum(1 for t in then if t["cmp"] is not None)
     if prices:
-        print("Prices: 1Y-back price used for %d stocks (date within ±%d days of %s); %d skipped as too far; "
-              "%d LTPs too far from %s → CSV CMP used" % (n_px, PRICE_TOL_DAYS, back.date(), n_far1, n_farL, asof.date()))
-    meta = {"hasPrice": n_px >= 0.5 * max(len(then), 1), "nPrice": n_px,
+        print("Prices %-5s back = %s: price for %d of %d stocks (±%d days); %d skipped as too far"
+              % (label, back.date(), n_px, len(then), PRICE_TOL_DAYS, n_far))
+    meta = {"key": key, "label": label, "date": back.strftime("%d %b %Y"), "days": days,
+            "hasPrice": n_px >= 0.5 * max(len(then), 1), "nPrice": n_px,
             "priceDate": None, "priceDateThen": None, "bench": None}
-    dates = [p.get("LTP_DATE") for p in prices.values() if ok(p.get("LTP_DATE"))]
-    dates1 = [p.get("PRICE_1Y_DATE") for p in prices.values() if ok(p.get("PRICE_1Y_DATE"))]
-    if dates:
-        meta["priceDate"] = max(set(dates), key=dates.count)
-    if dates1:
-        meta["priceDateThen"] = max(set(dates1), key=dates1.count)
-    if bench and ok(bench.get("LTP")) and ok(bench.get("PRICE_1Y")):
-        meta["bench"] = {"ret": round((bench["LTP"] / bench["PRICE_1Y_ADJ"] - 1) * 100, 2),
-                         "from": bench.get("PRICE_1Y_DATE"), "to": bench.get("LTP_DATE")}
-    return now, then, back, smnow, meta
+    pick = lambda col: (lambda v: max(set(v), key=v.count) if v else None)([p.get(col) for p in prices.values() if ok(p.get(col))])
+    meta["priceDate"], meta["priceDateThen"] = pick("LTP_DATE"), pick("PRICE_%s_DATE" % key)
+    if bench and ok(bench.get("LTP")) and ok(bench.get("PRICE_%s_ADJ" % key)):
+        meta["bench"] = {"ret": round((bench["LTP"] / bench["PRICE_%s_ADJ" % key] - 1) * 100, 2),
+                         "from": bench.get("PRICE_%s_DATE" % key), "to": bench.get("LTP_DATE")}
+    return dict(meta, stocks=then)
 
 
 def write_csvs(df):
@@ -1042,6 +1089,9 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:16p
 .chip:has(input:checked){border-color:var(--brass);color:var(--ink);background:var(--brassbg)}
 .chip:has(input:disabled){opacity:.6;cursor:default}
 .chip input{margin:0;accent-color:var(--brass);vertical-align:middle}
+.chip.backsel.on{background:var(--brass);border-color:var(--brass);color:var(--bg);font-weight:600}
+.chip.backsel.on .fsel-btn{color:var(--bg);font-weight:700}
+.chip.backsel.loading{opacity:.6;cursor:progress}
 .chip.ytoggle{position:relative}
 .chip.ytoggle input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
 .chip.ytoggle::before{content:"";width:9px;height:9px;border-radius:50%;border:1.5px solid currentColor}
@@ -1197,7 +1247,7 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
     <label class="chip"><input type="checkbox" id="hidePSU"> Hide PSU</label>
     <label class="chip"><input type="checkbox" id="hideSemi"> Hide semi-PSU</label>
     <label class="chip" id="sameChip" title="Same method: rebuild TODAY's numbers with the exact engine used for 1Y back (raw yearly / quarterly rows + one Angel price), instead of Screener's own ratios, so today and 1Y back are like-for-like. Always on in 1Y back."><input type="checkbox" id="sameM"> Same method</label>
-    <label class="chip ytoggle" id="backChip"><input type="checkbox" id="back1y"> 1Y back</label>
+    <label class="chip backsel" id="backChip">Back <select id="backSel" aria-label="Back period"></select></label>
     <button class="btn primary" id="saveHtml">Save as HTML</button>
     <div id="theme-toggle" title="Day / night">
       <span class="toggle-icon moon-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
@@ -1210,6 +1260,7 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
   <a href="#/" data-t="home">Industries</a>
   <a href="#/value" data-t="value">Value screen</a>
   <a href="#/method" data-t="method">Methodology</a>
+  <a href="#/all" data-t="all">All Stocks</a>
 </nav>
 <main id="view"></main>
 
@@ -1230,13 +1281,16 @@ const lsSet = (k, v) => { mem[k] = String(v); try { localStorage.setItem(LSP + k
 const lsJson = (k, def) => { try { return Object.assign({}, def, JSON.parse(lsGet(k) || '{}')); } catch (e) { return Object.assign({}, def); } };
 let method = lsGet('pemethod') || 'median';
 /* global PSU filter: applies to every tab (industry benchmarks still use all stocks) */
-const GF = lsJson('gf', {psu:false, semi:false, back:false, same:false, uni:'all'});
+const GF = lsJson('gf', {psu:false, semi:false, back:false, backP:'1Y', same:false, uni:'all'});
 const QP = new URLSearchParams(location.search);
 if (QP.has('uni') && history.replaceState) history.replaceState(null, '', location.pathname + location.hash);   // old ?uni= links: ignored, URL cleaned
 const vis = s => !(GF.psu && s.psu === 'psu') && !(GF.semi && s.psu === 'semi')
   && (!GF.uni || GF.uni === 'all' || (s.uni || []).includes(GF.uni));
 const V = () => S.filter(vis);
-const sortState = {}, searchState = {};
+/* per-user settings: kept in this browser (localStorage) so a refresh reopens the same view.
+   Every read / write goes through lsGet / lsSet, so a login-backed store can replace it in one place later. */
+const sortState = lsJson('sorts', {}), searchState = lsJson('search', {});
+const saveView = () => { lsSet('sorts', JSON.stringify(sortState)); lsSet('search', JSON.stringify(searchState)); };
 
 /* ---------- industry maths ---------- */
 const median = a => { const s=[...a].filter(x=>x!=null&&isFinite(x)).sort((x,y)=>x-y), m=s.length>>1; return s.length? (s.length%2? s[m] : (s[m-1]+s[m])/2) : null; };
@@ -1244,7 +1298,8 @@ const mean = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
 let industries = {};
 /* switch between today's data and the 1-year-back snapshot */
 function setMode() {
-  BACK = !!(GF.back && D.then);
+  BACK = !!(GF.back && D.then && (D.then.key || '1Y') === GF.backP);   // the chosen period once its data is in
+  const bc = $('#backChip'); if (bc) bc.classList.toggle('on', BACK);
   const smOk = D.smNow && D.smNow.stocks && D.smNow.stocks.length;
   SAME = BACK || !!(GF.same && smOk);
   S = BACK ? D.then.stocks : (SAME ? D.smNow.stocks : D.stocks);
@@ -1281,9 +1336,9 @@ const ey = s => s.pe ? 100/s.pe : null;
 const hv = (s, k, f) => s.h && s.h[k] ? s.h[k][f] : null;
 const smart = s => { const a = hv(s,'fii','chg'), b = hv(s,'dii','chg'); return a==null||b==null ? null : a+b; };
 
-const W_DEF = {pe:25, pb:15, q:15, g:15, fcf:15, cc:10, dy:5};
-const BACK_KEYS = ['q', 'g', 'cc'];
-const W_LABEL = {pe:'PE vs industry', pb:'PB', q:'ROCE (ROE fin.)', g:'EPS growth', fcf:'FCF yield', cc:'Cash conversion', dy:'Div yield'};
+const W_DEF = {pe:25, pb:15, q:15, g:15, fcf:15, cc:10, dy:5, cfo:5};
+const BACK_KEYS = ['q', 'g', 'cc', 'cfo'];
+const W_LABEL = {pe:'PE vs industry', pb:'PB', q:'ROCE (ROE fin.)', g:'EPS growth', fcf:'FCF yield', cc:'Cash conversion', dy:'Div yield', cfo:'CFO consistency'};
 const METRICS = {
   pe:  {v:s=>prem(s), hi:false},
   pb:  {v:s=>s.pb,    hi:false},
@@ -1292,6 +1347,7 @@ const METRICS = {
   fcf: {v:s=>s.fcfy,  hi:true},
   cc:  {v:s=>s.cc,    hi:true},
   dy:  {v:s=>s.dy,    hi:true},
+  cfo: {v:s=>s.cfop ? s.cfop[0] / s.cfop[1] : null, hi:true},   // share of years with positive operating cash flow
 };
 const ok = v => v!=null && isFinite(v);
 function pctl(sorted, v, hi) {
@@ -1316,7 +1372,7 @@ function computeScores() {
     for (const k in METRICS) {
       const w = +W[k] || 0; if (!w) continue;
       if (NOPRICE && !BACK_KEYS.includes(k)) continue;     // no price for this date: quality metrics only
-      if (s.fin && (k==='fcf' || k==='cc')) continue;      // not applicable to financials
+      if (s.fin && (k==='fcf' || k==='cc' || k==='cfo')) continue;   // not applicable to financials
       avail += w;
       const v = METRICS[k].v(s);
       if (!ok(v)) continue;
@@ -1325,6 +1381,18 @@ function computeScores() {
       s.parts[k] = p; tot += p*w; wt += w;
     }
     if (avail && wt >= 0.5*avail) s.score = tot/wt*100;
+  });
+  computeMomentum();
+}
+/* Price momentum (0–100): average percentile, across every stock on screen, of the 3-month, 6-month and
+   12-minus-1-month returns (the last month is skipped: short-term moves tend to reverse). Needs 2 of 3. */
+function computeMomentum() {
+  const cols = [0, 1, 2].map(i => S.map(s => s.mom ? s.mom[i] : null).filter(ok).sort((a, b) => a - b));
+  S.forEach(s => {
+    s.momS = null;
+    if (!s.mom) return;
+    const p = [0, 1, 2].filter(i => ok(s.mom[i])).map(i => pctl(cols[i], s.mom[i], true));
+    if (p.length >= 2) s.momS = p.reduce((a, x) => a + x, 0) / p.length * 100;
   });
 }
 function trapReasons(s) {
@@ -1371,7 +1439,7 @@ const FN_CODE = {
   minChg:v=>'CHG'+fnNum(v), minNow:v=>'NOW'+fnNum(v), dir:v=>String(v).toUpperCase(),
   trap:v=>v?'NOTRAPS':'TRAPS', graham:v=>v?'GRAHAM':'', exFin:v=>v?'EXFIN':'INCLFIN',
   smart:v=>v?'SMART':'', hideJump:v=>v?'NOJUMPS':'JUMPS',
-  minQ5:v=>'RCE5Y'+fnNum(v), maxDebitda:v=>'DEBITDA'+fnNum(v), maxNnpa:v=>'NNPA'+fnNum(v), minPcr:v=>'PCR'+fnNum(v), minUp:v=>'UP'+fnNum(v), maxDe:v=>'DE'+fnNum(v), minRoa:v=>'ROA'+fnNum(v), maxNpa:v=>'NPA'+fnNum(v), maxPta:v=>'MA'+fnNum(v), maxPfa:v=>'MFA'+fnNum(v), minInv:v=>'INV'+fnNum(v),
+  minQ5:v=>'RCE5Y'+fnNum(v), maxDebitda:v=>'DEBITDA'+fnNum(v), maxNnpa:v=>'NNPA'+fnNum(v), minPcr:v=>'PCR'+fnNum(v), minCfo:v=>'CFO'+fnNum(v), minMom:v=>'MOM'+fnNum(v), minUp:v=>'UP'+fnNum(v), maxDe:v=>'DE'+fnNum(v), minRoa:v=>'ROA'+fnNum(v), maxNpa:v=>'NPA'+fnNum(v), maxPta:v=>'MA'+fnNum(v), maxPfa:v=>'MFA'+fnNum(v), minInv:v=>'INV'+fnNum(v),
   minRoce:v=>'ROCE'+fnNum(v), minRoe:v=>'ROE'+fnNum(v), minRoeFin:v=>'ROEFIN'+fnNum(v), minIcov:v=>'ICR'+fnNum(v),
   maxProDrop:v=>'PRODROP'+fnNum(v), exPsu:v=>v?'':'WITHPSU', peers:v=>v==='all'?'PEERSALL':'', showFail:v=>v?'WITHFAILS':'',
 };
@@ -1449,7 +1517,7 @@ function makeTable(id, cols, rows, opt={}) {
           <svg class="tick" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <svg class="ico" width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="9" rx="1.6" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 10.5h-.4A1.6 1.6 0 0 1 1.5 8.9V3.1c0-.9.7-1.6 1.6-1.6h5.8c.9 0 1.6.7 1.6 1.6v.4" stroke="currentColor" stroke-width="1.5"/></svg></button></span>` : '');
     const inp = $('input', bar);
-    if (inp) { inp.value = searchState[id] || ''; inp.addEventListener('input', () => { searchState[id] = inp.value; draw(); }); }
+    if (inp) { inp.value = searchState[id] || ''; inp.addEventListener('input', () => { searchState[id] = inp.value; saveView(); draw(); }); }
     if (opt.csv) $('.csv', bar).addEventListener('click', () => {
       const q = (searchState[id] || '').trim();
       const name = listCode() + '_' + opt.csv().replace(/\.csv$/, '') + (q ? '_q-' + q.replace(/[^A-Za-z0-9]+/g, '') : '') + '.csv';   // search text tagged too
@@ -1506,7 +1574,7 @@ function makeTable(id, cols, rows, opt={}) {
       if (TSCROLL[id]) wrap.scrollLeft = TSCROLL[id];
     });
     tbl.querySelectorAll('th[data-k]').forEach(th => th.addEventListener('click', () => {
-      const k = th.dataset.k; st.dir = (st.k===k) ? -st.dir : 1; st.k = k; draw();
+      const k = th.dataset.k; st.dir = (st.k===k) ? -st.dir : 1; st.k = k; saveView(); draw();
     }));
   }
   draw();
@@ -1588,7 +1656,13 @@ const C = {
   q: {k:'q', label:'ROCE %', tip:'ROE used for financials', v:qual, f:s=>fmt(qual(s))+(s.fin?' <span class="na">ROE</span>':'')},
   from52: {k:'from52', label:'vs 52W high', v:s=>pctFrom(s.cmp,s.hi52), f:s=>{const p=pctFrom(s.cmp,s.hi52); return p==null?NA:fmt(p)+'%';}},
   score: {k:'score', label:'Value score', v:s=>s.score, f:scoreCell},
+  mom: {k:'mom', label:'Momentum', tip:'Price momentum 0–100: percentile of the 3M, 6M and 12-minus-1-month returns vs every stock on screen, averaged. Hover a value for the returns.',
+        v:s=>s.momS, x:s=>s.momS==null ? '' : Math.round(s.momS),
+        f:s=>s.momS==null ? NA : `<span class="meter" title="${esc(['3M', '6M', '12-1M'].map((l, i) => l + ': ' + (ok(s.mom[i]) ? (s.mom[i] > 0 ? '+' : '') + fmt(s.mom[i]) + '%' : '–')).join('\n'))}"><span>${fmt(s.momS, 0)}</span><i><b style="width:${Math.max(3, s.momS).toFixed(0)}%"></b></i></span>`},
   pb: {k:'pb', label:'PB', v:s=>s.pb, f:s=>s.pb==null?'<span class="na">N/A</span>':fmt(s.pb,2)+(s.pbSrc==='derived'?'<span class="na">*</span>':'')},
+  cfop: {k:'cfop', label:'CFO+ yrs', tip:'Years with positive operating cash flow, out of the last 10 financial years (fewer if the history is shorter, minimum 5). Not used for financials: their operating cash flow swings with deposits and loans.',
+         v:s=>s.cfop ? s.cfop[0] / s.cfop[1] * 10 : null, x:s=>s.cfop ? `${s.cfop[0]}/${s.cfop[1]}` : '',
+         f:s=>s.fin ? '<span class="na" title="Not meaningful for banks / NBFCs">fin</span>' : s.cfop ? `<span class="pill ${s.cfop[0] / s.cfop[1] >= 0.9 ? 'disc' : s.cfop[0] / s.cfop[1] < 0.7 ? 'prem' : ''}">${s.cfop[0]}/${s.cfop[1]}</span>` : NA},
   pup: {k:'pup', label:'Profit ↑ yrs', tip:'Years profit (PAT) grew, out of the last 10 financial years (fewer if the history is shorter). Graham: at least 7 of 10.',
         v:s=>s.pup ? s.pup[0] / s.pup[1] * 10 : null, x:s=>s.pup ? `${s.pup[0]}/${s.pup[1]}` : '',
         f:s=>s.pup ? `<span class="pill ${s.pup[0] / s.pup[1] >= 0.7 ? 'disc' : s.pup[0] / s.pup[1] < 0.5 ? 'prem' : ''}">${s.pup[0]}/${s.pup[1]}</span>` : NA},
@@ -1633,7 +1707,7 @@ const C = {
 };
 
 const has = k => S.some(s => s[k] != null);
-const safeCols = () => [C.q5, C.pup, C.de, C.debitda, C.roa].concat( has('gnpa') ? [C.gnpa, C.nnpa, C.pcr] : []);
+const safeCols = () => [C.q5, C.pup, C.cfop, C.de, C.debitda, C.roa].concat( has('gnpa') ? [C.gnpa, C.nnpa, C.pcr] : []);
 const assetCols = () => [C.pta].concat(has('pfa') ? [C.pfa] : [], has('invp') ? [C.invp] : []);
 
 /* ---------- views ---------- */
@@ -1666,13 +1740,14 @@ function holdStrip(st) {
     STAT_ANCHOR = st.scrollLeft > 2 && t ? {key: t.dataset.key, end: st.scrollLeft >= st.scrollWidth - st.clientWidth - 2} : null;
   }, {passive: true});
 }
-const THEN_BY = new Map(D.then ? D.then.stocks.map(s => [s.sym, s]) : []);
+const THEN1 = D.then;                                     // the embedded 1Y snapshot: Industries "1Y ago" columns always use it
+const THEN_BY = new Map(THEN1 ? THEN1.stocks.map(s => [s.sym, s]) : []);
 /* same stocks, 1 year ago vs now: medians over stocks that have the value at BOTH dates (listed < 1Y = ignored) */
 function yoyOf(rows) {
   const both = rows.map(s => [s, THEN_BY.get(s.sym)]).filter(x => x[1]);
   const pair = (fa, okv) => { const p = both.map(([n, t]) => [fa(t), fa(n)]).filter(([a, b]) => okv(a) && okv(b));
     return p.length ? [median(p.map(q => q[0])), median(p.map(q => q[1])), p.length] : null; };   // median: one PE of 900 can't swing it
-  const pos = v => ok(v) && v > 0, px = D.then && D.then.hasPrice;
+  const pos = v => ok(v) && v > 0, px = THEN1 && THEN1.hasPrice;
   return {n: both.length, pe: px ? pair(s => s.pe, pos) : null, pb: px ? pair(s => s.pb, pos) : null, roe: pair(s => s.roe, ok)};
 }
 const yoyPct = r => r ? (r[1] / r[0] - 1) * 100 : null;          // PE / PB change, %
@@ -1694,7 +1769,7 @@ const stats = (arr, rows, extra) => {                            // ONE compact 
   const p = perfStats(rows);
   view.insertAdjacentHTML('beforeend', `<div class="stats">${statTiles(arr)}` + (extra || '')
     + (p.length ? `<div class="stat cap" data-key="since"><span>Since</span><b>${esc(D.then.date)}</b></div>${statTiles(p)}` : '')
-    + (BACK && D.then.hasPrice ? `<div class="stat cap grpcap" data-key="grpcap" title="The table below split into top / middle / bottom thirds in its current order (click a column to re-rank); average 1Y price return of each">`
+    + (BACK && D.then.hasPrice ? `<div class="stat cap grpcap" data-key="grpcap" title="The table below split into top / middle / bottom thirds in its current order (click a column to re-rank); average price return of each since the back date">`
         + `<span>Thirds by</span><b class="grpby">–</b></div>`
         + ['Top', 'Mid', 'Low'].map((n, i) => `<div class="stat grp" data-g="${i}" data-key="grp${i}"><span>${n}</span><b>–</b></div>`).join('') : '')
     + '</div>');
@@ -1856,6 +1931,7 @@ const unsetF = v => v === '' || v == null;
 /* Graham safety: debt (non-financials), 10-year profit record (all), ROA + Gross NPA (financials).
    A test whose data isn't scraped yet (no stock has it) is skipped, never silently failing everyone. */
 function safeOk(s, f) {
+  if (!s.fin && !unsetF(f.minCfo) && !(s.cfop && s.cfop[0] / s.cfop[1] * 10 >= f.minCfo - 1e-9)) return false;
   if (!unsetF(f.minQ5)) {                                 // 5Y median; until a category has it (non-financials need Borrowings) use this year's ROCE
     const has5 = S.some(x => x.fin === s.fin && x.q5 != null);
     const v = has5 ? s.q5 : qual(s);
@@ -1877,7 +1953,7 @@ function safeOk(s, f) {
   return true;
 }
 const VF_DEF = {maxPE:'', maxPB:'', minQ:12, minScore:0, minFcf:'', minMcap:0, maxMcap:'', trap:true, graham:false, minTrend:'',
-                maxPrem:'', maxPeg:'', minDy:0.01, minCc:'', maxPta:'', maxPfa:'', minInv:'', maxDe:'', minUp:'', maxNpa:'', minRoa:'', minQ5:'', maxDebitda:'', maxNnpa:'', minPcr:''};
+                maxPrem:'', maxPeg:'', minDy:0.01, minCc:'', maxPta:'', maxPfa:'', minInv:'', maxDe:'', minUp:'', maxNpa:'', minRoa:'', minQ5:'', maxDebitda:'', maxNnpa:'', minPcr:'', minCfo:'', minMom:''};
 const GRAHAM_SAFE = {minQ5:12, minUp:7, maxDe:1, maxDebitda:2.5, minRoa:1.5, maxNpa:2.5, maxNnpa:1, minPcr:70};   // Graham's safety tests, used by both Graham screens
 const VF_PRESETS = [
   {name:'Asset-backed', price:1, tip:'Market cap ≤ total assets on the books (Mcap ÷ Assets ≤ 1x), PB ≤ 1.5, ROCE ≥ 10%, debt ÷ equity ≤ 0.5 (assets not bought with borrowed money), pays a dividend, no value traps', st:{maxPta:1, maxPB:1.5, minQ:10, maxDe:0.5}},
@@ -1885,29 +1961,49 @@ const VF_PRESETS = [
   {name:'Graham deep value', price:1, tip:'Graham defensive + PE ≤ 15, PB ≤ 2', st:{graham:true, maxPE:15, maxPB:2, minQ:'', ...GRAHAM_SAFE}},
   {name:'Deep value', price:1, tip:'PE ≤ 15, PB ≤ 2, ROCE ≥ 10%, pays a dividend, no value traps', st:{maxPE:15, maxPB:2, minQ:10}},
 ];
+/* filter fields shared by Value screen and All Stocks */
+const vfMain = st => (NOPRICE ? '' : fNum(st,'maxPE','Max PE',{min:0})) + fNum(st,'minQ','Min ROCE / ROE %')
+  + fNum(st,'minScore','Min score',{min:0,max:100,step:5}) + fNum(st,'minTrend','Min Trend %',{min:0,max:100,step:10})
+  + (NOPRICE ? '' : fNum(st,'minMom','Min momentum',{min:0,max:100,step:5}))
+  + fChk(st,'trap','Hide value traps');
+const vfMore = st => (NOPRICE ? '' : fNum(st,'maxPB','Max PB',{min:0,step:0.5}) + fNum(st,'maxPrem','Max vs industry PE %',{step:5})
+  + fNum(st,'maxPeg','Max PEG',{min:0,step:0.25}) + fNum(st,'minFcf','Min FCF yield %',{step:0.5})
+  + fNum(st,'minDy','Min div yield %',{min:0,step:0.01}))
+  + fNum(st,'minCc','Min cash conv. x',{step:0.1})
+  + fNum(st,'minQ5','Min ROCE 5Y median %',{min:0,step:1})
+  + fNum(st,'minUp','Min profit-up yrs (of 10)',{min:0,max:10,step:1})
+  + fNum(st,'minCfo','Min CFO-positive yrs (of 10)',{min:0,max:10,step:1})
+  + fNum(st,'maxDe','Max debt ÷ equity',{min:0,step:0.1}) + fNum(st,'maxDebitda','…or max debt ÷ EBITDA x',{min:0,step:0.25})
+  + fNum(st,'minRoa','Financials: min ROA %',{min:0,step:0.25})
+  + (has('gnpa') ? fNum(st,'maxNpa','Banks: max Gross NPA %',{min:0,step:0.5}) + fNum(st,'maxNnpa','Banks: max Net NPA %',{min:0,step:0.25})
+      + fNum(st,'minPcr','Banks: min PCR %',{min:0,max:100,step:5}) : '')
+  + (NOPRICE ? '' : fNum(st,'maxPta','Max Mcap ÷ Assets x',{min:0,step:0.25})
+      + (has('pfa') ? fNum(st,'maxPfa','Max Mcap ÷ Fixed assets x',{min:0,step:0.25}) : '')
+      + (has('invp') ? fNum(st,'minInv','Min Investments % Mcap',{min:0,step:10}) : ''))
+  + fMcap(st)
+  + (NOPRICE ? '' : fChk(st,'graham','Graham: PE×PB ≤ 22.5'));
+const vfMoreKeys = () => NOPRICE ? ['minCc','minQ5','minUp','minCfo','maxDe','maxDebitda','minRoa','maxNpa','maxNnpa','minPcr','minMcap','maxMcap']
+  : ['maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','minQ5','minUp','minCfo','maxDe','maxDebitda','minRoa','maxNpa','maxNnpa','minPcr','maxPta','maxPfa','minInv','minMcap','maxMcap','graham'];
+const VF_CSV_KEYS = () => NOPRICE ? ['minMcap','maxMcap','minQ','minScore','minTrend','minCc','minQ5','minUp','minCfo','maxDe','maxDebitda','minRoa','maxNpa','maxNnpa','minPcr','trap']
+  : ['minMcap','maxMcap','maxPE','minQ','minScore','minTrend','minMom','maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','minQ5','minUp','minCfo','maxDe','maxDebitda','minRoa','maxNpa','maxNnpa','minPcr','maxPta','maxPfa','minInv','trap','graham'];
+/* one stock against one filter set; a blank box = no filter, and a missing value fails a set filter */
+function passVF(s, f) {
+  const on = k => !unsetF(f[k]) && !(typeof f[k] === 'number' && f[k] === 0 && k !== 'maxPE');
+  const max = (k, v) => !on(k) || (v != null && isFinite(v) && v <= f[k]);
+  const min = (k, v) => !on(k) || (v != null && isFinite(v) && v >= f[k]);
+  return (NOPRICE || (max('maxPE', s.pe) && max('maxPB', s.pb) && max('maxPrem', prem(s)) && max('maxPeg', peg(s))
+          && min('minDy', s.dy) && (s.fin || min('minFcf', s.fcfy)) && max('maxPta', s.pta)
+          && (!has('pfa') || max('maxPfa', s.pfa)) && (!has('invp') || min('minInv', s.invp))
+          && min('minMom', s.momS) && (!f.graham || grahamPass(s))))
+    && min('minQ', qual(s)) && (s.fin || min('minCc', s.cc)) && min('minScore', s.score)
+    && safeOk(s, f) && mcapOk(s, f) && (!f.trap || !trapReasons(s).length) && trendOk(s, f.minTrend);
+}
+
 function valueView() {
   setNav('value'); view.innerHTML = '';
   const vf = filterBox({
     key:'vf', def:VF_DEF, presets:VF_PRESETS,
-    main: st => (NOPRICE ? '' : fNum(st,'maxPE','Max PE',{min:0})) + fNum(st,'minQ','Min ROCE / ROE %')
-      + fNum(st,'minScore','Min score',{min:0,max:100,step:5}) + fNum(st,'minTrend','Min Trend %',{min:0,max:100,step:10})
-      + fChk(st,'trap','Hide value traps'),
-    more: st => (NOPRICE ? '' : fNum(st,'maxPB','Max PB',{min:0,step:0.5}) + fNum(st,'maxPrem','Max vs industry PE %',{step:5})
-      + fNum(st,'maxPeg','Max PEG',{min:0,step:0.25}) + fNum(st,'minFcf','Min FCF yield %',{step:0.5})
-      + fNum(st,'minDy','Min div yield %',{min:0,step:0.01}))
-      + fNum(st,'minCc','Min cash conv. x',{step:0.1})
-      + fNum(st,'minQ5','Min ROCE 5Y median %',{min:0,step:1})
-      + fNum(st,'minUp','Min profit-up yrs (of 10)',{min:0,max:10,step:1})
-      + fNum(st,'maxDe','Max debt ÷ equity',{min:0,step:0.1}) + fNum(st,'maxDebitda','…or max debt ÷ EBITDA x',{min:0,step:0.25})
-      + fNum(st,'minRoa','Financials: min ROA %',{min:0,step:0.25})
-      + (has('gnpa') ? fNum(st,'maxNpa','Banks: max Gross NPA %',{min:0,step:0.5}) + fNum(st,'maxNnpa','Banks: max Net NPA %',{min:0,step:0.25})
-          + fNum(st,'minPcr','Banks: min PCR %',{min:0,max:100,step:5}) : '')
-      + (NOPRICE ? '' : fNum(st,'maxPta','Max Mcap ÷ Assets x',{min:0,step:0.25})
-          + (has('pfa') ? fNum(st,'maxPfa','Max Mcap ÷ Fixed assets x',{min:0,step:0.25}) : '')
-          + (has('invp') ? fNum(st,'minInv','Min Investments % Mcap',{min:0,step:10}) : ''))
-      + fMcap(st)
-      + (NOPRICE ? '' : fChk(st,'graham','Graham: PE×PB ≤ 22.5')),
-    moreKeys: NOPRICE ? ['minCc','minQ5','minUp','maxDe','maxDebitda','minRoa','maxNpa','maxNnpa','minPcr','minMcap','maxMcap'] : ['maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','minQ5','minUp','maxDe','maxDebitda','minRoa','maxNpa','maxNnpa','minPcr','maxPta','maxPfa','minInv','minMcap','maxMcap','graham'],
+    main: vfMain, more: vfMore, moreKeys: vfMoreKeys(),
     extra: {label:'Scoring', build: el => {                 // industry PE method + score weights, out of the way
       const W = lsJson('vw', W_DEF);
       el.appendChild(pePicker());
@@ -1921,33 +2017,15 @@ function valueView() {
     }},
   }, valueView);
 
-  const rows = V().filter(s => s.score != null
-    && (NOPRICE || vf.maxPE === '' || s.pe <= vf.maxPE)
-    && (NOPRICE || vf.maxPB === '' || (s.pb != null && s.pb <= vf.maxPB))
-    && (NOPRICE || vf.maxPrem === '' || (prem(s) != null && prem(s) <= vf.maxPrem))
-    && (NOPRICE || vf.maxPeg === '' || (peg(s) != null && peg(s) <= vf.maxPeg))
-    && (NOPRICE || vf.minDy === '' || (s.dy != null && s.dy >= vf.minDy))
-    && (vf.minQ === '' || (qual(s) != null && qual(s) >= vf.minQ))
-    && (NOPRICE || vf.minFcf === '' || s.fin || (s.fcfy != null && s.fcfy >= vf.minFcf))
-    && (vf.minCc === '' || s.fin || (s.cc != null && s.cc >= vf.minCc))
-    && (NOPRICE || vf.maxPta === '' || vf.maxPta == null || (s.pta != null && s.pta <= vf.maxPta))
-    && (NOPRICE || vf.maxPfa === '' || vf.maxPfa == null || !has('pfa') || (s.pfa != null && s.pfa <= vf.maxPfa))
-    && (NOPRICE || vf.minInv === '' || vf.minInv == null || !has('invp') || (s.invp != null && s.invp >= vf.minInv))
-    && safeOk(s, vf)
-    && s.score >= (+vf.minScore || 0)
-    && mcapOk(s, vf)
-    && (!vf.trap || !trapReasons(s).length)
-    && (NOPRICE || !vf.graham || grahamPass(s))
-    && trendOk(s, vf.minTrend));                                       // Trend is a filter here, never part of the score
+  const rows = V().filter(s => s.score != null && passVF(s, vf));               // Trend is a filter here, never part of the score                                       // Trend is a filter here, never part of the score
   if (NOPRICE) stats([['Passing', rows.length], ['Scored', V().filter(s=>s.score!=null).length]], rows);
   else stats([['Passing', rows.length], ['Scored', V().filter(s=>s.score!=null).length],
          ['Median PE', fmt(median(rows.map(s=>s.pe)))], ['Median PB', fmt(median(rows.map(s=>s.pb)),2)],
          ['Graham pass', rows.filter(grahamPass).length]], rows);
   view.appendChild(makeTable('value',
-    [C.score, C.trend, C.sym, C.name, C.ind, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...safeCols(), ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
+    [C.score, C.mom, C.trend, C.sym, C.name, C.ind, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...safeCols(), ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
     rows, {sortKey:'score', sortDir:-1, search:true, csv:() => csvName('Value_screen', vf, VF_DEF,
-      NOPRICE ? ['minMcap','maxMcap','minQ','minScore','minTrend','minCc','minQ5','minUp','maxDe','maxDebitda','minRoa','maxNpa','maxNnpa','minPcr','trap']
-           : ['minMcap','maxMcap','maxPE','minQ','minScore','minTrend','maxPB','maxPrem','maxPeg','minFcf','minDy','minCc','minQ5','minUp','maxDe','maxDebitda','minRoa','maxNpa','maxNnpa','minPcr','maxPta','maxPfa','minInv','trap','graham'])}));
+      VF_CSV_KEYS())}));
   if (NOPRICE) hint('1 year back (no prices.csv yet) the score uses only the quality metrics as they stood then (ROCE / ROE, EPS growth, cash conversion), ranked within each industry. Green / red "since" columns show what the business did after that. Mcap filter uses today\'s market cap.');
   else hint('Value score = weighted percentile rank within the stock\'s own industry (hover a score for each part). Screens are one-click presets; any change turns them into Custom. FCF yield, cash conversion and core PE are not used for financials. Orange core PE = over 20% of profit is other income.');
 }
@@ -2240,6 +2318,21 @@ const btOf = k => {
   return T[k] ? {lvl:T[k][0], why:T[k][1]} : null;
 };
 const BT_ROUTE = h => h.startsWith('#/industry/') || h === '#/' || h === '' ? 'home' : h.slice(2);
+/* ---------- ALL STOCKS: no screen, no filter; every stock in the chosen list that has a price on the date shown ---------- */
+const AF_DEF = Object.assign({}, VF_DEF, {minQ:'', minDy:'', trap:false});   // All Stocks: every filter off by default
+function allView() {
+  setNav('all'); view.innerHTML = '';
+  const af = filterBox({key:'af', def:AF_DEF, main: vfMain, more: vfMore, moreKeys: vfMoreKeys()}, allView);
+  const priced = V().filter(s => s.cmp != null), rows = priced.filter(s => passVF(s, af));
+  stats([['Showing', rows.length], ['With a price', priced.length], ['Without a price', V().length - priced.length],
+         ['Median PE', fmt(median(rows.map(s => s.pe)))], ['Median PB', fmt(median(rows.map(s => s.pb)), 2)],
+         ['Median ROE %', fmt(median(rows.map(s => s.roe)))]], rows);
+  view.appendChild(makeTable('all',
+    [C.sym, C.name, C.ind, C.cmp, C.score, C.mom, C.trend, C.pe, C.cpe, C.prem, C.pb, ...safeCols(), ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.dy, C.proChg, C.mcap, C.from52, C.flags],
+    rows, {sortKey:'mcap', sortDir:-1, search:true, csv:() => csvName('All_stocks', af, AF_DEF, VF_CSV_KEYS())}));
+  if (!priced.length) view.insertAdjacentHTML('beforeend', '<p class="hint">No prices for this date yet (prices.csv has no price for it), so nothing to list.</p>');
+}
+
 function methodView() {
   setNav('method'); view.innerHTML = '';
   const W = lsJson('vw', W_DEF);
@@ -2275,7 +2368,7 @@ function methodView() {
         <div class="pair">
           <div class="nd out"><b>Today (ticked)</b></div>
           <div class="eq">⇅ like-for-like</div>
-          <div class="nd out"><b>1Y back</b><span>${D.then ? esc(D.then.date) : ''}</span></div>
+          <div class="nd out"><b>${D.then && D.then.label ? esc(D.then.label) : '1Y'} back</b><span>${D.then ? esc(D.then.date) : ''}</span></div>
         </div>
       </div>
       <div class="use">✓ Use to <b>compare today with 1Y back</b>, the only way both dates are computed identically</div>
@@ -2290,7 +2383,9 @@ function methodView() {
   ${row('Holding companies', 'profit that belongs to the shareholders', 'group profit incl. subsidiaries\' outside shareholders', 'PE looks too cheap, ROE too high (e.g. a holding company at PE 4 instead of 10)')}
   ${row('Dividend yield', 'Screener', 'payout % × PAT ÷ market cap', 'small')}</table></div>
 
-  <h2>Backtesting with 1Y back: read this first</h2>
+  <h2>Backtesting with the Back dropdown: read this first</h2>
+  <p><b>Back periods:</b> ${(D.backs || []).map(b => `${esc(b.label)} = ${esc(b.date)}${b.hasPrice ? '' : ' (no prices yet)'}`).join(' · ')}. Each one is the same engine run on that date, priced with that date's Angel close.
+  The further back, the fewer quarters of history the CSV holds, so Trend and shareholding checks have less data at 1.25Y and 1.5Y. <b>All Stocks</b> lists every stock in the chosen List with a price on the date shown, with no screen or filter.</p>
   <p><b>One engine, two dates.</b> 1Y back rebuilds each company as it stood on ${D.then ? esc(D.then.date) : '–'} with the <b>same function</b> that computes the <b>Same method</b> view of today:
   every metric from the raw yearly and quarterly rows known at that date (quarters ≥ 45 days old, financial years ≥ 60 days, shareholding ≥ 21 days) plus one price.
   So "Same method" today vs 1Y back differ only in their inputs, never in their formulas. Windows are clipped to what the CSV holds 1 year back and the <b>same</b> windows are used today:
@@ -2355,7 +2450,7 @@ function methodView() {
 
   <h2>Value screen</h2>
   <p><b>Value score (0–100)</b>: each stock is ranked against its own industry on each metric (fewer than 4 peers → against all stocks); ranks become percentiles from 0 (worst) to 1 (best); the weighted average × 100 is the score.
-  A score needs a positive PE and at least half of the applicable weight. Financials skip FCF yield and cash conversion. Current weights (Scoring ▾):</p>
+  A score needs a positive PE and at least half of the applicable weight. Financials skip FCF yield, cash conversion and CFO consistency. Current weights (Scoring ▾):</p>
   <div class="wrap"><table><tr><th>Metric</th><th>Better when</th><th>Weight</th><th>Used 1Y back?</th></tr>
   ${Object.keys(W_DEF).map(k => row(W_LABEL[k], METRICS[k].hi ? 'higher' : 'lower', W[k], (D.then.hasPrice || BACK_KEYS.includes(k)) ? 'yes' : '<b>no</b> (needs prices.csv)')).join('')}</table></div>
   <p><b>Filters</b> today: Max PE, Min ROCE / ROE, Min score, Min Trend %, Hide value traps; More: Max PB, Max vs industry PE %, Max PEG, Min FCF yield, Min div yield, Min cash conversion, Max Mcap ÷ Assets (plus Mcap ÷ Fixed assets / Investments % once scraped), Min / Max Mcap, Graham pass.
@@ -2363,6 +2458,7 @@ function methodView() {
   <p><b>Graham safety tests</b> (both Graham screens; each also a filter under More filters):</p>
   <div class="wrap"><table><tr><th>Test</th><th>Applies to</th><th>Pass when</th><th>Data</th></tr>
   ${row('Return through the cycle', 'all', 'median ROCE of the last 5 financial years ≥ 12% (ROE for financials); replaces the single-year ROCE floor', S.some(x => !x.fin && x.q5 != null) ? 'yearly, available' : 'financials: available; others use this year\'s ROCE <b>until the next full scrape</b> (Borrowings rows)')}
+  ${row('Cash-flow consistency', 'non-financials', 'operating cash flow positive in at least N of the last 10 financial years (Min CFO-positive yrs filter; also 5% of the Value score)', 'yearly cash flow, available')}
   ${row('Earnings stability', 'all', 'profit (PAT) grew in ≥ 7 of the last 10 financial years (scaled if the record is shorter, minimum 5 comparisons)', 'yearly P&amp;L, available')}
   ${row('Leverage', 'non-financials', 'borrowings ÷ (reserves + share capital) &lt; 1 <b>or</b> borrowings ÷ EBITDA &lt; 2.5x (gross debt: Screener has no cash figure, so stricter than net debt ÷ EBITDA)', has('de') ? 'yearly balance sheet, available' : '<b>skipped until the next full scrape</b> (Borrowings rows)')}
   ${row('Return on assets', 'banks, NBFCs, insurers', 'PAT ÷ total assets ≥ 1.5%', 'yearly, available')}
@@ -2372,6 +2468,12 @@ function methodView() {
   ${row('Debt &lt; net current assets', 'non-financials', '<b>not tested</b> (debt ÷ equity &lt; 0.5 used instead)', 'Screener\'s summary balance sheet has no current assets / liabilities')}</table></div>
   <p>A test with no data yet is skipped, never counted as a fail. NBFCs without NPA rows on Screener are judged on ROA only. Min div yield starts at 0.01%, so every screen keeps only dividend payers unless you clear that box. All fields, Scoring and Reset sit under the Filters button.
   <b>1Y back:</b> ${btOf('value').why}${D.then.hasPrice ? '' : ' The score is renamed "Quality score (then)" so it isn\'t mistaken for the Value score; the Screens need prices, so they are hidden.'}</p>
+
+  <h2>Momentum (Momentum column, Min momentum)</h2>
+  <p>Price momentum, 0–100: each stock's 3-month, 6-month and 12-minus-1-month price returns (split / bonus adjusted, Angel closes) are turned into percentiles against every stock on screen and averaged (needs 2 of 3).
+  12-minus-1 means the return from 12 months ago to 1 month ago: the latest month is left out because very short-term moves tend to reverse. 70+ = strong, under 30 = weak.
+  With the Back dropdown it is computed from prices up to that date only, so it can be backtested. It is a filter and a column, not part of the Value score:
+  value works best on beaten-down stocks, so pairing a cheap screen with Min momentum 50+ avoids "falling knives" without chasing the most expensive winners.</p>
 
   <h2>Trend score (Trend column, Min Trend %)</h2>
   <p>Seven pass / fail checks; Trend % = checks passed ÷ checks with data (needs ≥ 4, or ≥ 3 for financials, who get 4 checks). Ratios are compared in pp, never as CAGR.</p>
@@ -2420,6 +2522,7 @@ function route() {
   if (h.startsWith('#/industry/')) industryView(decodeURIComponent(h.slice(11)));
   else if (h === '#/value') valueView();
   else if (h === '#/method') methodView();
+  else if (h === '#/all') allView();
   else homeView();
   meta();
   window.scrollTo(0,0);
@@ -2442,11 +2545,37 @@ function meta() {
 }
 document.addEventListener('click', e => { const p = $('#backPop'); if (p && !e.target.closest('#backPop')) p.classList.remove('open'); });
 const saveGF = () => lsSet('gf', JSON.stringify(GF));
-[['psu','#hidePSU'], ['semi','#hideSemi'], ['back','#back1y'], ['same','#sameM']].forEach(([k, id]) => {
+[['psu','#hidePSU'], ['semi','#hideSemi'], ['same','#sameM']].forEach(([k, id]) => {
   const el = $(id); el.checked = !!GF[k];
   el.addEventListener('change', () => { GF[k] = el.checked; saveGF(); route(); });
 });
-$('#backChip').title = 'Show fundamentals as of ' + D.then.date + ' and how each business did since';
+/* Back dropdown: Off / 3M / 6M / 9M / 1Y / 1.25Y / 1.5Y. 1Y is inside the page; the others load once, on first use */
+const BACK_CACHE = Object.assign({[D.then.key || '1Y']: D.then}, D.backData || {});
+const bsel = $('#backSel'), bchip = $('#backChip');
+bsel.innerHTML = '<option value="">Off</option>' + (D.backs || [{key:'1Y', label:'1Y', date:D.then.date}]).map(b => `<option value="${b.key}">${esc(b.label)}</option>`).join('');
+const backLabel = k => ((D.backs || []).find(b => b.key === k) || {label:k}).label;
+const backTitle = () => 'Show the companies as they stood on a past date (same-method engine) and how each did since'
+  + ((D.backs || []).length ? ': ' + D.backs.map(b => b.label + ' = ' + b.date).join(', ') : '');
+bchip.title = backTitle();
+function pickBack(key) {
+  if (!key) { GF.back = false; saveGF(); route(); return; }
+  GF.backP = key; GF.back = true; saveGF();
+  if (BACK_CACHE[key]) { D.then = BACK_CACHE[key]; route(); return; }
+  bchip.classList.add('loading');
+  fetch('fundamentals_back_' + key + '.json', {cache: 'no-cache'})
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(j => { BACK_CACHE[key] = j; bchip.classList.remove('loading'); if (GF.backP === key && GF.back) { D.then = j; route(); } })
+    .catch(() => {
+      bchip.classList.remove('loading');
+      alert(backLabel(key) + ' back could not be loaded. It loads from the website; a saved offline copy has 1Y only.');
+      GF.backP = '1Y'; D.then = BACK_CACHE['1Y'] || D.then; bsel.value = GF.back ? '1Y' : ''; saveGF(); route();
+    });
+}
+bsel.value = GF.back ? GF.backP : '';
+if (bsel.value !== (GF.back ? GF.backP : '')) { GF.backP = '1Y'; bsel.value = GF.back ? '1Y' : ''; }   // unknown key in storage
+bsel.addEventListener('change', () => pickBack(bsel.value));
+if (GF.back && !BACK_CACHE[GF.backP]) setTimeout(() => pickBack(GF.backP), 0);       // remembered period: load it
+else if (GF.back) D.then = BACK_CACHE[GF.backP];
 const us = $('#uniSel');
 us.innerHTML = '<option value="all">All lists</option>' + D.lists.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
 us.value = D.lists.includes(GF.uni) ? GF.uni : 'all';
@@ -2537,8 +2666,9 @@ route();
 # ----------------------------------------------------------------------------
 # RENDER / BUILD
 # ----------------------------------------------------------------------------
-def render_html(now, then, back, asof, web=False, smnow=None, meta=None):
-    """Fill the HTML template with the computed records."""
+def render_html(now, backs, asof, web=False, smnow=None, embed_all=False):
+    """Fill the HTML template with the computed records. The default back period is embedded; the others are
+    listed in "backs" and (web) loaded on demand from fundamentals_back_<key>.json, or (embed_all) inlined."""
     pro = [r["h"]["pro"] for r in now if "pro" in r["h"]]
     span = pd.Series([p["since"] + " → " + p["till"] for p in pro]).mode()[0] if pro else "n/a"
     lists = [u for u in UNIVERSES.values() if any(u in r["uni"] for r in now)]
@@ -2552,7 +2682,9 @@ def render_html(now, then, back, asof, web=False, smnow=None, meta=None):
         "jumpPP": JUMP_PP,
         "cashYears": CASH_YEARS,
         "staleDays": MAX_STALE_DAYS,
-        "then": dict({"stocks": then, "date": back.strftime("%d %b %Y")}, **(meta or {})),
+        "then": backs[DEFAULT_BACK],
+        "backs": [{"key": k, "label": b["label"], "date": b["date"], "hasPrice": b["hasPrice"]} for k, b in backs.items()],
+        "backData": {k: b for k, b in backs.items() if k != DEFAULT_BACK} if embed_all else {},
         "smNow": {"stocks": smnow or []},
         "sm": {"trendQ": SM_TREND_QTRS, "shQ": SM_SH_QTRS},
     }
@@ -2569,15 +2701,23 @@ def build_site(paths, out_path, minify=None, prices_path=None):
     if prices_path is None and paths:
         prices_path = pathlib.Path(str(paths[0])).parent / PRICES_CSV
     prices, bench = load_prices(prices_path) if prices_path else ({}, None)
-    now, then, back, smnow, meta = build_all(df, asof, prices, bench)
-    html, span = render_html(now, then, back, asof, web=True, smnow=smnow, meta=meta)
+    now, smnow, backs = build_all(df, asof, prices, bench)
+    html, span = render_html(now, backs, asof, web=True, smnow=smnow)
     if minify:
         html = minify(html)
     out_path = pathlib.Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")
-    print("    Fundamentals: %d stocks, data as of %s, 1Y back = %s, %.1f MB -> %s" % (
-        len(now), asof.strftime("%d %b %Y"), back.strftime("%d %b %Y"), len(html.encode("utf-8")) / 1e6, out_path))
+    extra = 0
+    for k, b in backs.items():                            # other back periods: small JSON files next to the page
+        if k == DEFAULT_BACK:
+            continue
+        txt = json.dumps(clean(b), allow_nan=False, separators=(",", ":"))
+        (out_path.parent / ("fundamentals_back_%s.json" % k)).write_text(txt, encoding="utf-8")
+        extra += len(txt.encode("utf-8"))
+    print("    Fundamentals: %d stocks, data as of %s, back periods %s, page %.1f MB + %.1f MB on demand -> %s" % (
+        len(now), asof.strftime("%d %b %Y"), "/".join(b["label"] for b in backs.values()),
+        len(html.encode("utf-8")) / 1e6, extra / 1e6, out_path))
     return len(now)
 
 
@@ -2590,8 +2730,8 @@ def main():
     df = df.sort_values("PE", na_position="last")
     write_csvs(df)
     prices, bench = load_prices(os.path.join(HERE, PRICES_CSV))
-    now, then, back, smnow, meta = build_all(df, asof, prices, bench)
-    html, span = render_html(now, then, back, asof, web=False, smnow=smnow, meta=meta)
+    now, smnow, backs = build_all(df, asof, prices, bench)
+    html, span = render_html(now, backs, asof, web=False, smnow=smnow, embed_all=True)   # offline file: all periods inline
     with open(OUT_HTML, "w", encoding="utf-8") as f:
         f.write(html)
     os.makedirs(ARCHIVE_DIR, exist_ok=True)
@@ -2603,8 +2743,9 @@ def main():
     pro = sum(1 for r in now if "pro" in r["h"])
     print("Stocks: %d | PB: %d | EPS CAGR: %d | FCF yield: %d | holding history: %d (mostly %s)" % (
         len(now), cnt("pb"), cnt("cagr"), cnt("fcfy"), pro, span))
-    print("1Y back : fundamentals as of %s, profit growth since then for %d stocks" % (
-        back.strftime("%d %b %Y"), sum(1 for t in then if t["since"]["patG"] is not None)))
+    for b in backs.values():
+        print("%-5s back: fundamentals as of %s, profit growth since then for %d stocks" % (
+            b["label"], b["date"], sum(1 for t in b["stocks"] if t["since"]["patG"] is not None)))
     print("Dashboard :", OUT_HTML)
     print("Saved copy:", archive)
     if OPEN_BROWSER:
