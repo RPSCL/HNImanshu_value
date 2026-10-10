@@ -1089,9 +1089,15 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:16p
 .chip:has(input:checked){border-color:var(--brass);color:var(--ink);background:var(--brassbg)}
 .chip:has(input:disabled){opacity:.6;cursor:default}
 .chip input{margin:0;accent-color:var(--brass);vertical-align:middle}
-.chip.backsel.on{background:var(--brass);border-color:var(--brass);color:var(--bg);font-weight:600}
-.chip.backsel.on .fsel-btn{color:var(--bg);font-weight:700}
-.chip.backsel.loading{opacity:.6;cursor:progress}
+.chip.backsel{padding:0 8px}
+.chip.backsel.on{border-color:var(--brass)}
+.chip.backsel.on .fsel-btn{color:var(--brass);font-weight:700}
+.chip.loading{opacity:.6;cursor:progress}
+/* PSU / Semi PSU: plain text; ticked = hidden = struck through in red */
+.chip.strike{position:relative}
+.chip.strike input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.chip.strike:has(input:checked){border-color:var(--bad);background:var(--badbg);color:var(--ink)}
+.chip.strike:has(input:checked) span{text-decoration:line-through;text-decoration-color:var(--bad);text-decoration-thickness:2px}
 .chip.ytoggle{position:relative}
 .chip.ytoggle input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
 .chip.ytoggle::before{content:"";width:9px;height:9px;border-radius:50%;border:1.5px solid currentColor}
@@ -1152,7 +1158,9 @@ th.l,td.l{text-align:left}
 td.idx{color:var(--faint);font:11px var(--mono);width:1%}
 tbody tr:last-child td{border-bottom:0}
 tbody tr:hover td{background:var(--hover)}
-tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 var(--brass)}
+tbody td:first-child{border-left:4px solid var(--sc, transparent)}   /* sector colour strip */
+body.day tbody td:first-child{border-left-color:color-mix(in srgb, var(--sc, transparent) 70%, #5a4a30)}   /* pastels need more ink on the light theme */
+tbody tr:hover td:first-child{box-shadow:inset 2px 0 0 var(--brass)}
 tbody tr.click{cursor:pointer}
 td a.sym{font:700 12.5px var(--mono);color:var(--ink);letter-spacing:.01em}
 td a.ind{color:var(--mute)}
@@ -1244,10 +1252,11 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
   <div class="global">
     <a class="btn back" id="backBtn" href="./"><span class="lg">Back to </span>Screener</a>
     <label class="chip">List <select id="uniSel"></select></label>
-    <label class="chip"><input type="checkbox" id="hidePSU"> Hide PSU</label>
-    <label class="chip"><input type="checkbox" id="hideSemi"> Hide semi-PSU</label>
+    <label class="chip strike" title="Click to hide PSU stocks (struck through = hidden)"><input type="checkbox" id="hidePSU"><span>PSU</span></label>
+    <label class="chip strike" title="Click to hide semi-PSU stocks (struck through = hidden)"><input type="checkbox" id="hideSemi"><span>Semi PSU</span></label>
     <label class="chip" id="sameChip" title="Same method: rebuild TODAY's numbers with the exact engine used for 1Y back (raw yearly / quarterly rows + one Angel price), instead of Screener's own ratios, so today and 1Y back are like-for-like. Always on in 1Y back."><input type="checkbox" id="sameM"> Same method</label>
-    <label class="chip backsel" id="backChip">Back <select id="backSel" aria-label="Back period"></select></label>
+    <label class="chip ytoggle" id="backChip"><input type="checkbox" id="histOn"> Historical</label>
+    <label class="chip backsel" id="backPer" title="Historical date"><select id="backSel" aria-label="Historical period"></select></label>
     <button class="btn primary" id="saveHtml">Save as HTML</button>
     <div id="theme-toggle" title="Day / night">
       <span class="toggle-icon moon-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
@@ -1299,7 +1308,7 @@ let industries = {};
 /* switch between today's data and the 1-year-back snapshot */
 function setMode() {
   BACK = !!(GF.back && D.then && (D.then.key || '1Y') === GF.backP);   // the chosen period once its data is in
-  const bc = $('#backChip'); if (bc) bc.classList.toggle('on', BACK);
+  const bp = $('#backPer'); if (bp) bp.classList.toggle('on', BACK);
   const smOk = D.smNow && D.smNow.stocks && D.smNow.stocks.length;
   SAME = BACK || !!(GF.same && smOk);
   S = BACK ? D.then.stocks : (SAME ? D.smNow.stocks : D.stocks);
@@ -1386,6 +1395,7 @@ function computeScores() {
 }
 /* Price momentum (0–100): average percentile, across every stock on screen, of the 3-month, 6-month and
    12-minus-1-month returns (the last month is skipped: short-term moves tend to reverse). Needs 2 of 3. */
+let HAS_MOM = false;                                     // false until prices.csv carries momentum: the filter is then skipped
 function computeMomentum() {
   const cols = [0, 1, 2].map(i => S.map(s => s.mom ? s.mom[i] : null).filter(ok).sort((a, b) => a - b));
   S.forEach(s => {
@@ -1394,6 +1404,7 @@ function computeMomentum() {
     const p = [0, 1, 2].filter(i => ok(s.mom[i])).map(i => pctl(cols[i], s.mom[i], true));
     if (p.length >= 2) s.momS = p.reduce((a, x) => a + x, 0) / p.length * 100;
   });
+  HAS_MOM = S.some(s => s.momS != null);
 }
 function trapReasons(s) {
   const r = [];
@@ -1494,6 +1505,12 @@ function thirds(data, col) {
     el.title = x.map(s => s.sym + ' ' + (s.since.ret > 0 ? '+' : '') + fmt(s.since.ret) + '%').join('\n') + (b != null ? '\nNIFTY 500: ' + fmt(b) + '%' : '');
   });
 }
+/* one light colour per sector (22), fixed by sector name, so a sector keeps its colour in every table */
+const SEC_PAL = ['#FFC1CC','#FFD8B1','#FFF3A6','#D9F99D','#B6F2D0','#A7F3EB','#B3D9FF','#C7D2FE','#E0BBFF','#F3C4FB','#FFD6E7',
+                 '#FFB3A7','#F6E3C1','#FFFAC2','#C8E6C9','#D6EFFF','#B3E5E0','#A7C7E7','#D1C4E9','#FFD1B3','#D0E8D0','#E4E7EB'];
+const SEC_COLOR = {};
+[...new Set(D.stocks.map(s => s.ind).filter(Boolean))].sort().forEach((n, i) => SEC_COLOR[n] = SEC_PAL[i % SEC_PAL.length]);
+const secColor = n => SEC_COLOR[n] || null;
 const TABLE_ROWS = 15;
 const TSCROLL = {};                                       // table sideways scroll, kept while filters re-render the table                                    // visible rows per table, the rest scrolls
 function makeTable(id, cols, rows, opt={}) {
@@ -1560,8 +1577,10 @@ function makeTable(id, cols, rows, opt={}) {
     const tb = document.createElement('tbody');
     data.forEach((r,i) => {
       const tr = document.createElement('tr');
+      const sc = secColor(r.ind); if (sc) { tr.style.setProperty('--sc', sc); tr.dataset.sec = r.ind; }
       if (opt.onRow) { tr.className='click'; tr.addEventListener('click', () => opt.onRow(r)); }
       tr.innerHTML = (opt.noIndex ? '' : `<td class="l idx">${i+1}</td>`) + cols.map(c => `<td class="${c.l?'l':''}">${c.f(r)}</td>`).join('');
+      if (sc && tr.firstChild) tr.firstChild.title = r.ind;                 // hover the strip: sector name
       tb.appendChild(tr);
     });
     if (!data.length) tb.innerHTML = `<tr><td class="l na" colspan="${cols.length+1}">No stocks match these filters. Loosen a filter or press Reset.</td></tr>`;
@@ -1953,7 +1972,7 @@ function safeOk(s, f) {
   return true;
 }
 const VF_DEF = {maxPE:'', maxPB:'', minQ:12, minScore:0, minFcf:'', minMcap:0, maxMcap:'', trap:true, graham:false, minTrend:'',
-                maxPrem:'', maxPeg:'', minDy:0.01, minCc:'', maxPta:'', maxPfa:'', minInv:'', maxDe:'', minUp:'', maxNpa:'', minRoa:'', minQ5:'', maxDebitda:'', maxNnpa:'', minPcr:'', minCfo:'', minMom:''};
+                maxPrem:'', maxPeg:'', minDy:0.01, minCc:'', maxPta:'', maxPfa:'', minInv:'', maxDe:'', minUp:'', maxNpa:'', minRoa:'', minQ5:'', maxDebitda:'', maxNnpa:'', minPcr:'', minCfo:'', minMom:40};
 const GRAHAM_SAFE = {minQ5:12, minUp:7, maxDe:1, maxDebitda:2.5, minRoa:1.5, maxNpa:2.5, maxNnpa:1, minPcr:70};   // Graham's safety tests, used by both Graham screens
 const VF_PRESETS = [
   {name:'Asset-backed', price:1, tip:'Market cap ≤ total assets on the books (Mcap ÷ Assets ≤ 1x), PB ≤ 1.5, ROCE ≥ 10%, debt ÷ equity ≤ 0.5 (assets not bought with borrowed money), pays a dividend, no value traps', st:{maxPta:1, maxPB:1.5, minQ:10, maxDe:0.5}},
@@ -1994,7 +2013,7 @@ function passVF(s, f) {
   return (NOPRICE || (max('maxPE', s.pe) && max('maxPB', s.pb) && max('maxPrem', prem(s)) && max('maxPeg', peg(s))
           && min('minDy', s.dy) && (s.fin || min('minFcf', s.fcfy)) && max('maxPta', s.pta)
           && (!has('pfa') || max('maxPfa', s.pfa)) && (!has('invp') || min('minInv', s.invp))
-          && min('minMom', s.momS) && (!f.graham || grahamPass(s))))
+          && (!HAS_MOM || min('minMom', s.momS)) && (!f.graham || grahamPass(s))))
     && min('minQ', qual(s)) && (s.fin || min('minCc', s.cc)) && min('minScore', s.score)
     && safeOk(s, f) && mcapOk(s, f) && (!f.trap || !trapReasons(s).length) && trendOk(s, f.minTrend);
 }
@@ -2023,7 +2042,7 @@ function valueView() {
          ['Median PE', fmt(median(rows.map(s=>s.pe)))], ['Median PB', fmt(median(rows.map(s=>s.pb)),2)],
          ['Graham pass', rows.filter(grahamPass).length]], rows);
   view.appendChild(makeTable('value',
-    [C.score, C.mom, C.trend, C.sym, C.name, C.ind, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...safeCols(), ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
+    [C.sym, C.ind, C.score, C.name, C.mom, C.trend, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...safeCols(), ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
     rows, {sortKey:'score', sortDir:-1, search:true, csv:() => csvName('Value_screen', vf, VF_DEF,
       VF_CSV_KEYS())}));
   if (NOPRICE) hint('1 year back (no prices.csv yet) the score uses only the quality metrics as they stood then (ROCE / ROE, EPS growth, cash conversion), ranked within each industry. Green / red "since" columns show what the business did after that. Mcap filter uses today\'s market cap.');
@@ -2319,7 +2338,7 @@ const btOf = k => {
 };
 const BT_ROUTE = h => h.startsWith('#/industry/') || h === '#/' || h === '' ? 'home' : h.slice(2);
 /* ---------- ALL STOCKS: no screen, no filter; every stock in the chosen list that has a price on the date shown ---------- */
-const AF_DEF = Object.assign({}, VF_DEF, {minQ:'', minDy:'', trap:false});   // All Stocks: every filter off by default
+const AF_DEF = Object.assign({}, VF_DEF, {minQ:'', minDy:'', trap:false, minMom:''});   // All Stocks: every filter off by default
 function allView() {
   setNav('all'); view.innerHTML = '';
   const af = filterBox({key:'af', def:AF_DEF, main: vfMain, more: vfMore, moreKeys: vfMoreKeys()}, allView);
@@ -2328,7 +2347,7 @@ function allView() {
          ['Median PE', fmt(median(rows.map(s => s.pe)))], ['Median PB', fmt(median(rows.map(s => s.pb)), 2)],
          ['Median ROE %', fmt(median(rows.map(s => s.roe)))]], rows);
   view.appendChild(makeTable('all',
-    [C.sym, C.name, C.ind, C.cmp, C.score, C.mom, C.trend, C.pe, C.cpe, C.prem, C.pb, ...safeCols(), ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.dy, C.proChg, C.mcap, C.from52, C.flags],
+    [C.sym, C.ind, C.score, C.name, C.mom, C.trend, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...safeCols(), ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.dy, C.proChg, C.mcap, C.from52, C.flags],
     rows, {sortKey:'mcap', sortDir:-1, search:true, csv:() => csvName('All_stocks', af, AF_DEF, VF_CSV_KEYS())}));
   if (!priced.length) view.insertAdjacentHTML('beforeend', '<p class="hint">No prices for this date yet (prices.csv has no price for it), so nothing to list.</p>');
 }
@@ -2383,8 +2402,8 @@ function methodView() {
   ${row('Holding companies', 'profit that belongs to the shareholders', 'group profit incl. subsidiaries\' outside shareholders', 'PE looks too cheap, ROE too high (e.g. a holding company at PE 4 instead of 10)')}
   ${row('Dividend yield', 'Screener', 'payout % × PAT ÷ market cap', 'small')}</table></div>
 
-  <h2>Backtesting with the Back dropdown: read this first</h2>
-  <p><b>Back periods:</b> ${(D.backs || []).map(b => `${esc(b.label)} = ${esc(b.date)}${b.hasPrice ? '' : ' (no prices yet)'}`).join(' · ')}. Each one is the same engine run on that date, priced with that date's Angel close.
+  <h2>Backtesting with the Historical dropdown: read this first</h2>
+  <p><b>Historical dates:</b> ${(D.backs || []).map(b => `${esc(b.label)} = ${esc(b.date)}${b.hasPrice ? '' : ' (no prices yet)'}`).join(' · ')}. Each one is the same engine run on that date, priced with that date's Angel close.
   The further back, the fewer quarters of history the CSV holds, so Trend and shareholding checks have less data at 1.25Y and 1.5Y. <b>All Stocks</b> lists every stock in the chosen List with a price on the date shown, with no screen or filter.</p>
   <p><b>One engine, two dates.</b> 1Y back rebuilds each company as it stood on ${D.then ? esc(D.then.date) : '–'} with the <b>same function</b> that computes the <b>Same method</b> view of today:
   every metric from the raw yearly and quarterly rows known at that date (quarters ≥ 45 days old, financial years ≥ 60 days, shareholding ≥ 21 days) plus one price.
@@ -2472,7 +2491,7 @@ function methodView() {
   <h2>Momentum (Momentum column, Min momentum)</h2>
   <p>Price momentum, 0–100: each stock's 3-month, 6-month and 12-minus-1-month price returns (split / bonus adjusted, Angel closes) are turned into percentiles against every stock on screen and averaged (needs 2 of 3).
   12-minus-1 means the return from 12 months ago to 1 month ago: the latest month is left out because very short-term moves tend to reverse. 70+ = strong, under 30 = weak.
-  With the Back dropdown it is computed from prices up to that date only, so it can be backtested. It is a filter and a column, not part of the Value score:
+  With the Historical dropdown it is computed from prices up to that date only, so it can be backtested. It is a filter and a column, not part of the Value score:
   value works best on beaten-down stocks, so pairing a cheap screen with Min momentum 50+ avoids "falling knives" without chasing the most expensive winners.</p>
 
   <h2>Trend score (Trend column, Min Trend %)</h2>
@@ -2549,17 +2568,21 @@ const saveGF = () => lsSet('gf', JSON.stringify(GF));
   const el = $(id); el.checked = !!GF[k];
   el.addEventListener('change', () => { GF[k] = el.checked; saveGF(); route(); });
 });
-/* Back dropdown: Off / 3M / 6M / 9M / 1Y / 1.25Y / 1.5Y. 1Y is inside the page; the others load once, on first use */
+/* Historical: an on / off chip + a period dropdown (3M … 1.5Y). Every page load starts with Historical OFF and 1Y.
+   Choosing a period switches Historical on; clicking the chip again switches it off. 1Y is inside the page,
+   the other periods load once, on first use (fundamentals_back_<key>.json). */
+GF.back = false; GF.backP = '1Y';
 const BACK_CACHE = Object.assign({[D.then.key || '1Y']: D.then}, D.backData || {});
-const bsel = $('#backSel'), bchip = $('#backChip');
-bsel.innerHTML = '<option value="">Off</option>' + (D.backs || [{key:'1Y', label:'1Y', date:D.then.date}]).map(b => `<option value="${b.key}">${esc(b.label)}</option>`).join('');
+const bsel = $('#backSel'), hist = $('#histOn'), bchip = $('#backChip');
+bsel.innerHTML = (D.backs || [{key:'1Y', label:'1Y', date:D.then.date}]).map(b => `<option value="${b.key}">${esc(b.label)}</option>`).join('');
+bsel.value = '1Y';
 const backLabel = k => ((D.backs || []).find(b => b.key === k) || {label:k}).label;
-const backTitle = () => 'Show the companies as they stood on a past date (same-method engine) and how each did since'
+bchip.title = 'Show the companies as they stood on a past date (same-method engine) and how each did since'
   + ((D.backs || []).length ? ': ' + D.backs.map(b => b.label + ' = ' + b.date).join(', ') : '');
-bchip.title = backTitle();
-function pickBack(key) {
-  if (!key) { GF.back = false; saveGF(); route(); return; }
-  GF.backP = key; GF.back = true; saveGF();
+function setHistorical(on, key) {
+  key = key || GF.backP;
+  GF.back = !!on; GF.backP = key; hist.checked = GF.back; bsel.value = key; if (bsel._paint) bsel._paint();
+  if (!GF.back) { route(); return; }
   if (BACK_CACHE[key]) { D.then = BACK_CACHE[key]; route(); return; }
   bchip.classList.add('loading');
   fetch('fundamentals_back_' + key + '.json', {cache: 'no-cache'})
@@ -2567,15 +2590,13 @@ function pickBack(key) {
     .then(j => { BACK_CACHE[key] = j; bchip.classList.remove('loading'); if (GF.backP === key && GF.back) { D.then = j; route(); } })
     .catch(() => {
       bchip.classList.remove('loading');
-      alert(backLabel(key) + ' back could not be loaded. It loads from the website; a saved offline copy has 1Y only.');
-      GF.backP = '1Y'; D.then = BACK_CACHE['1Y'] || D.then; bsel.value = GF.back ? '1Y' : ''; saveGF(); route();
+      alert(backLabel(key) + ' could not be loaded. It loads from the website; a saved offline copy has 1Y only.');
+      setHistorical(GF.back, '1Y');
     });
 }
-bsel.value = GF.back ? GF.backP : '';
-if (bsel.value !== (GF.back ? GF.backP : '')) { GF.backP = '1Y'; bsel.value = GF.back ? '1Y' : ''; }   // unknown key in storage
-bsel.addEventListener('change', () => pickBack(bsel.value));
-if (GF.back && !BACK_CACHE[GF.backP]) setTimeout(() => pickBack(GF.backP), 0);       // remembered period: load it
-else if (GF.back) D.then = BACK_CACHE[GF.backP];
+hist.checked = false;
+hist.addEventListener('change', () => setHistorical(hist.checked));
+bsel.addEventListener('change', () => setHistorical(true, bsel.value));   // picking a date turns Historical on
 const us = $('#uniSel');
 us.innerHTML = '<option value="all">All lists</option>' + D.lists.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
 us.value = D.lists.includes(GF.uni) ? GF.uni : 'all';
@@ -2603,6 +2624,7 @@ function fancySelect(sel) {
       `<button type="button" role="option" class="fsel-opt${i === sel.selectedIndex ? ' on' : ''}" data-i="${i}">${esc(o.text)}</button>`).join('');
   };
   paint();
+  sel._paint = paint;                                      // lets code that sets sel.value refresh the button
   btn.addEventListener('click', e => {
     e.preventDefault(); e.stopPropagation();
     closeFsel(wrap);
