@@ -26,9 +26,21 @@ import {
   getDatabase, ref, set, onValue, onDisconnect, increment,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
 
-// Project config comes from Firebase Hosting itself (/__/firebase/init.json = the project that hosts this site,
-// i.e. hnimanshu). Nothing project-specific is hard-coded here, so this file can never talk to another project.
-const firebaseConfig = await fetch("/__/firebase/init.json").then((r) => r.json());
+// Firebase project "hnimanshu", web app "valueapp" (Project settings → Your apps). These values are public by design;
+// security comes from the Firestore / Realtime Database rules, not from hiding them.
+const firebaseConfig = {
+  apiKey: "AIzaSyD1oA953pXZxBAuOR9ObSk6vAmKf1gyVbE",
+  authDomain: "hnimanshu-7c544.firebaseapp.com",
+  projectId: "hnimanshu",
+  storageBucket: "hnimanshu.firebasestorage.app",
+  messagingSenderId: "428887828946",
+  appId: "1:428887828946:web:854acb9c7651aebd38000b",
+};
+// Realtime Database address: Firebase Hosting hands it out once the database exists, so nothing to paste here later.
+try {
+  const hosted = await fetch("/__/firebase/init.json").then((r) => r.json());
+  if (hosted.projectId === firebaseConfig.projectId && hosted.databaseURL) firebaseConfig.databaseURL = hosted.databaseURL;
+} catch (e) {}
 const USER_DOMAIN = "users.hnimanshu.app";        // username → hidden email for Firebase
 const SESSION_DAYS = 7;                           // log out a week after the last sign-in
 const ADMIN_EMAIL = "admin@" + USER_DOMAIN;       // username "admin" (created by you in the Firebase console)
