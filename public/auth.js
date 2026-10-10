@@ -22,12 +22,16 @@ import {
 import {
   getFirestore, doc, setDoc, getDoc, getDocs, collection, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import {
+  getDatabase, ref, set, onValue, onDisconnect, runTransaction,
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
 
 // Same Firebase project as RollbackCAS, so one account works on both sites. These values are public by design.
 const firebaseConfig = {
   apiKey: "AIzaSyANIaWhY5RfhjaBYJLjfFcIKxGwJUapD44",
   authDomain: "nfsxcas.firebaseapp.com",
   projectId: "nfsxcas",
+  databaseURL: "https://nfsxcas-default-rtdb.asia-southeast1.firebasedatabase.app",
 };
 const USER_DOMAIN = "users.hnimanshu.app";        // username → hidden email for Firebase
 const SESSION_DAYS = 7;                           // log out a week after the last sign-in
@@ -39,6 +43,7 @@ const GATED = document.documentElement.dataset.auth === "required";
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const rtdb = getDatabase(app);                   // only for the live online / visitor counters (hni/... paths)
 const google = new GoogleAuthProvider();
 google.setCustomParameters({ prompt: "select_account" });
 
@@ -228,6 +233,51 @@ function showUser(u) {
   host.insertBefore(el, host.querySelector("#theme-toggle"));
 }
 
+// ---------- online now + total visitors (same method as RollbackCAS, separate hni/ paths) ----------
+// Every open tab of the screener or Fundamentals adds hni/presence/<random id>; Firebase deletes it by itself the
+// moment the tab closes or the connection drops (onDisconnect). Each IP is counted once ever (SHA-256 hash, never the
+// raw IP) into hni/meta/visitors. Only the admin's browser reads these numbers; everyone else just writes.
+function presence() {
+  try {
+    const sid = (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2)).replace(/[^a-z0-9-]/gi, "");
+    const me = ref(rtdb, "hni/presence/" + sid);
+    onValue(ref(rtdb, ".info/connected"), (s) => {
+      if (s.val() !== true) return;
+      onDisconnect(me).remove();                    // re-armed on every reconnect
+      set(me, true).catch(() => {});
+    });
+  } catch (e) { console.warn("presence off:", e); }
+}
+async function countVisitor() {
+  try {
+    if (localStorage.getItem("hni_counted")) return;   // this browser already counted, skip the IP lookup
+  } catch (e) {}
+  try {
+    const r = await fetch("https://api.ipify.org?format=json");
+    const { ip } = await r.json();
+    if (!ip) return;
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("hni:" + ip));
+    const key = Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+    const res = await runTransaction(ref(rtdb, "hni/visitors/" + key), (cur) => (cur === true ? undefined : true));
+    if (res.committed) await runTransaction(ref(rtdb, "hni/meta/visitors"), (n) => (n || 0) + 1);
+    try { localStorage.setItem("hni_counted", "1"); } catch (e) {}
+  } catch (e) { console.warn("visitor count skipped:", e); }
+}
+let adminDot = null;
+function showAdminDot() {
+  if (adminDot) return;
+  adminDot = document.createElement("div");
+  adminDot.className = "au-online";
+  adminDot.innerHTML = '<i></i><span>… online</span>';
+  document.body.appendChild(adminDot);
+  let online = 0, total = null;
+  const paintDot = () => { $("span", adminDot).textContent = `${online} online` + (total != null ? ` (${total})` : ""); };
+  onValue(ref(rtdb, "hni/presence"), (s) => { online = s.size; paintDot(); });
+  onValue(ref(rtdb, "hni/meta/visitors"), (s) => { const v = s.val(); total = typeof v === "number" ? v : null; paintDot(); });
+}
+presence();
+countVisitor();
+
 // ---------- page wiring ----------
 let current = null;
 const ready = new Promise((resolve) => {
@@ -236,6 +286,7 @@ const ready = new Promise((resolve) => {
     current = u;
     resolve();
     if (u) record(u);
+    if (isAdmin(u)) showAdminDot();
     if (GATED) {
       if (u) { document.documentElement.classList.add("auth-ok"); showUser(u); }
       else location.replace(HOME + "?login=" + encodeURIComponent(location.pathname.replace(/^\//, "") + location.hash));

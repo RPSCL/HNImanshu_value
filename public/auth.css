@@ -83,3 +83,10 @@ html.auth-ok .au-wait{display:none}
 .au-tbl td{text-align:left;font:12.5px var(--au-sans);padding:7px 10px;border-bottom:1px solid var(--au-line);color:var(--au-ink);white-space:nowrap}
 .au-tbl tr:last-child td{border-bottom:0}
 .au-user .au-adm{color:var(--au-acc)}
+
+/* admin only: live "N online (total visitors)" in the bottom-left corner, same look as RollbackCAS */
+.au-online{position:fixed;left:14px;bottom:10px;z-index:250;display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+  pointer-events:none;user-select:none}
+.au-online i{width:6px;height:6px;border-radius:50%;background:#2fbf6a;box-shadow:0 0 3px 1px rgba(47,191,106,.45);animation:au-pulse 2.6s ease-in-out infinite}
+.au-online span{font:9.5px var(--au-mono);letter-spacing:.02em;color:var(--au-faint)}
+@keyframes au-pulse{0%,100%{opacity:.75}50%{opacity:1}}
