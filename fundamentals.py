@@ -2731,7 +2731,10 @@ AUTH_WEB = {
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait){visibility:hidden}</style>\n'
                      '<link rel="stylesheet" href="auth.css">\n'
                      '<script type="module" src="auth.js"></script>\n',
-    "__AUTH_BODY__": '<div class="au-wait"><i></i>Checking login…</div>\n',
+    "__AUTH_BODY__": '<div class="au-wait" id="auWait"><i></i>Checking login…</div>\n'
+                     # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
+                     '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
+                     'var w=document.getElementById("auWait");if(w)w.innerHTML=\'Login could not load. <a href="./">Back to screener</a>\';}},10000);</script>\n',
 }
 AUTH_OFF = {k: "" for k in AUTH_WEB}
 
