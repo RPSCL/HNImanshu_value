@@ -6,6 +6,9 @@
 //     Opening the screener with ?login=<path> pops the popup straight away (the Fundamentals gate sends people here).
 //   • Fundamentals (<html data-auth="required">): the page stays hidden until a login is confirmed; no login →
 //     back to the screener with the popup open. Shows "name · Logout" in the header.
+//   • Every login is recorded in Firestore hni_users/{uid} (username, email, provider, dates). Firestore rules let
+//     only the admin account read that list; the admin gets a "Users" button in the header to see it.
+//   • Passwords never pass through this code's storage: Firebase Authentication keeps them hashed on its servers.
 //
 // Usernames: Firebase needs an email, so username "chirag" is stored as chirag@users.hnimanshu.app (never shown,
 // never mailed). Firebase keeps them unique, so a taken username is refused automatically.
@@ -16,6 +19,9 @@ import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   updateProfile, GoogleAuthProvider, signInWithPopup, signOut,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import {
+  getFirestore, doc, setDoc, getDoc, getDocs, collection, serverTimestamp,
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 // Same Firebase project as RollbackCAS, so one account works on both sites. These values are public by design.
 const firebaseConfig = {
@@ -25,10 +31,14 @@ const firebaseConfig = {
 };
 const USER_DOMAIN = "users.hnimanshu.app";        // username → hidden email for Firebase
 const SESSION_DAYS = 7;                           // log out a week after the last sign-in
+const ADMIN_EMAIL = "admin@" + USER_DOMAIN;       // username "admin" (created by you in the Firebase console)
+const USERS = "hni_users";                        // Firestore collection: one doc per account
 const HOME = "./";                                // the screener
 const GATED = document.documentElement.dataset.auth === "required";
 
-const auth = getAuth(initializeApp(firebaseConfig));
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 const google = new GoogleAuthProvider();
 google.setCustomParameters({ prompt: "select_account" });
 
@@ -36,6 +46,8 @@ const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const toEmail = (u) => `${u.trim().toLowerCase()}@${USER_DOMAIN}`;
 const nameOf = (u) => u.displayName || (u.email || "").replace("@" + USER_DOMAIN, "") || "user";
+const isAdmin = (u) => !!u && u.email === ADMIN_EMAIL;
+const providerOf = (u) => (u.providerData && u.providerData[0] && u.providerData[0].providerId) === "google.com" ? "google" : "username";
 const expired = (u) => {
   const t = Date.parse(u.metadata && u.metadata.lastSignInTime);
   return t && Date.now() - t > SESSION_DAYS * 864e5;
@@ -100,6 +112,7 @@ function buildPopup() {
     if (!/^[a-z0-9._]{3,20}$/.test(u)) return (err.textContent = "Username: 3–20 letters, numbers, dot or underscore.");
     if (p.length < 8) return (err.textContent = "Password must be at least 8 characters.");
     if (mode === "register" && p !== f.p2.value) return (err.textContent = "The two passwords don't match.");
+    if (mode === "register" && /^(admin|root|support|hnimanshu)/.test(u)) return (err.textContent = "That username is taken. Try another.");
     btn.disabled = true; err.textContent = "";
     try {
       if (mode === "register") {
@@ -147,6 +160,58 @@ function message(ex) {
   return "Something went wrong (" + (c || "unknown") + "). Please try again.";
 }
 
+// ---------- user record in Firestore (only the admin can read these) ----------
+async function record(u) {
+  const key = "hni_rec_" + u.uid;                       // write at most once per browser session, keeps Firestore use tiny
+  try { if (sessionStorage.getItem(key)) return; } catch (e) {}
+  const ref = doc(db, USERS, u.uid);
+  const data = { username: nameOf(u), email: u.email || null, provider: providerOf(u), lastLogin: serverTimestamp() };
+  try {
+    const snap = await getDoc(ref).catch(() => null);  // each user may read only their own doc (to keep "created" once)
+    if (!snap || !snap.exists()) data.created = serverTimestamp();
+    await setDoc(ref, data, { merge: true });
+    try { sessionStorage.setItem(key, "1"); } catch (e) {}
+  } catch (e) { console.warn("user record not saved:", e.code || e); }   // never blocks the page
+}
+
+// ---------- admin: list of users ----------
+const fmt = (t) => (t && t.toDate ? t.toDate().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "–");
+async function openUsers() {
+  let back = $(".au-users");
+  if (!back) {
+    back = document.createElement("div");
+    back.className = "au-back au-users";
+    back.innerHTML = `<div class="au-box au-wide" role="dialog" aria-modal="true">
+      <button class="au-x" type="button" aria-label="Close">×</button>
+      <h2 class="au-title">Users <span class="au-count"></span></h2>
+      <input class="au-q" placeholder="Search username or email" spellcheck="false">
+      <div class="au-tbl"></div></div>`;
+    document.body.appendChild(back);
+    const close = () => back.classList.remove("open");
+    $(".au-x", back).addEventListener("click", close);
+    back.addEventListener("click", (e) => { if (e.target === back) close(); });
+    back.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") close(); });
+    $(".au-q", back).addEventListener("input", (e) => paint(back, e.target.value));
+  }
+  back.classList.add("open");
+  $(".au-tbl", back).innerHTML = '<p class="au-sub">Loading…</p>';
+  try {
+    const snap = await getDocs(collection(db, USERS));
+    back._rows = snap.docs.map((d) => d.data()).sort((a, b) => ((b.lastLogin && b.lastLogin.seconds) || 0) - ((a.lastLogin && a.lastLogin.seconds) || 0));
+    paint(back, "");
+  } catch (e) {
+    $(".au-tbl", back).innerHTML = `<p class="au-err">Couldn't load users (${esc(e.code || e)}). Check the Firestore rules.</p>`;
+  }
+}
+function paint(back, q) {
+  q = q.trim().toLowerCase();
+  const rows = (back._rows || []).filter((r) => !q || (r.username + " " + (r.email || "")).toLowerCase().includes(q));
+  $(".au-count", back).textContent = `· ${rows.length}`;
+  $(".au-tbl", back).innerHTML = `<table><thead><tr><th>Username</th><th>Email</th><th>Via</th><th>Joined</th><th>Last login</th></tr></thead><tbody>${
+    rows.map((r) => `<tr><td>${esc(r.username || "")}</td><td>${r.provider === "google" ? esc(r.email || "") : "–"}</td><td>${esc(r.provider || "")}</td><td>${fmt(r.created)}</td><td>${fmt(r.lastLogin)}</td></tr>`).join("")
+  }</tbody></table>`;
+}
+
 // ---------- signed-in chip (Fundamentals header) ----------
 function showUser(u) {
   const host = document.querySelector("header .global");
@@ -155,8 +220,11 @@ function showUser(u) {
   const el = document.createElement("span");
   el.className = "au-user";
   el.title = "Signed in as " + n;
-  el.innerHTML = `<b>${esc(n.charAt(0).toUpperCase())}</b><span class="au-name">${esc(n)}</span><button type="button">Logout</button>`;
-  $("button", el).addEventListener("click", async () => { await signOut(auth); location.href = HOME; });
+  el.innerHTML = `<b>${esc(n.charAt(0).toUpperCase())}</b><span class="au-name">${esc(n)}</span>`
+    + (isAdmin(u) ? `<button type="button" class="au-adm">Users</button>` : "")
+    + `<button type="button" class="au-out">Logout</button>`;
+  $(".au-out", el).addEventListener("click", async () => { await signOut(auth); location.href = HOME; });
+  if (isAdmin(u)) $(".au-adm", el).addEventListener("click", openUsers);
   host.insertBefore(el, host.querySelector("#theme-toggle"));
 }
 
@@ -167,6 +235,7 @@ const ready = new Promise((resolve) => {
     if (u && expired(u)) { await signOut(auth); u = null; }   // 7-day session limit
     current = u;
     resolve();
+    if (u) record(u);
     if (GATED) {
       if (u) { document.documentElement.classList.add("auth-ok"); showUser(u); }
       else location.replace(HOME + "?login=" + encodeURIComponent(location.pathname.replace(/^\//, "") + location.hash));
