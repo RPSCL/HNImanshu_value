@@ -1100,9 +1100,15 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:16p
 .chip.strike:has(input:checked) span{text-decoration:line-through;text-decoration-color:var(--bad);text-decoration-thickness:2px}
 .chip.ytoggle{position:relative}
 .chip.ytoggle input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
-.chip.ytoggle::before{content:"";width:9px;height:9px;border-radius:50%;border:1.5px solid currentColor}
-.chip.ytoggle:has(input:checked){background:var(--brass);border-color:var(--brass);color:var(--bg);font-weight:600}
-.chip.ytoggle:has(input:checked)::before{background:currentColor}
+.chip.ytoggle::before{content:"";width:10px;height:10px;border-radius:50%;border:1.5px solid currentColor;box-sizing:border-box;flex-shrink:0}
+.chip.ytoggle:has(input:checked){background:var(--brass);border-color:var(--brass);color:var(--bg)}
+.chip.ytoggle:has(input:checked)::before{background:radial-gradient(circle, currentColor 0 2px, transparent 2.6px)}   /* dot inside the ring */
+/* header never shifts: chips that change content get a fixed width (set in JS from their widest option) */
+.global .chip{position:relative;flex-shrink:0}
+.global .chip .fsel{position:static;flex:1;min-width:0}
+.global .chip .fsel-btn{width:100%;justify-content:space-between}
+.global .chip .fsel-menu{left:-1px;right:-1px;min-width:0;top:calc(100% + 6px)}   /* exactly under the chip, same width */
+#backChip{justify-content:center}
 .chip:has(input:focus-visible){outline:2px solid var(--brass);outline-offset:2px}
 .chip select{border:0;background:transparent;padding:0 2px;color:var(--ink);font-size:12.5px}
 .banner{display:flex;gap:10px 18px;flex-wrap:wrap;align-items:baseline;background:var(--brassbg);border:1px solid var(--brass);border-radius:10px;padding:12px 16px;margin-bottom:16px;color:var(--ink)}
@@ -1251,7 +1257,7 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
   </div>
   <div class="global">
     <a class="btn back" id="backBtn" href="./"><span class="lg">Back to </span>Screener</a>
-    <label class="chip">List <select id="uniSel"></select></label>
+    <label class="chip" id="uniChip">List <select id="uniSel"></select></label>
     <label class="chip strike" title="Click to hide PSU stocks (struck through = hidden)"><input type="checkbox" id="hidePSU"><span>PSU</span></label>
     <label class="chip strike" title="Click to hide semi-PSU stocks (struck through = hidden)"><input type="checkbox" id="hideSemi"><span>Semi PSU</span></label>
     <label class="chip" id="sameChip" title="Same method: rebuild TODAY's numbers with the exact engine used for 1Y back (raw yearly / quarterly rows + one Angel price), instead of Screener's own ratios, so today and 1Y back are like-for-like. Always on in 1Y back."><input type="checkbox" id="sameM"> Same method</label>
@@ -2596,7 +2602,7 @@ function setHistorical(on, key) {
 }
 hist.checked = false;
 hist.addEventListener('change', () => setHistorical(hist.checked));
-bsel.addEventListener('change', () => setHistorical(true, bsel.value));   // picking a date turns Historical on
+bsel.addEventListener('change', () => setHistorical(GF.back, bsel.value));   // picking a date keeps Historical as it is
 const us = $('#uniSel');
 us.innerHTML = '<option value="all">All lists</option>' + D.lists.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
 us.value = D.lists.includes(GF.uni) ? GF.uni : 'all';
@@ -2651,6 +2657,21 @@ function fancySelect(sel) {
 }
 document.addEventListener('click', () => closeFsel());
 document.querySelectorAll('select').forEach(fancySelect);   // header List picker
+function lockChipWidth(chip, sel) {                        // widest option decides the width, so choosing never moves anything
+  if (!chip || !sel || !sel._paint) return;
+  chip.style.width = '';
+  const keep = sel.selectedIndex; let w = 0;
+  for (let i = 0; i < sel.options.length; i++) { sel.selectedIndex = i; sel._paint(); w = Math.max(w, chip.offsetWidth); }
+  sel.selectedIndex = keep; sel._paint();
+  if (w) chip.style.width = Math.ceil(w) + 'px';
+}
+function lockHeader() {
+  lockChipWidth($('#uniChip'), $('#uniSel')); lockChipWidth($('#backPer'), $('#backSel'));
+  const h = $('#backChip');                                // Historical: same width on and off
+  if (h) { h.style.width = ''; h.style.width = Math.ceil(h.offsetWidth) + 'px'; }
+}
+lockHeader();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(lockHeader);
 new MutationObserver(() => view.querySelectorAll('select:not([data-fancy])').forEach(fancySelect))
   .observe(view, {childList:true, subtree:true});            // filter boxes re-render on every change, not only on route
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeFsel(); });
