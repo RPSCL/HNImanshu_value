@@ -103,18 +103,25 @@ def load_symbols():
 # ─────────────────────────────────────────────────────────────────────────────
 # Angel scrip master: SYMBOL → token
 # ─────────────────────────────────────────────────────────────────────────────
+SCRIP_KEYS = ("token", "symbol", "name", "exch_seg", "instrumenttype")   # all that build_token_map reads
+
+
 def scrip_master():
+	"""Angel's list of every instrument → SYMBOL / token. Downloaded once per Indian day, then read from
+	.cache/scrip_master_YYYYMMDD.json. Only NSE rows and the 5 fields used are kept (~40 MB → ~3 MB),
+	so the GitHub cache that carries it between runs stays small and restores in a second."""
 	CACHE_DIR.mkdir(exist_ok=True)
-	cache = CACHE_DIR / f"scrip_master_{date.today():%Y%m%d}.json"
+	cache = CACHE_DIR / f"scrip_master_{datetime.now(IST):%Y%m%d}.json"      # IST day, not the runner's UTC day
 	if cache.exists():
+		log(f"Angel scrip master: today's saved copy ({cache.name})")
 		return json.loads(cache.read_text())
-	log("Downloading Angel scrip master …")
+	log("Downloading Angel scrip master (first run today) …")
 	r = requests.get(SCRIP_URL, timeout=120)
 	r.raise_for_status()
-	data = r.json()
+	data = [{k: m.get(k) for k in SCRIP_KEYS} for m in r.json() if m.get("exch_seg") == "NSE"]
 	for old in CACHE_DIR.glob("scrip_master_*.json"):
 		old.unlink()
-	cache.write_text(json.dumps(data))
+	cache.write_text(json.dumps(data, separators=(",", ":")))
 	return data
 
 

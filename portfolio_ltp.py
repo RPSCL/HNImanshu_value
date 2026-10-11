@@ -5,12 +5,19 @@ portfolio_ltp.py — live LTP (+ previous close) from Angel One for the stocks h
 What it does
   1. Reads every portfolio in Firestore (hni_portfolio/{uid}) with the Firebase service account and works out
      which symbols are still held (buys − sells > 0). Nothing else is read.
-  2. Checks NSE's symbol-change list: a held symbol that NSE renamed (e.g. OLDNAME → NEWNAME) is priced under
-     the new symbol, and the rename is published so the website can update the holding by itself.
+  2. Once per Indian day, checks every held symbol against NSE's master lists (EQUITY_L.csv main board,
+     SME_EQUITY_L.csv) and the symbol-change list:
+       • renamed by NSE (OLDNAME → NEWNAME): priced under the new symbol; the website moves the holding itself
+       • not on NSE's list any more and not renamed (delisted / suspended / typo): listed in "notListed",
+         the Portfolio page asks the owner to update the symbol
+       • the company's current name on NSE goes into "names" (a name change shows up by itself)
+     The three NSE files and Angel's scrip master are downloaded on the first run of the day only and kept in
+     .cache/ (the workflow carries .cache/ between runs with actions/cache, keyed by the IST date).
   3. Logs in to Angel One (same secrets / login as fetch_prices.py) and asks for LTP + previous close,
      50 symbols per call (Angel's limit), about 1 call a second.
   4. Writes ONE Firestore document, hni_market/ltp:
-        {asOf, prices: {SYMBOL: {ltp, prev}}, renames: {OLD: NEW}, missing: [symbols Angel doesn't know]}
+        {asOf, prices: {SYMBOL: {ltp, prev}}, renames: {OLD: NEW}, missing: [symbols Angel doesn't know],
+         notListed: [held symbols on no NSE list], names: {SYMBOL: company name}, checked: "YYYY-MM-DD"}
      The Portfolio page reads it: Value, P&L and Day gain use these prices; renames are applied automatically.
 
 Run
@@ -31,12 +38,56 @@ from datetime import datetime
 
 import requests
 
-from fetch_prices import Angel, scrip_master, build_token_map, log, IST   # reuse login + symbol → token map
+from fetch_prices import Angel, scrip_master, build_token_map, log, IST, CACHE_DIR   # reuse login + symbol → token map
 
 PORTFOLIOS = "hni_portfolio"
 OUT_COLL, OUT_DOC = "hni_market", "ltp"
 BATCH = 50                                   # Angel getMarketData: max 50 tokens per request
 SYMBOL_CHANGE_URL = "https://nsearchives.nseindia.com/content/equities/symbolchange.csv"
+EQUITY_URLS = ["https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv",          # main board
+               "https://nsearchives.nseindia.com/emerge/corporates/content/SME_EQUITY_L.csv"]   # SME (Emerge)
+NSE_HEAD = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", "Referer": "https://www.nseindia.com/"}
+
+
+def nse_file(url):
+	"""Text of an NSE archive file, downloaded once per IST day and kept in .cache/. None if NSE can't be reached."""
+	CACHE_DIR.mkdir(exist_ok=True)
+	day = datetime.now(IST).strftime("%Y%m%d")
+	name = url.rsplit("/", 1)[1].split(".")[0].lower()
+	f = CACHE_DIR / f"nse_{name}_{day}.csv"
+	if f.exists():
+		return f.read_text(encoding="utf-8")
+	try:
+		r = requests.get(url, timeout=25, headers=NSE_HEAD)
+		r.raise_for_status()
+		text = r.content.decode("utf-8", "ignore")
+	except Exception as e:                                  # NSE sometimes blocks cloud IPs; tried again next run
+		log(f"NSE {name}: not reachable ({e})")
+		return None
+	for old in CACHE_DIR.glob(f"nse_{name}_*.csv"):
+		old.unlink()
+	f.write_text(text, encoding="utf-8")
+	log(f"NSE {name}: downloaded (first run today)")
+	return text
+
+
+def nse_master():
+	"""{SYMBOL: company name} for everything listed on NSE today (main board + SME). Empty if NSE was unreachable."""
+	out = {}
+	for url in EQUITY_URLS:
+		text = nse_file(url)
+		if not text:
+			continue
+		rows = list(csv.reader(io.StringIO(text)))
+		if not rows:
+			continue
+		head = [c.strip().upper() for c in rows[0]]
+		si = next((i for i, c in enumerate(head) if c == "SYMBOL"), 0)
+		ni = next((i for i, c in enumerate(head) if "NAME" in c), 1)
+		for r_ in rows[1:]:
+			if len(r_) > max(si, ni) and r_[si].strip():
+				out[r_[si].strip().upper()] = r_[ni].strip()
+	return out
 
 
 def held_symbols(db):
@@ -58,18 +109,15 @@ def held_symbols(db):
 
 def nse_renames():
 	"""{OLD: NEW} from NSE's symbol-change file. Best effort: an empty dict if NSE can't be reached."""
-	try:
-		r = requests.get(SYMBOL_CHANGE_URL, timeout=30, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.nseindia.com/"})
-		r.raise_for_status()
-	except Exception as e:                                  # NSE sometimes blocks cloud IPs; prices still work without it
-		log(f"Symbol-change list not available ({e}); renames skipped this run")
+	text = nse_file(SYMBOL_CHANGE_URL)
+	if not text:                                            # prices still work without it
 		return {}
-	rows = list(csv.reader(io.StringIO(r.content.decode("utf-8", "ignore"))))
+	rows = list(csv.reader(io.StringIO(text)))
 	if not rows:
 		return {}
 	head = [c.strip().upper() for c in rows[0]]
-	o = next((i for i, c in enumerate(head) if "OLD" in c), None)
-	n = next((i for i, c in enumerate(head) if "NEW" in c), None)
+	o = next((i for i, c in enumerate(head) if "OLD" in c or "KEY_SYMBOL" in c), None)   # NSE: SM_KEY_SYMBOL = old symbol
+	n = next((i for i, c in enumerate(head) if "NEW" in c and "SYMBOL" in c), None)
 	body = rows[1:] if o is not None and n is not None else rows
 	if o is None or n is None:                              # no header: company, old symbol, new symbol, date
 		o, n = 1, 2
@@ -105,6 +153,22 @@ def main():
 		log("Renamed by NSE: " + ", ".join(f"{k}→{v}" for k, v in renames.items()))
 
 	tmap = build_token_map(scrip_master())                 # {SYMBOL: (angel_symbol, token)}
+
+	# daily match of every held symbol with NSE's master list
+	master = nse_master()
+	names, not_listed = {}, []
+	for s in syms:
+		live = renames.get(s, s)
+		if master:
+			if live in master:
+				names[live] = master[live]
+			else:
+				not_listed.append(s)
+		elif live not in tmap:                              # NSE unreachable: Angel's list is the fallback check
+			not_listed.append(s)
+	log(f"NSE check: {len(syms) - len(not_listed)} of {len(syms)} held symbols listed"
+	    + (f"; not listed: {', '.join(not_listed)}" if not_listed else "")
+	    + ("" if master else " (NSE list unreachable, checked against Angel's list)"))
 	want, missing = {}, []
 	for s in syms:
 		live = renames.get(s, s)
@@ -137,7 +201,8 @@ def main():
 			prices[old] = prices[new]
 	log(f"Priced {len(prices)} of {len(syms)} held symbols")
 
-	doc = {"asOf": datetime.now(IST).strftime("%Y-%m-%d %H:%M"), "prices": prices, "renames": renames, "missing": missing}
+	doc = {"asOf": datetime.now(IST).strftime("%Y-%m-%d %H:%M"), "prices": prices, "renames": renames, "missing": missing,
+	       "notListed": not_listed, "names": names, "checked": datetime.now(IST).strftime("%Y-%m-%d")}
 	if a.dry:
 		print(doc)
 		return 0

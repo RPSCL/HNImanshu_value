@@ -2706,6 +2706,36 @@ async function pfApplyRenames() {
   PF.txns = PF.txns.map(t => (t.sym && ren[t.sym] && !lock.has(t.id)) ? (done.add(t.sym + ' → ' + ren[t.sym]), Object.assign({}, t, {sym: ren[t.sym]})) : t);
   if (done.size) { await pfSave(); toast('Renamed on NSE: ' + [...done].join(', ')); }
 }
+/* held symbols that portfolio_ltp.py did not find on NSE's master list today → one line, each symbol opens "Update symbol" */
+function pfNotListed(open) {
+  const nl = new Set((PF.mkt && PF.mkt.notListed) || []), bad = open.filter(r => nl.has(r.sym)).map(r => r.sym);
+  if (!bad.length) return '';
+  return `<p class="pf-err">⚠ Not on NSE's list today: ${bad.map(x => `<button type="button" class="btn ghost" data-rn="${esc(x)}" title="Update the symbol / name">${esc(x)} ✎</button>`).join(' ')}
+    — delisted, suspended or the symbol changed. Tap one to update it.</p>`;
+}
+/* "⟳ Live prices" (admins, when the Worker address is set in auth.js): starts ltp.yml on GitHub, then checks
+   hni_market/ltp every 15 s until the new prices land (about 1–2 minutes), and redraws */
+const pfCanRefresh = () => !!(WEB && window.hniStore && window.hniStore.canRefresh && window.hniStore.canRefresh());
+let PF_POLL = null;
+async function pfRefresh(btn) {
+  if (PF_POLL) return;
+  btn.disabled = true; btn.textContent = '⟳ Starting…';
+  let r; try { r = await window.hniStore.refresh(); } catch (e) { r = {error: 'no connection'}; }
+  if (r.error && !r.running) { btn.disabled = false; btn.textContent = '⟳ Live prices'; return toast('Live prices: ' + r.error); }
+  toast(r.running ? 'Already running · prices update in a minute or two' : 'Started · new prices in about 2 minutes');
+  btn.textContent = '⟳ Fetching…';
+  const was = PF.mkt && PF.mkt.asOf, t0 = Date.now();
+  PF_POLL = setInterval(async () => {
+    let m = null; try { m = await window.hniStore.market(); } catch (e) {}
+    const fresh = m && m.asOf && m.asOf !== was;
+    if (!fresh && Date.now() - t0 < 6 * 60000) return;
+    clearInterval(PF_POLL); PF_POLL = null;
+    if (fresh) { PF.mkt = m; await pfApplyRenames(); PF_HELD = pfHeld(); toast('Live prices updated · ' + m.asOf.slice(11) + ' IST'); }
+    else toast('No new prices yet. See the Actions tab on GitHub.');
+    if ((location.hash || '') === '#/portfolio') route();
+  }, 15000);
+}
+window.addEventListener('hni-admin', () => { if ((location.hash || '') === '#/portfolio' && PF.txns) route(); });   // extra admin confirmed → show the button
 /* LTP: live Angel price for held stocks when portfolio_ltp.py has run, else the latest close in this page */
 const pfLive = sym => PF.mkt && PF.mkt.prices && PF.mkt.prices[sym];
 const pfLtp = sym => { const l = pfLive(sym); if (l && l.ltp) return l.ltp; const s = TODAY.get(sym); return s && ok(s.cmp) ? s.cmp : null; };
@@ -2869,16 +2899,28 @@ function pfSummary(txns, mkt) {
 /* admin (auth.js Users list): read-only look at any user's portfolio */
 window.hniPf = {
   summary(d, mkt) { const P = pfSummary(pfTxnsOf(d), mkt); return {worth: P.worth, gain: P.gain, gainPct: P.gainPct, day: P.day, dayPct: P.dayPct, n: P.open.length, cash: P.R.cash}; },
+  /* the whole portfolio, read-only: holdings, closed and EVERY transaction, as plain light tables (no sorting /
+     batching machinery), so the overlay opens at once and scrolls smoothly even with thousands of rows */
   html(d, mkt) {
-    const t = pfTxnsOf(d), P = pfSummary(t, mkt);
+    const t = pfTxnsOf(d), P = pfSummary(t, mkt), nl = new Set((mkt && mkt.notListed) || []);
     const k = (a, b, c = '') => `<div class="pf-k ${c}"><span>${a}</span><b>${b}</b></div>`;
-    const rows = P.open.sort((a, b) => b.value - a.value).map(r => `<tr><td class="l"><b>${esc(r.sym)}</b></td><td>${fmt(r.qty, 0)}</td><td>${fmt(r.avg, 2)}</td><td>${r.ltp == null ? '–' : fmt(r.ltp, 2)}</td>
-      <td>${fmt(r.value, 0)}</td><td>${r.priced ? signed(r.pnl) : '–'}</td><td>${r.day == null ? '–' : signed(r.day)}</td></tr>`).join('');
-    const tx = pfSorted(t).slice(-12).reverse().map(x => `<tr><td class="l">${esc(x.date || '')}</td><td class="l">${TX_LABEL[x.t] || x.t}</td><td class="l">${x.sym ? esc(x.sym) + ' ' + fmt(x.qty, 0) + ' @ ' + fmt(x.px, 2) : '₹' + fmt(x.amt, 0)}</td></tr>`).join('');
-    return `<div class="pf-sum">${k('Net gain', rs(P.gain, true), 'gain ' + (P.gain >= 0 ? 'pos' : 'neg'))}${k('Day', P.day == null ? '–' : signed(P.day))}${k('Net worth', rs(P.worth))}${k('Cash', rs(P.R.cash))}${k('Holdings', rs(P.hold))}${k('Closed', P.closed.length)}</div>
-      <div class="au-tbl"><table><thead><tr><th>Stock</th><th>Qty</th><th>Avg</th><th>LTP</th><th>Value</th><th>P&amp;L</th><th>Day</th></tr></thead><tbody>${rows || '<tr><td class="l" colspan="7">No open holdings.</td></tr>'}</tbody></table></div>
-      <div class="au-sub" style="margin:12px 0 6px">Latest transactions</div>
-      <div class="au-tbl"><table><tbody>${tx || '<tr><td class="l">None yet.</td></tr>'}</tbody></table></div>`;
+    const h = (title, n, sub = '') => `<div class="au-pfh">${title} <small>${n}${sub ? ' · ' + sub : ''}</small></div>`;
+    const tbl = (head, body, empty, cols) => `<div class="au-tbl"><table><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols}">${empty}</td></tr>`}</tbody></table></div>`;
+    const rows = P.open.sort((a, b) => b.value - a.value).map(r => `<tr><td><b>${esc(r.sym)}</b>${nl.has(r.sym) ? ' <span class="au-dn" title="Not on NSE\'s list today">⚠</span>' : ''}</td><td class="r">${fmt(r.qty, 0)}</td><td class="r">${fmt(r.avg, 2)}</td><td class="r">${r.ltp == null ? '–' : fmt(r.ltp, 2)}</td>
+      <td class="r">${fmt(r.value, 0)}</td><td class="r">${r.priced ? signed(r.pnl) : '–'}</td><td class="r">${r.day == null ? '–' : signed(r.day)}</td></tr>`).join('');
+    const cl = P.closed.slice().sort((a, b) => String(b.last || '').localeCompare(String(a.last || ''))).map(r => `<tr><td><b>${esc(r.sym)}</b></td><td class="r">${fmt(r.sQty, 0)}</td>
+      <td class="r">${fmt(r.bQty ? r.bAmt / r.bQty : null, 2)} → ${fmt(r.sQty ? r.sAmt / r.sQty : null, 2)}</td><td class="r">${signed(r.realized - r.charges)}</td><td>${esc(r.last || '')}</td></tr>`).join('');
+    const tx = pfSorted(t).reverse().map(x => `<tr><td>${esc(x.date || '')}</td><td>${TX_LABEL[x.t] || x.t}</td><td>${x.sym ? '<b>' + esc(x.sym) + '</b> ' + fmt(x.qty, 0) + ' @ ' + fmt(x.px, 2) : ''}</td>
+      <td class="r">₹${fmt(x.sym ? x.qty * x.px : x.amt, 0)}</td><td class="r">${x.ch ? fmt(x.ch, 2) : ''}</td></tr>`).join('');
+    const bad = P.open.filter(r => nl.has(r.sym)).map(r => r.sym);
+    return `<div class="pf-sum">${k('Net gain', rs(P.gain, true), 'gain ' + (P.gain >= 0 ? 'pos' : 'neg'))}${k('Day', P.day == null ? '–' : signed(P.day))}${k('Net worth', rs(P.worth))}${k('Cash', rs(P.R.cash))}${k('Holdings', rs(P.hold))}${k('Money in', rs(P.deposits))}</div>
+      ${bad.length ? `<p class="au-pfwarn">⚠ Not on NSE's list today: ${bad.map(esc).join(', ')} (delisted, suspended or a wrong symbol).</p>` : ''}
+      ${h('Holdings', P.open.length, P.asOf ? 'LTP ' + esc(P.asOf) : 'last close')}
+      ${tbl('<th>Stock</th><th class="r">Qty</th><th class="r">Avg</th><th class="r">LTP</th><th class="r">Value</th><th class="r">P&amp;L</th><th class="r">Day</th>', rows, 'No open holdings.', 7)}
+      ${h('Closed', P.closed.length)}
+      ${tbl('<th>Stock</th><th class="r">Qty</th><th class="r">Buy → Sell ₹</th><th class="r">Net ₹</th><th>Closed</th>', cl, 'None.', 5)}
+      ${h('Transactions', t.length, 'newest first')}
+      ${tbl('<th>Date</th><th>Type</th><th>Stock</th><th class="r">Amount</th><th class="r">Charges</th>', tx, 'None yet.', 5)}`;
   },
 };
 function portfolioView() {
@@ -2903,8 +2945,10 @@ function portfolioView() {
         <button type="button" class="btn" data-open="in">Pay in</button>
         <button type="button" class="btn" data-open="out">Pay out</button>
         <button type="button" class="btn ghost" data-open="rates" title="Brokerage and tax rates used to work out charges" aria-label="Charges settings">⚙<span class="lg"> Charges</span></button>
+        ${pfCanRefresh() ? `<button type="button" class="btn ghost" data-open="ltp" title="Fetch live prices from Angel now (admins)"${PF_POLL ? ' disabled' : ''}>${PF_POLL ? '⟳ Fetching…' : '⟳ Live prices'}</button>` : ''}
       </div>
     </div>${PF.err ? `<p class="pf-err">${esc(PF.err)}</p>` : ''}
+    ${pfNotListed(open)}
     ${R.bad ? `<p class="pf-err">A sale of ${esc(R.bad.sym)} on ${esc(R.bad.date || 'an undated day')} is larger than the shares held then. Check the dates in Transactions.</p>` : ''}
     <div class="pf-sum">
       ${tile('Net gain', rs(gain, true), gainPct == null ? '' : (gainPct > 0 ? '+' : gainPct < 0 ? '−' : '') + fmt(Math.abs(gainPct), 1) + '% on money put in', 'gain ' + (gain >= 0 ? 'pos' : 'neg'))}
@@ -2934,7 +2978,7 @@ function portfolioView() {
   if (tb && ledRows.length) tb.querySelector('.pf-h').insertAdjacentHTML('afterend', '<button type="button" class="pf-rm all" id="pfWipe" title="Delete every entry in your portfolio">Delete all</button>');
   if (!ledRows.length) RT.querySelectorAll('tbody')[1].innerHTML = '<tr><td class="l na" colspan="5">Every Pay in, Pay out, Buy and Sell shows here, newest first. ✎ edits, × deletes.</td></tr>';
   view.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => {
-    const k = b.dataset.open; k === 'trade' ? pfTradeForm({}) : k === 'rates' ? pfRatesForm() : pfCashForm({t: k});
+    const k = b.dataset.open; k === 'trade' ? pfTradeForm({}) : k === 'rates' ? pfRatesForm() : k === 'ltp' ? pfRefresh(b) : pfCashForm({t: k});
   }));
   const wipe = $('#pfWipe');
   if (wipe) wipe.addEventListener('click', () => typeConfirm('Delete all', `Every holding, closed position, pay in / out and trade (${PF.txns.length} entries) is deleted. Your charge rates stay.`,
@@ -2944,8 +2988,9 @@ function portfolioView() {
    rows re-drawn by the search box or added while scrolling work straight away */
 document.addEventListener('click', e => {
   if ((location.hash || '') !== '#/portfolio' || !PF.txns) return;
-  const b = e.target.closest && e.target.closest('[data-trade],[data-edit],[data-del],[data-rm]');
+  const b = e.target.closest && e.target.closest('[data-trade],[data-edit],[data-del],[data-rm],[data-rn]');
   if (!b || !view.contains(b)) return;
+  if (b.dataset.rn) return pfRenameForm(b.dataset.rn);
   if (b.dataset.trade) return pfTradeForm({sym: b.dataset.trade, t: 'sell'});
   if (b.dataset.edit) {
     const x = PF.txns.find(t => t.id === b.dataset.edit); if (!x) return;
