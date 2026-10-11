@@ -1093,11 +1093,23 @@ body.day .toggle-thumb{transform:translateX(16px)}
 .pf-ico.del{font-size:18px}
 .pf-ico.del:hover{color:var(--bad);background:var(--badbg)}
 .pf-acts2{display:inline-flex;gap:2px}
+.pf-lock{display:inline-block;padding:3px 8px;font-size:12px;opacity:.6;cursor:help}
+.pf-rm{border:1px solid var(--line);background:transparent;color:var(--mute);font:600 11px var(--mono);padding:3px 9px;border-radius:6px;cursor:pointer;white-space:nowrap}
+.pf-rm:hover{border-color:var(--bad);color:var(--bad);background:var(--badbg)}
+.pf-rm.all{margin-right:auto}
+.btn.primary.danger{background:var(--bad);border-color:var(--bad)}
+.btn.primary:disabled{opacity:.45;cursor:not-allowed}
+.seg button:disabled{opacity:.35;cursor:not-allowed}
 .pf-t{font:600 10.5px var(--mono);padding:2px 6px;border-radius:5px;border:1px solid var(--line);white-space:nowrap}
 .pf-t.buy{color:var(--good);border-color:var(--good)}
 .pf-t.sell{color:var(--bad);border-color:var(--bad)}
 .pf-t.in,.pf-t.out{color:var(--brass);border-color:var(--brass)}
-/* bag next to every company name: opens Buy / Sell; brass when you hold the stock */
+/* header: Portfolio bag, just left of the user's initials */
+.btn.hbag{gap:6px;border-color:var(--line);color:var(--ink)}
+.btn.hbag:hover,.btn.hbag.on{border-color:var(--brass);color:var(--brass);background:var(--brassbg)}
+@media (max-width:700px){.btn.hbag{position:absolute;top:13px;right:calc(var(--au-right,104px) + 40px);width:32px;height:32px;padding:0;justify-content:center;border-radius:50%}}
+.ind{vertical-align:middle}
+/* bag left of every industry name: opens Buy / Sell; brass when you hold the stock */
 .bag{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;margin:-3px 6px -3px -2px;vertical-align:middle;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--faint);cursor:pointer;padding:0;opacity:.75}
 .bag:hover{opacity:1;color:var(--brass);border-color:var(--line);background:var(--brassbg)}
 .bag.held{opacity:1;color:var(--brass)}
@@ -1377,6 +1389,7 @@ __AUTH_BODY__<script>
       <label class="chip backsel" id="backPer" title="Historical date"><select id="backSel" aria-label="Historical period"></select></label>
     </div>
     <button class="btn primary" id="saveHtml">Save as HTML</button>
+    <a class="btn hbag" id="pfBag" href="#/portfolio" title="Portfolio" aria-label="Portfolio"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg><span class="lg">Portfolio</span></a>
     <div id="theme-toggle" title="Day / night">
       <span class="toggle-icon moon-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
       <button class="toggle-track" aria-label="Toggle day / night theme"><div class="toggle-thumb"></div></button>
@@ -1389,7 +1402,6 @@ __AUTH_BODY__<script>
   <a href="#/value" data-t="value">Value screen</a>
   <a href="#/momentum" data-t="momentum">Momentum</a>
   <a href="#/all" data-t="all">All Stocks</a>
-  <a href="#/portfolio" data-t="portfolio">Portfolio</a>
   <a href="#/method" data-t="method">Methodology</a>
 </nav>
 <main id="view"></main>
@@ -1736,7 +1748,8 @@ const pctPill = (v, good, d=1, suf='%') => v==null ? NA : `<span class="pill ${g
 const ppPill = (v, upGood=true) => v==null ? NA : `<span class="pill ${Math.abs(v)<0.05?'':((v>0)===upGood?'disc':'prem')}">${v>0?'+':''}${fmt(v,2)} pp</span>`;
 const psuTag = s => s.psu === 'psu' ? '<span class="tag" title="Government-owned">PSU</span>' : s.psu === 'semi' ? '<span class="tag semi" title="Large government / PSU stake, not controlling">semi</span>' : '';
 const symCell = s => (s.url ? `<a class="sym" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.sym)}</a>` : `<b>${esc(s.sym)}</b>`) + psuTag(s);
-const indLink = s => `<a class="ind" href="#/industry/${encodeURIComponent(s.ind)}">${esc(s.ind)}</a>`;
+const bagBtn = s => `<button type="button" class="bag${PF_HELD.has(s.sym) ? ' held' : ''}" data-bag="${esc(s.sym)}" title="Buy / sell ${esc(s.sym)} in your Portfolio" aria-label="Buy or sell ${esc(s.sym)}">${BAG}</button>`;
+const indLink = s => bagBtn(s) + `<a class="ind" href="#/industry/${encodeURIComponent(s.ind)}">${esc(s.ind)}</a>`;   // bag left of the industry: add / subtract in Portfolio
 const premCell = s => { const p = prem(s); if (p==null) return '<span class="na">N/A</span>';
   return `<span class="pill ${p<=0?'disc':'prem'}">${p<=0?'':'+'}${fmt(p)}% ${p<=0?'disc.':'prem.'}</span>`; };
 const scoreCell = s => {
@@ -1772,7 +1785,8 @@ const trendOk = (s, min) => min === '' || min == null || (s.tr != null && s.tr.p
 const BAG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg>';
 const C = {
   sym: {k:'sym', label:'Symbol', l:1, v:s=>s.sym, f:symCell},
-  name: {k:'name', label:'Company', l:1, v:s=>s.name, f:s=>`<button type="button" class="bag${PF_HELD.has(s.sym) ? ' held' : ''}" data-bag="${esc(s.sym)}" title="Buy / sell ${esc(s.sym)} in your Portfolio" aria-label="Buy or sell ${esc(s.sym)}">${BAG}</button><span class="co" title="${esc(s.name)}">${esc(s.name)}</span>`},
+  name: {k:'name', label:'Company', l:1, v:s=>s.name, f:s=>`<span class="co" title="${esc(s.name)}">${esc(s.name)}</span>`},
+  nameBag: {k:'name', label:'Company', l:1, v:s=>s.name, f:s=>bagBtn(s) + `<span class="co" title="${esc(s.name)}">${esc(s.name)}</span>`},   // industry page: no Industry column
   ind: {k:'ind', label:'Industry', l:1, v:s=>s.ind, f:indLink},
   cmp: {k:'cmp', label:'CMP ₹', v:s=>s.cmp, f:s=>fmt(s.cmp,2)},
   patG: {k:'patG', label:'Profit growth since', tip:'TTM profit now vs TTM profit a year earlier', x:s=>sv(s,'patL') || sv(s,'patG'),
@@ -1956,7 +1970,7 @@ function industryView(name) {
   else stats([['Industry PE (selected)', fmt(g.pe[method])], ['Median PE', fmt(g.pe.median)], ['Average PE', fmt(g.pe.mean)],
          ['Cap-weighted PE', fmt(g.pe.weighted)], ['Median PB', fmt(g.medPB,2)], ['Stocks', g.n]], g.stocks.filter(vis), yoyTiles(g.stocks.filter(vis)));
   view.appendChild(pePicker());
-  view.appendChild(makeTable('ind', [C.sym, C.name, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...assetCols(), C.score, C.q, C.cagr, C.fcfy, C.dy, C.proChg, C.mcap, C.from52],
+  view.appendChild(makeTable('ind', [C.sym, C.nameBag, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...assetCols(), C.score, C.q, C.cagr, C.fcfy, C.dy, C.proChg, C.mcap, C.from52],
     g.stocks.filter(vis), {sortKey:'pe', sortDir:1, search:true, csv:() => csvName('Industry_' + g.name, {}, {}, [])}));
   hint('Sorted by PE, lowest first. Green = PE below industry PE (discount), red = above (premium).');
 }
@@ -2581,29 +2595,31 @@ function pfCharges(t, qty, px, r = PF.rates) {
 }
 const pfSorted = txns => txns.map((x, i) => [x, i]).sort((a, b) => (a[0].date || '').localeCompare(b[0].date || '') || a[1] - b[1]).map(p => p[0]);   // by date, then entry order
 /* replay every transaction: average-cost holdings, realised P&L, charges and cash */
-function pfReplay(txns, upto) {
-  const pos = {}, led = [];
+function pfReplay(txns) {
+  const pos = {}, led = [], closed = [], lock = new Set();
   let cash = 0, payIn = 0, payOut = 0, charges = 0, realized = 0, bad = null;
+  const fresh = x => ({sym: x.sym, qty: 0, cost: 0, realized: 0, charges: 0, bQty: 0, bAmt: 0, sQty: 0, sAmt: 0, first: x.date, last: x.date, ids: []});
   for (const x of pfSorted(txns)) {
-    if (upto && x === upto) break;
     const amt = (x.qty || 0) * (x.px || 0), ch = +x.ch || 0;
     if (x.t === 'in') { cash += x.amt; payIn += x.amt; }
     else if (x.t === 'out') { cash -= x.amt; payOut += x.amt; }
     else {
-      const p = pos[x.sym] = pos[x.sym] || {sym: x.sym, qty: 0, cost: 0, realized: 0, charges: 0, bQty: 0, bAmt: 0, sQty: 0, sAmt: 0, first: x.date, last: x.date};
-      p.charges += ch; charges += ch; p.last = x.date || p.last;
+      const p = pos[x.sym] = pos[x.sym] || fresh(x);
+      p.ids.push(x.id); p.charges += ch; charges += ch; p.last = x.date || p.last;
       if (x.t === 'buy') { p.qty += x.qty; p.cost += amt; p.bQty += x.qty; p.bAmt += amt; cash -= amt + ch; }
-      else {                                              // sell at average cost
+      else {                                              // sell at average cost; never more than held at that date
         if (x.qty > p.qty + 1e-9) bad = bad || x;
         const q = Math.min(x.qty, p.qty), avg = p.qty ? p.cost / p.qty : 0;
         p.realized += (x.px - avg) * q; realized += (x.px - avg) * q;
-        p.cost -= avg * q; p.qty -= q; p.sQty += x.qty; p.sAmt += amt; cash += amt - ch;
-        if (p.qty < 1e-9) { p.qty = 0; p.cost = 0; }
+        p.cost -= avg * q; p.qty -= q; p.sQty += q; p.sAmt += q * x.px; cash += amt - ch;
+        if (p.qty < 1e-9) {                               // sold out: this round of trades becomes a closed record, its entries lock
+          p.qty = 0; p.cost = 0; closed.push(p); p.ids.forEach(id => lock.add(id)); delete pos[x.sym];
+        }
       }
     }
     led.push({x, cash});
   }
-  return {pos, led, cash, payIn, payOut, charges, realized, bad};
+  return {pos, led, closed, lock, cash, payIn, payOut, charges, realized, bad};
 }
 const TODAY = new Map(D.stocks.map(s => [s.sym, s]));
 const pfKnown = c => Object.assign({}, c, {v: r => r.known ? c.v(r) : null, f: r => r.known ? c.f(r) : NA});   // not in the lists → blank
@@ -2630,6 +2646,7 @@ const PFC = {
   net: {k:'net', label:'Net ₹', tip:'Realised profit minus charges', v:r => r.realized - r.charges,
         f:r => `<span title="Realised ${fmt(r.realized, 0)} − charges ${fmt(r.charges, 2)}">${signed(r.realized - r.charges)}</span>`},
   closed: {k:'closed', label:'Closed', v:r => r.last || '', f:r => r.last ? esc(r.last) : NA},
+  rm: {k:'rm', label:'', noCsv:1, v:r => null, f:r => `<button type="button" class="pf-rm" data-rm="${r.ci}" title="Remove this closed position and all its trades">Remove</button>`},
 };
 const TX_LABEL = {buy:'Buy', sell:'Sell', in:'Pay in', out:'Pay out'};
 const TXC = {
@@ -2640,7 +2657,8 @@ const TXC = {
          f:r => r.x.sym ? `<b>${esc(r.x.sym)}</b> <span class="na">${fmt(r.x.qty, 0)} @ ${fmt(r.x.px, 2)}</span>` : NA},
   amt: {k:'tamt', label:'Cash ₹', tip:'Effect on cash, charges included', v:r => r.amt,
         f:r => `<span title="${r.x.ch ? 'Charges ₹' + fmt(r.x.ch, 2) + ' · ' : ''}Cash after ₹${fmt(r.cash, 0)}">${signed(r.amt)}</span>`},
-  act: {k:'tact', label:'', noCsv:1, v:r => null, f:r => `<span class="pf-acts2"><button type="button" class="pf-ico" data-edit="${esc(r.x.id)}" title="Edit" aria-label="Edit">✎</button><button type="button" class="pf-ico del" data-del="${esc(r.x.id)}" title="Delete" aria-label="Delete">×</button></span>`},
+  act: {k:'tact', label:'', noCsv:1, v:r => null, f:r => PF_LAST && PF_LAST.lock.has(r.x.id)
+         ? `<span class="pf-lock" title="Part of a closed position: remove it from the Closed list instead">🔒</span>` : `<span class="pf-acts2"><button type="button" class="pf-ico" data-edit="${esc(r.x.id)}" title="Edit" aria-label="Edit">✎</button><button type="button" class="pf-ico del" data-del="${esc(r.x.id)}" title="Delete" aria-label="Delete">×</button></span>`},
 };
 /* a table inside a panel: title on the left of its own tool row, body scrolls inside the panel */
 function pfPanel(host, title, sub, table) {
@@ -2664,16 +2682,16 @@ function portfolioView() {
     return;
   }
   const R = pfReplay(PF.txns);
-  const open = [], closed = [];
-  Object.values(R.pos).forEach(p => {
-    const s = TODAY.get(p.sym), r = Object.assign({}, s || {sym: p.sym, name: p.sym, ind: ''}, p, {known: !!s});
-    if (p.qty > 0) {
-      r.avg = p.cost / p.qty; r.priced = !!(s && ok(s.cmp));
-      r.value = r.priced ? p.qty * s.cmp : p.cost;          // no price → valued at cost
-      r.pnl = r.value - p.cost; r.pnlPct = p.cost ? r.pnl / p.cost * 100 : null;
-      open.push(r);
-    } else closed.push(r);
+  const withData = p => { const s = TODAY.get(p.sym); return Object.assign({}, s || {sym: p.sym, name: p.sym, ind: ''}, p, {known: !!s}); };
+  const open = Object.values(R.pos).filter(p => p.qty > 0).map(p => {
+    const r = withData(p), s = TODAY.get(p.sym);
+    r.avg = p.cost / p.qty; r.priced = !!(s && ok(s.cmp));
+    r.value = r.priced ? p.qty * s.cmp : p.cost;            // no price → valued at cost
+    r.pnl = r.value - p.cost; r.pnlPct = p.cost ? r.pnl / p.cost * 100 : null;
+    return r;
   });
+  const closed = R.closed.map((p, i) => Object.assign(withData(p), {ci: i}));
+  PF_LAST = R;
   const hold = open.reduce((t, r) => t + r.value, 0), cost = open.reduce((t, r) => t + r.cost, 0);
   open.forEach(r => r.wt = hold ? r.value / hold * 100 : null);
   const unreal = open.filter(r => r.priced).reduce((t, r) => t + r.pnl, 0);
@@ -2704,14 +2722,16 @@ function portfolioView() {
   const hCols = phone ? [PFC.edit, PFC.msym, PFC.val, PFC.pnl]          // phone: qty sits under the symbol, so nothing scrolls sideways
                       : [PFC.edit, PFC.sym, PFC.qty, PFC.avg, PFC.cmp, PFC.val, PFC.pnl, PFC.wt, PFC.score, PFC.mom, PFC.trend, PFC.flags];
   pfPanel(L, 'Holdings', open.length, makeTable('pf', hCols, open, {sortKey:'val', sortDir:-1, search:!phone || open.length > 6, noIndex:true, csv:() => 'Portfolio_holdings'}));
-  if (!open.length) L.querySelector('tbody').innerHTML = `<tr><td class="l na" colspan="13">No open holdings. Start with <b>Pay in</b> (your opening cash), then <b>+ Buy / Sell</b> — or tap the bag 🛍 next to any company on the other tabs.</td></tr>`;
-  pfPanel(RT, 'Closed', closed.length, makeTable('pfc', phone ? [PFC.csym, PFC.net, PFC.closed] : [PFC.csym, PFC.cqty, PFC.cpx, PFC.net, PFC.closed],
+  if (!open.length) L.querySelector('tbody').innerHTML = `<tr><td class="l na" colspan="13">No open holdings. Start with <b>Pay in</b> (your opening cash), then <b>+ Buy / Sell</b> — or tap the bag next to any industry name on the other tabs.</td></tr>`;
+  pfPanel(RT, 'Closed', closed.length, makeTable('pfc', phone ? [PFC.csym, PFC.net, PFC.rm] : [PFC.csym, PFC.cqty, PFC.cpx, PFC.net, PFC.closed, PFC.rm],
     closed, {sortKey:'closed', sortDir:-1, noIndex:true, csv:() => 'Portfolio_closed'}));
   if (!closed.length) RT.querySelector('tbody').innerHTML = '<tr><td class="l na" colspan="5">Stocks you sell fully move here; the money goes back to Cash.</td></tr>';
   const ledRows = R.led.map(l => ({x: l.x, cash: l.cash, sym: l.x.sym || '', name: '', ind: '',
     amt: l.x.t === 'in' ? l.x.amt : l.x.t === 'out' ? -l.x.amt : l.x.t === 'buy' ? -(l.x.qty * l.x.px + (l.x.ch || 0)) : l.x.qty * l.x.px - (l.x.ch || 0)})).reverse();
   pfPanel(RT, 'Transactions', ledRows.length, makeTable('pft', phone ? [TXC.mtype, TXC.what, TXC.amt, TXC.act] : [TXC.date, TXC.type, TXC.what, TXC.amt, TXC.act],
     ledRows, {noIndex:true, csv:() => 'Portfolio_transactions'}));
+  const tb = RT.querySelectorAll('.tbar')[1];
+  if (tb && ledRows.length) tb.querySelector('.pf-h').insertAdjacentHTML('afterend', '<button type="button" class="pf-rm all" id="pfWipe" title="Delete every entry in your portfolio">Delete all</button>');
   if (!ledRows.length) RT.querySelectorAll('tbody')[1].innerHTML = '<tr><td class="l na" colspan="5">Every Pay in, Pay out, Buy and Sell shows here, newest first. ✎ edits, × deletes.</td></tr>';
   view.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => {
     const k = b.dataset.open; k === 'trade' ? pfTradeForm({}) : k === 'rates' ? pfRatesForm() : pfCashForm({t: k});
@@ -2721,11 +2741,22 @@ function portfolioView() {
     const x = PF.txns.find(t => t.id === b.dataset.edit); if (!x) return;
     x.t === 'in' || x.t === 'out' ? pfCashForm(x) : pfTradeForm(x);
   }));
-  view.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
-    const x = PF.txns.find(t => t.id === b.dataset.del);
-    if (!x || !confirm(`Delete this ${TX_LABEL[x.t].toLowerCase()}${x.sym ? ' of ' + x.sym : ''}${x.date ? ' on ' + x.date : ''}? Holdings and cash are recalculated.`)) return;
-    PF.txns = PF.txns.filter(t => t !== x); await pfSave(); route();
+  view.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
+    const x = PF.txns.find(t => t.id === b.dataset.del); if (!x) return;
+    const rest = PF.txns.filter(t => t !== x), bad = pfReplay(rest).bad;
+    if (bad) return modal('Can\'t delete', `<p>Without this ${TX_LABEL[x.t].toLowerCase()}, the sale of ${esc(bad.sym)}${bad.date ? ' on ' + esc(bad.date) : ''} would be more than the shares held. Delete or edit that sale first.</p>`);
+    typeConfirm(`Delete ${TX_LABEL[x.t].toLowerCase()}`, `${x.sym ? `<b>${esc(x.sym)}</b> ${fmt(x.qty, 0)} @ ₹${fmt(x.px, 2)}` : `₹${fmt(x.amt, 0)}`}${x.date ? ' on ' + esc(x.date) : ''}. Holdings and cash are recalculated.`,
+      async () => { PF.txns = rest; await pfSave(); route(); });
   }));
+  view.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => {
+    const c = R.closed[+b.dataset.rm]; if (!c) return;
+    const ids = new Set(c.ids);
+    typeConfirm('Remove closed position', `<b>${esc(c.sym)}</b>: bought ${fmt(c.bQty, 0)}, sold ${fmt(c.sQty, 0)}, net ${rs(c.realized - c.charges, true)}. Its ${ids.size} trades are deleted, and cash drops or rises by that net amount.`,
+      async () => { PF.txns = PF.txns.filter(t => !ids.has(t.id)); await pfSave(); route(); });
+  }));
+  const wipe = $('#pfWipe');
+  if (wipe) wipe.addEventListener('click', () => typeConfirm('Delete all', `Every holding, closed position, pay in / out and trade (${PF.txns.length} entries) is deleted. Your charge rates stay.`,
+    async () => { PF.txns = []; await pfSave(); route(); }));
   $('#pfWeekly').addEventListener('click', () => modal('Weekly updates', `<p>Work in progress. Soon you'll get your portfolio summary every week on Telegram.</p>`));
 }
 /* small dialog: × , Esc or a click outside closes it; returns the box */
@@ -2742,6 +2773,17 @@ function modal(title, html) {
   w._close = close;
   const first = w.querySelector('input:not([type=hidden]), .wip-x'); if (first) setTimeout(() => first.focus(), 30);
   return w;
+}
+let PF_LAST = null;                                       // last replay shown, so transaction rows know which entries are locked
+/* deletes need the word "confirm" typed in */
+function typeConfirm(title, html, onOk) {
+  const w = modal(title, `<form class="pf-form" autocomplete="off"><p class="pf-calc">${html}</p>
+    <label class="fld"><span>Type <b>confirm</b> to continue</span><input name="c" spellcheck="false" autocapitalize="none"></label>
+    <button type="submit" class="btn primary danger" disabled>Delete</button></form>`);
+  const f = $('form', w), btn = $('button[type=submit]', f);
+  f.c.addEventListener('input', () => { btn.disabled = f.c.value.trim().toLowerCase() !== 'confirm'; });
+  f.addEventListener('submit', async e => { e.preventDefault(); if (btn.disabled) return; btn.disabled = true; await onOk(); w._close(); });
+  setTimeout(() => f.c.focus(), 40);
 }
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
 /* Buy / Sell form (new, or edit an existing trade). Charges fill in by themselves; type over them to override. */
@@ -2766,6 +2808,8 @@ function pfTradeForm(x) {
     f.px.placeholder = L ? 'LTP ' + fmt(L, 2) : 'price';
     $('.ltp', w).textContent = L && !f.px.value ? 'blank = LTP' : '';
     const h = sym ? held() : 0; $('.held', w).textContent = sym && h ? `(holding ${fmt(h, 0)})` : '';
+    const sb = w.querySelector('.seg [data-t=sell]'); sb.disabled = !(h > 0); sb.title = h > 0 ? '' : 'Nothing to sell: you hold none';
+    if (t === 'sell' && !(h > 0)) { t = 'buy'; seg(); }        // can't sell what you don't hold
     if (!chTyped) f.ch.value = q > 0 && p > 0 ? pfCharges(t, q, p) : '';
     const ch = +f.ch.value || 0;
     $('.pf-calc', w).textContent = q > 0 && p > 0 ? (t === 'buy' ? `Cash out ₹${fmt(q * p + ch, 2)} (₹${fmt(q * p, 2)} + charges)` : `Cash in ₹${fmt(q * p - ch, 2)} (₹${fmt(q * p, 2)} − charges)`) : '';
@@ -2782,10 +2826,14 @@ function pfTradeForm(x) {
     if (!/^[A-Z0-9&._-]{1,20}$/.test(sym)) return err('Type a valid NSE symbol, e.g. TCS.');
     if (!(qty > 0)) return err('Quantity must be above 0.');
     if (!(px > 0)) return err(`No price for ${sym} in today's data. Type the price.`);
+    if (t === 'sell' && !(held() > 0)) return err(`You hold no ${sym}, so there is nothing to sell.`);
     if (t === 'sell' && qty > held() + 1e-9) return err(`You hold ${fmt(held(), 0)} ${sym}; you can't sell ${fmt(qty, 0)}.`);
     if (!edit && PF.txns.length >= 3000) return err('Transaction limit reached (3000).');
     const rec = {id: x.id || pfId(), t, sym, qty, px, ch: f.ch.value === '' ? pfCharges(t, qty, px) : +f.ch.value, date: f.date.value || ''};
-    PF.txns = edit ? PF.txns.map(o => o === x ? rec : o) : PF.txns.concat(rec);
+    const next = edit ? PF.txns.map(o => o === x ? rec : o) : PF.txns.concat(rec);
+    const bad = pfReplay(next).bad;                         // dates matter: a sale can't exceed what was held on its day, now or after this change
+    if (bad) return err(`That would make the sale of ${bad.sym}${bad.date ? ' on ' + bad.date : ''} larger than the shares held then. Check the date and quantity.`);
+    PF.txns = next;
     await pfSave(); w._close();
     if ((location.hash || '') === '#/portfolio') route();
     else { pfMarkBags(); toast(`${t === 'buy' ? 'Bought' : 'Sold'} ${fmt(qty, 0)} ${sym} @ ₹${fmt(px, 2)} · saved to Portfolio`); }
@@ -2939,13 +2987,13 @@ function methodView() {
   <p>Your own holdings, saved to your login (only you can see them). Everything is worked out from your list of transactions, so editing or deleting a wrong entry fixes all the numbers after it.</p>
   ${tbl(
     g('Pay in / Pay out', 'Money you add or take out. Your opening cash is a Pay in.', 'Pay in ₹5,00,000 on day one.')
-  + g('Buy / Sell', 'Trades at average cost. Leave the price blank to use the LTP (the latest close on this page). The bag next to any company, on any tab, opens this.', 'Buy 10 @ 2,000, then 10 @ 2,200 → average 2,100.')
+  + g('Buy / Sell', 'Trades at average cost. Leave the price blank to use the LTP (the latest close on this page). The bag next to any industry name, on any tab, opens this; selling more than you hold on that date is refused.', 'Buy 10 @ 2,000, then 10 @ 2,200 → average 2,100.')
   + g('Charges', 'Worked out per trade from the rates under ⚙ Charges (STT, exchange, SEBI, stamp duty, GST, DP, your brokerage) and taken from cash. Type over them to use your contract note.', '₹1,00,000 delivery buy ≈ ₹118 with zero brokerage.')
   + g('Cash', 'Pay ins − pay outs − buys + sells − all charges.', '5,00,000 − 2,00,000 buy − 237 charges = 2,99,763.')
   + g('Unrealised', 'Open holdings at LTP minus what they cost.', 'Cost 21,000, now 23,000 → +2,000.')
   + g('Realised', 'Profit on what you sold (sell price − average cost), after charges.', 'Sold 10 @ 2,300, average 2,100 → +2,000 before charges.')
   + g('Net gain', 'Net worth (holdings + cash) minus the money you put in.', 'Put in 5,00,000, worth 5,40,000 → +40,000 (+8%).')
-  + g('Closed', 'A stock sold down to 0 moves here; its money is back in Cash.', 'Bought 100, sold 100 → closed.')
+  + g('Closed', 'A stock sold down to 0 moves here and its trades lock; its money is back in Cash. Only its Remove button (type confirm) deletes it.', 'Bought 100, sold 100 → closed.')
   )}
   <p>Stocks outside these lists can be added too; they have no price here, so they are valued at cost. Prices are the latest in this page's data (updated weekly), not live.</p>
 
@@ -3020,6 +3068,7 @@ function route() {
   else if (h === '#/portfolio') portfolioView();
   else homeView();
   meta();
+  $('#pfBag').classList.toggle('on', h === '#/portfolio');            // header bag lights up on the Portfolio page
   window.scrollTo(0,0);
 }
 function nowInfo() {                                     // (i) popover for the current view
