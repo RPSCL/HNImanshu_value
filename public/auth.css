@@ -106,3 +106,7 @@ html.auth-ok .au-wait{display:none}
 .au-tbl tbody tr:hover td{background:color-mix(in srgb, var(--au-ink) 8%, transparent);color:var(--au-ink)}
 .au-tbl tbody tr:hover td:first-child{box-shadow:inset 2px 0 0 var(--au-acc)}
 .au-tbl tbody tr td{color:var(--au-ink)}
+.au-up{color:var(--good, #3fae6a)} .au-dn{color:var(--bad, #e06666)}
+.au-pfv .au-box{width:min(920px,100%)}
+.au-pfv .pf-sum{margin-bottom:12px}
+.au-pfv{z-index:310}

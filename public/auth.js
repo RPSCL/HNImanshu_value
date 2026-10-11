@@ -45,7 +45,8 @@ const SESSION_DAYS = 7;                           // log out a week after the la
 const ADMIN_EMAIL = "admin@" + USER_DOMAIN;       // username "admin" (created by you in the Firebase console)
 const USERS = "hni_users";                        // Firestore collection: one doc per account
 const ADMINS = "hni_admins";
-const PORTFOLIO = "hni_portfolio";                // Firestore: one doc per user with their holdings                      // Firestore: one doc per extra admin (made from the Users list)
+const PORTFOLIO = "hni_portfolio";                // Firestore: one doc per user with their holdings
+const MARKET = ["hni_market", "ltp"];             // live LTP for held stocks, written by portfolio_ltp.py                      // Firestore: one doc per extra admin (made from the Users list)
 const HOME = "./";                                // the screener
 const GATED = document.documentElement.dataset.auth === "required";
 
@@ -199,6 +200,15 @@ async function openUsers() {
     const adm = new Set((await getDocs(collection(db, ADMINS))).docs.map((d) => d.id));
     back._rows = snap.docs.map((d) => Object.assign({ uid: d.id, admin: adm.has(d.id) }, d.data())).sort((a, b) => ((b.lastLogin && b.lastLogin.seconds) || 0) - ((a.lastLogin && a.lastLogin.seconds) || 0));
     paint(back, "");
+    if (window.hniPf) {                                       // Fundamentals page: add each user's portfolio worth and day gain
+      const mkt = await getDoc(doc(db, ...MARKET)).then((d) => (d.exists() ? d.data() : null)).catch(() => null);
+      back._mkt = mkt;
+      await Promise.all(back._rows.map(async (r) => {
+        try { const d = await getDoc(doc(db, PORTFOLIO, r.uid)); r.pfData = d.exists() ? d.data() : null; r.pf = r.pfData ? window.hniPf.summary(r.pfData, mkt) : null; }
+        catch (e) { r.pf = undefined; }
+      }));
+      paint(back, $(".au-q", back).value);
+    }
   } catch (e) {
     $(".au-tbl", back).innerHTML = `<p class="au-err">Couldn't load users (${esc(e.code || e)}). Check the Firestore rules.</p>`;
   }
@@ -207,12 +217,35 @@ function paint(back, q) {
   q = q.trim().toLowerCase();
   const rows = (back._rows || []).filter((r) => !q || (r.username + " " + (r.email || "")).toLowerCase().includes(q));
   $(".au-count", back).textContent = `· ${rows.length}`;
-  $(".au-tbl", back).innerHTML = `<table><thead><tr><th>Username</th><th>Email</th><th>Via</th><th>Joined</th><th>Last login</th><th>Admin</th></tr></thead><tbody>${
-    rows.map((r) => `<tr><td>${esc(r.username || "")}</td><td>${r.provider === "google" ? esc(r.email || "") : "–"}</td><td>${esc(r.provider || "")}</td><td>${fmt(r.created)}</td><td>${fmt(r.lastLogin)}</td><td>${
+  const inr = (v, sign) => v == null ? "–" : (v < 0 ? "−" : sign && v > 0 ? "+" : "") + "₹" + Math.round(Math.abs(v)).toLocaleString("en-IN");
+  const pfCell = (r) => !window.hniPf ? "" : `<td>${r.pf === undefined ? '<span class="au-tag">no access</span>' : r.pf ? inr(r.pf.worth) : "–"}</td>
+    <td class="${r.pf && r.pf.day != null ? (r.pf.day >= 0 ? "au-up" : "au-dn") : ""}">${r.pf ? inr(r.pf.day, true) : "–"}</td>
+    <td>${r.pfData ? `<button type="button" class="au-mk au-view" data-pf="${esc(r.uid)}">View</button>` : ""}</td>`;
+  $(".au-tbl", back).innerHTML = `<table><thead><tr><th>Username</th><th>Email</th><th>Via</th><th>Joined</th><th>Last login</th>${window.hniPf ? "<th>Portfolio</th><th>Day</th><th></th>" : ""}<th>Admin</th></tr></thead><tbody>${
+    rows.map((r) => `<tr><td>${esc(r.username || "")}</td><td>${r.provider === "google" ? esc(r.email || "") : "–"}</td><td>${esc(r.provider || "")}</td><td>${fmt(r.created)}</td><td>${fmt(r.lastLogin)}</td>${pfCell(r)}<td>${
       r.email === ADMIN_EMAIL ? '<span class="au-tag">main</span>'
         : `<button type="button" class="au-mk${r.admin ? " on" : ""}" data-uid="${esc(r.uid)}">${r.admin ? "Admin ✓" : "Make admin"}</button>`}</td></tr>`).join("")
   }</tbody></table>`;
-  back.querySelectorAll(".au-mk").forEach((b) => b.addEventListener("click", () => setAdmin(back, b.dataset.uid)));
+  back.querySelectorAll(".au-mk[data-uid]").forEach((b) => b.addEventListener("click", () => setAdmin(back, b.dataset.uid)));
+  back.querySelectorAll("[data-pf]").forEach((b) => b.addEventListener("click", () => {
+    const r = back._rows.find((x) => x.uid === b.dataset.pf); if (r) viewPortfolio(r, back._mkt);
+  }));
+}
+// admin: one user's portfolio as an overlay (read-only), drawn by the Fundamentals page (window.hniPf.html)
+function viewPortfolio(r, mkt) {
+  let o = $(".au-pfv");
+  if (!o) {
+    o = document.createElement("div"); o.className = "au-back au-pfv";
+    o.innerHTML = `<div class="au-box au-wide" role="dialog" aria-modal="true"><button class="au-x" type="button" aria-label="Close">×</button><h2 class="au-title"></h2><div class="au-pfbody"></div></div>`;
+    document.body.appendChild(o);
+    const close = () => o.classList.remove("open");
+    $(".au-x", o).addEventListener("click", close);
+    o.addEventListener("click", (e) => { if (e.target === o) close(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && o.classList.contains("open")) { e.stopImmediatePropagation(); close(); } }, true);
+  }
+  $(".au-title", o).textContent = (r.username || r.email || "User") + " · portfolio";
+  $(".au-pfbody", o).innerHTML = window.hniPf.html(r.pfData, mkt);
+  o.classList.add("open");
 }
 // make / unmake an admin: Firestore hni_admins/{uid} (Users list, rules) + RTDB hni/admins/{uid} (online counter rules)
 async function setAdmin(back, uid) {
@@ -314,6 +347,7 @@ const ready = new Promise((resolve) => {
     window.hniStore = {
       load: async () => { const d = await getDoc(pref); return d.exists() ? d.data() : {}; },             // {txns, rates} (or old {items})
       save: (data) => setDoc(pref, { txns: data.txns || [], rates: data.rates || {}, updated: serverTimestamp() }),
+      market: async () => { const d = await getDoc(doc(db, ...MARKET)); return d.exists() ? d.data() : null; },
     };
     window.dispatchEvent(new Event("hni-ready"));
     record(u);
