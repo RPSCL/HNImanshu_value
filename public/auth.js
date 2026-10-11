@@ -18,12 +18,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/fireba
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signOut,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
-import {
-  getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection, serverTimestamp,
-} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-import {
-  getDatabase, ref, set, remove, onValue, onDisconnect, increment,
-} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
+// Firestore and the Realtime Database are loaded only when first needed (not before the page shows):
+// only Auth is needed to open a page, which keeps the first load light on slow (2G) connections.
+let getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection, serverTimestamp;
+let getDatabase, ref, set, remove, onValue, onDisconnect, increment;
 
 // Firebase project "hnimanshu", web app "valueapp" (Project settings → Your apps). These values are public by design;
 // security comes from the Firestore / Realtime Database rules, not from hiding them.
@@ -52,8 +50,15 @@ const GATED = document.documentElement.dataset.auth === "required";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
-const rtdb = firebaseConfig.databaseURL ? getDatabase(app) : null;   // live online / visitor counters (hni/...); skipped if no Realtime DB
+let db = null, rtdb = null, FSP = null, RTP = null;
+const needFS = () => FSP = FSP || import("https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js").then((m) => {
+  ({ getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection, serverTimestamp } = m); db = getFirestore(app);
+});
+const needRT = () => RTP = RTP || (firebaseConfig.databaseURL                                // live online / visitor counters (hni/...)
+  ? import("https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js").then((m) => {
+      ({ getDatabase, ref, set, remove, onValue, onDisconnect, increment } = m); rtdb = getDatabase(app); })
+  : Promise.resolve());
+const idle = (fn, ms = 2500) => setTimeout(() => (window.requestIdleCallback || ((f) => f()))(fn), ms);   // after the page has settled
 const google = new GoogleAuthProvider();
 google.setCustomParameters({ prompt: "select_account" });
 
@@ -66,7 +71,7 @@ let ADMIN = false;                                           // set once per pag
 async function checkAdmin(u) {
   if (!u) return false;
   if (isMainAdmin(u)) return true;
-  try { return (await getDoc(doc(db, ADMINS, u.uid))).exists(); } catch (e) { return false; }
+  try { await needFS(); return (await getDoc(doc(db, ADMINS, u.uid))).exists(); } catch (e) { return false; }
 }
 const initials = (n) => {                                    // "Himanshu Shekhar" → HS, "admin" → AD
   const w = String(n || "?").trim().split(/[\s._-]+/).filter(Boolean);
@@ -163,6 +168,7 @@ function message(ex) {
 async function record(u) {
   const key = "hni_rec_" + u.uid;                       // write at most once per browser session, keeps Firestore use tiny
   try { if (sessionStorage.getItem(key)) return; } catch (e) {}
+  await needFS();
   const ref = doc(db, USERS, u.uid);
   const data = { username: nameOf(u), email: u.email || null, provider: providerOf(u), lastLogin: serverTimestamp() };
   try {
@@ -196,6 +202,7 @@ async function openUsers() {
   back.classList.add("open");
   $(".au-tbl", back).innerHTML = '<p class="au-sub">Loading…</p>';
   try {
+    await needFS();
     const snap = await getDocs(collection(db, USERS));
     const adm = new Set((await getDocs(collection(db, ADMINS))).docs.map((d) => d.id));
     back._rows = snap.docs.map((d) => Object.assign({ uid: d.id, admin: adm.has(d.id) }, d.data())).sort((a, b) => ((b.lastLogin && b.lastLogin.seconds) || 0) - ((a.lastLogin && a.lastLogin.seconds) || 0));
@@ -254,6 +261,7 @@ async function setAdmin(back, uid) {
   const make = !r.admin;
   if (!confirm((make ? "Make " : "Remove admin from ") + (r.username || r.email || uid) + (make ? " an admin? They will see every user and the online counter." : "?"))) return;
   try {
+    await needFS(); await needRT();
     if (make) await setDoc(doc(db, ADMINS, uid), { by: current ? current.uid : null, at: serverTimestamp() });
     else await deleteDoc(doc(db, ADMINS, uid));
     if (rtdb) await (make ? set(ref(rtdb, "hni/admins/" + uid), true) : remove(ref(rtdb, "hni/admins/" + uid))).catch(() => {});
@@ -285,7 +293,8 @@ function showUser(u) {
 // Every open tab of the screener or Fundamentals adds hni/presence/<random id>; Firebase deletes it by itself the
 // moment the tab closes or the connection drops (onDisconnect). Each IP is counted once ever (SHA-256 hash, never the
 // raw IP) into hni/meta/visitors. Only the admin's browser reads these numbers; everyone else just writes.
-function presence() {
+async function presence() {
+  await needRT();
   if (!rtdb) return;
   try {
     const sid = (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2)).replace(/[^a-z0-9-]/gi, "");
@@ -298,10 +307,11 @@ function presence() {
   } catch (e) { console.warn("presence off:", e); }
 }
 async function countVisitor() {
-  if (!rtdb) return;
   try {
     if (localStorage.getItem("hni_counted")) return;   // this browser already counted, skip the IP lookup
   } catch (e) {}
+  await needRT();
+  if (!rtdb) return;
   try {
     const r = await fetch("https://api.ipify.org?format=json");
     const { ip } = await r.json();
@@ -315,7 +325,8 @@ async function countVisitor() {
   } catch (e) { console.warn("visitor count skipped:", e); }
 }
 let adminDot = null;
-function showAdminDot() {
+async function showAdminDot() {
+  await needRT();
   if (adminDot || !rtdb) return;
   adminDot = document.createElement("div");
   adminDot.className = "au-online";
@@ -326,8 +337,8 @@ function showAdminDot() {
   onValue(ref(rtdb, "hni/presence"), (s) => { online = s.size; paintDot(); });
   onValue(ref(rtdb, "hni/meta/visitors"), (s) => { const v = s.val(); total = typeof v === "number" ? v : null; paintDot(); });
 }
-presence();
-countVisitor();
+idle(presence);                                         // online counter: after the page has settled, never before it shows
+idle(countVisitor, 4000);
 
 // ---------- page wiring ----------
 let current = null;
@@ -343,17 +354,20 @@ const ready = new Promise((resolve) => {
     if (GATED) document.documentElement.classList.add("auth-ok");   // show the page at once; admin check follows
     if (!u) return;
     // Portfolio tab: the page saves / loads the user's holdings through this (Firestore hni_portfolio/{uid}, owner only)
-    const pref = doc(db, PORTFOLIO, u.uid);
     window.hniStore = {
-      load: async () => { const d = await getDoc(pref); return d.exists() ? d.data() : {}; },             // {txns, rates} (or old {items})
-      save: (data) => setDoc(pref, { txns: data.txns || [], rates: data.rates || {}, updated: serverTimestamp() }),
-      market: async () => { const d = await getDoc(doc(db, ...MARKET)); return d.exists() ? d.data() : null; },
+      load: async () => { await needFS(); const d = await getDoc(doc(db, PORTFOLIO, u.uid)); return d.exists() ? d.data() : {}; },             // {txns, rates} (or old {items})
+      save: async (data) => { await needFS(); return setDoc(doc(db, PORTFOLIO, u.uid), { txns: data.txns || [], rates: data.rates || {}, updated: serverTimestamp() }); },
+      market: async () => { await needFS(); const d = await getDoc(doc(db, ...MARKET)); return d.exists() ? d.data() : null; },
     };
     window.dispatchEvent(new Event("hni-ready"));
-    record(u);
-    ADMIN = await checkAdmin(u);
+    ADMIN = isMainAdmin(u);                                   // known at once; extra admins are checked once the page has settled
     if (GATED) showUser(u);
-    if (ADMIN) showAdminDot();
+    idle(async () => {
+      record(u);
+      const a = await checkAdmin(u);
+      if (a && !ADMIN) { ADMIN = true; const old = $(".au-user"); if (old) old.remove(); if (GATED) showUser(u); }   // menu gains "Users"
+      if (ADMIN) showAdminDot();
+    }, 1500);
   });
 });
 
