@@ -974,6 +974,8 @@ body.day{
 .fback{display:none}
 .fdhead{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--line);position:sticky;top:-12px;background:var(--panel);z-index:2;padding-top:2px}
 .fbtns{display:flex;gap:6px;flex-wrap:wrap}
+.fbtns .btn.save-on{border-color:var(--brass);background:var(--brass);color:var(--bg)}
+.fbtns .btn:disabled{opacity:.45;cursor:default}
 .btn.done{border-color:var(--brass);color:var(--brass)}
 .fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px 14px;align-items:end}
 .fld{display:flex;flex-direction:column;gap:5px;min-width:0;margin:0}
@@ -1109,6 +1111,45 @@ body.day .toggle-thumb{transform:translateX(16px)}
 .btn.hbag:hover,.btn.hbag.on{border-color:var(--brass);color:var(--brass);background:var(--brassbg)}
 @media (max-width:700px){.btn.hbag{position:absolute;top:13px;right:calc(var(--au-right,104px) + 40px);width:32px;height:32px;padding:0;justify-content:center;border-radius:50%}}
 .ind{vertical-align:middle}
+/* header: Weekly (Telegram) */
+.btn.hweek{gap:6px;color:var(--ink)}
+.btn.hweek:hover{border-color:#29a9eb;background:rgba(41,169,235,.12)}
+@media (max-width:700px){.btn.hweek{padding:0 9px}}
+/* Pay in / Pay out: soft green / red glow on hover; always on phones */
+.pf-acts [data-open=in]:hover{border-color:var(--good);box-shadow:0 6px 16px -6px var(--good)}
+.pf-acts [data-open=out]:hover{border-color:var(--bad);box-shadow:0 6px 16px -6px var(--bad)}
+@media (max-width:700px){
+  .pf-acts [data-open=in]{border-color:var(--good);box-shadow:0 5px 14px -7px var(--good)}
+  .pf-acts [data-open=out]{border-color:var(--bad);box-shadow:0 5px 14px -7px var(--bad)}
+}
+/* Day gain tile */
+.pf-k.day.pos b{color:var(--good)} .pf-k.day.neg b{color:var(--bad)}
+/* news panel */
+.pf-news .pf-h{margin-bottom:6px}
+.pf-nl{max-height:max(160px,calc(32vh - 60px));overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.pf-nl .na{padding:12px 14px;margin:0}
+.pf-ni{display:grid;grid-template-columns:auto auto 1fr;gap:4px 10px;align-items:baseline;padding:8px 12px;border-bottom:1px solid var(--line);color:var(--ink);text-decoration:none}
+.pf-ni:last-child{border-bottom:0}
+.pf-ni:hover{background:var(--hover);text-decoration:none}
+.pf-ni .d{font:500 11px var(--mono);color:var(--faint);white-space:nowrap}
+.pf-ni b{font:700 11.5px var(--mono);color:var(--brass)}
+.pf-ni .t{font-size:12.5px;line-height:1.4;min-width:0}
+/* holdings search: wide, right after the title */
+.pf-panel .tbar .pf-h{margin-right:0}
+.pf-panel .tbar input[type=search]{width:300px!important;margin-right:auto}
+@media (max-width:700px){.pf-panel .tbar input[type=search]{width:auto!important;flex:1;min-width:0}}
+/* symbol dropdown (works the same on phones; no keyboard-bar suggestions) */
+.sp-wrap{position:relative}
+.wip-box.ov{overflow:visible;max-height:none}   /* forms with the symbol dropdown: let it hang below the box */
+.sp-list{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:5;max-height:260px;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--drop-shadow);padding:4px}
+.sp-it{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:baseline;width:100%;text-align:left;border:0;background:transparent;color:var(--ink);padding:8px 10px;border-radius:6px;cursor:pointer;font:inherit}
+.sp-it b{font:700 12.5px var(--mono)}
+.sp-it span{font-size:12px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-it i{font:600 10px var(--mono);font-style:normal;color:var(--brass)}
+.sp-it.on,.sp-it:hover{background:var(--brassbg)}
+.sp-it.add b{color:var(--brass)}
+.pf-fix{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--warn);border:1px dashed var(--warn);border-radius:8px;padding:8px 10px}
+.pf-fix[hidden],.pf-name[hidden]{display:none}
 /* bag left of every industry name: opens Buy / Sell; brass when you hold the stock */
 .bag{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;margin:-3px 6px -3px -2px;vertical-align:middle;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--faint);cursor:pointer;padding:0;opacity:.75}
 .bag:hover{opacity:1;color:var(--brass);border-color:var(--line);background:var(--brassbg)}
@@ -1389,6 +1430,7 @@ __AUTH_BODY__<script>
       <label class="chip backsel" id="backPer" title="Historical date"><select id="backSel" aria-label="Historical period"></select></label>
     </div>
     <button class="btn primary" id="saveHtml">Save as HTML</button>
+    <button type="button" class="btn hweek" id="weeklyBtn" title="Weekly updates on Telegram"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#29a9eb"/><path d="M5.4 11.6l11.5-4.4c.5-.2 1 .1.8.9l-2 9.3c-.1.6-.5.8-1.1.5l-3-2.2-1.5 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5.1c.2-.2 0-.3-.4-.1l-6.9 4.4-3-.9c-.6-.2-.7-.6.1-1z" fill="#fff"/></svg>Weekly</button>
     <a class="btn hbag" id="pfBag" href="#/portfolio" title="Portfolio" aria-label="Portfolio"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg><span class="lg">Portfolio</span></a>
     <div id="theme-toggle" title="Day / night">
       <span class="toggle-icon moon-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
@@ -1998,9 +2040,22 @@ function placeDrop(f) {
   }
 }
 const closeDrops = () => { document.querySelectorAll('.fbox.dopen').forEach(f => f.classList.remove('dopen')); for (const k in DROP) DROP[k].open = false; document.body.classList.remove('fmodal'); };
+/* memory mode (Value screen): the screen opens on its default (Deep value) unless the user pressed Save;
+   changes work at once but are kept only for this visit until Save; Default (after a warning) forgets them */
+const FMEM = {};
+function fmem(key, def, base) {
+  if (!FMEM[key]) {
+    let saved = null; try { saved = JSON.parse(lsGet(key + '_saved') || 'null'); } catch (e) {}
+    FMEM[key] = {base, saved, live: Object.assign({}, def, saved || base)};
+  }
+  return FMEM[key];
+}
 function filterBox(o, rerender) {
   const {key, def} = o;
-  const st = lsJson(key, def);
+  const M = o.memory ? fmem(key, def, Object.assign({}, def, o.memory)) : null;
+  const put = obj => M ? (M.live = Object.assign({}, def, obj)) : lsSet(key, JSON.stringify(obj));
+  const st = M ? Object.assign({}, M.live) : lsJson(key, def);
+  const dirty = M && JSON.stringify(M.live) !== JSON.stringify(Object.assign({}, def, M.saved || M.base));
   const presets = (o.presets || []).filter(p => !NOPRICE || !p.price);  // price-based screens need a price for this date
   const unset = v => v === '' || v == null || v === 0;                 // blank box and 0 both mean "no filter"
   const same = (a, b) => (unset(a) && unset(b)) || String(a) === String(b);
@@ -2020,7 +2075,9 @@ function filterBox(o, rerender) {
     + `<div class="fback"></div><div class="fdrop" role="dialog" aria-label="Filters">`
     + `<div class="fdhead"><span class="t">Filters</span><span class="fbtns">`
     + (o.extra ? `<button type="button" class="btn ghost" data-tog="extra">${o.extra.label} <span class="car">▾</span></button>` : '')
-    + `<button type="button" class="btn ghost" data-reset title="Back to defaults">Reset</button>`
+    + (M ? `<button type="button" class="btn ghost${dirty ? ' save-on' : ''}" data-save ${dirty ? '' : 'disabled'} title="Remember these filters on this device">Save</button>`
+         + `<button type="button" class="btn ghost" data-reset title="Back to the default screen (Deep value)">Default</button>`
+         : `<button type="button" class="btn ghost" data-reset title="Back to defaults">Reset</button>`)
     + `<button type="button" class="btn ghost done" data-close>Done</button></span></div>`
     + (o.extra ? `<div class="fpanel" data-panel="extra"></div>` : '')
     + `<div class="fgrid">${o.main(st)}</div>`
@@ -2047,14 +2104,23 @@ function filterBox(o, rerender) {
   });
   f.querySelectorAll('[data-f]').forEach(el => el.addEventListener('change', () => {
     st[el.dataset.f] = el.type === 'checkbox' ? el.checked : (el.tagName === 'SELECT' ? el.value : (el.value === '' ? '' : +el.value));
-    lsSet(key, JSON.stringify(st)); rerender();                          // dropdown stays open (DROP) while you tweak
+    put(st); rerender();                                                 // dropdown stays open (DROP) while you tweak
   }));
   f.querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => {
     const p = presets[+b.dataset.p];
-    lsSet(key, p === active ? '{}' : JSON.stringify(Object.assign({}, def, p.st)));   // click the active screen again = switch it off
+    put(p === active ? {} : Object.assign({}, def, p.st));                // click the active screen again = switch it off
     rerender();
   }));
-  $('[data-reset]', f).addEventListener('click', () => { lsSet(key, '{}'); rerender(); });
+  if (M) {
+    const sv = $('[data-save]', f);
+    sv.addEventListener('click', () => { M.saved = Object.assign({}, M.live); lsSet(key + '_saved', JSON.stringify(M.saved)); rerender(); toast('Filters saved. They open like this next time.'); });
+    $('[data-reset]', f).addEventListener('click', () => {
+      const w = modal('Back to default?', `<p>Every filter goes back to the default screen (<b>Deep value</b>) and your saved settings are forgotten.</p>
+        <div class="pf-btns" style="margin-top:14px"><button type="button" class="btn ghost" data-no>Cancel</button><button type="button" class="btn primary danger" data-yes>Set to default</button></div>`);
+      $('[data-no]', w).addEventListener('click', () => w._close());
+      $('[data-yes]', w).addEventListener('click', () => { M.saved = null; lsSet(key + '_saved', ''); M.live = Object.assign({}, M.base); w._close(); rerender(); });
+    });
+  } else $('[data-reset]', f).addEventListener('click', () => { lsSet(key, '{}'); rerender(); });
   view.appendChild(f);
   const on = $('.preset.on', f), pc = $('.pchips', f);               // phone: swipe row starts at the active screen
   if (on && pc.scrollWidth > pc.clientWidth) pc.scrollLeft = on.offsetLeft - pc.offsetLeft - 8;
@@ -2193,7 +2259,7 @@ function passVF(s, f) {
 function valueView() {
   setNav('value'); view.innerHTML = '';
   const vf = filterBox({
-    key:'vf', def:VF_DEF, presets:VF_PRESETS,
+    key:'vf', def:VF_DEF, presets:VF_PRESETS, memory: VF_PRESETS.find(p => p.name === 'Deep value').st,   // opens on Deep value unless saved
     main: vfMain, more: vfMore, moreKeys: vfMoreKeys(),
     extra: {label:'Scoring', build: el => {                 // industry PE method + score weights, out of the way
       const W = lsJson('vw', W_DEF);
@@ -2562,20 +2628,35 @@ function pfLoad() {                                       // loads once; every c
   if (WEB && !window.hniStore) return new Promise(res => window.addEventListener('hni-ready', () => pfLoad().then(res), {once: true}));   // login still being checked
   return PF_WAIT = PF_WAIT || pfLoadNow();
 }
+const pfTxnsOf = d => Array.isArray(d && d.txns) ? d.txns
+  : ((d && Array.isArray(d.items)) ? d.items : (Array.isArray(d) ? d : [])).map(it => ({id: it.id || pfId(), t:'buy', sym: it.sym, qty: it.qty, px: it.buy, ch: 0, date: it.date || ''}));   // first version: plain holdings → buys
 async function pfLoadNow() {
   PF.busy = true;
   try {
     const d = await pfStore().load() || {};
-    PF.txns = Array.isArray(d.txns) ? d.txns
-      : (Array.isArray(d.items) ? d.items : (Array.isArray(d) ? d : [])).map(it => ({id: it.id || pfId(), t:'buy', sym: it.sym, qty: it.qty, px: it.buy, ch: 0, date: it.date || ''}));   // first version: plain holdings → buys
+    PF.txns = pfTxnsOf(d);
     PF.rates = Object.assign({}, PF_RATES, d.rates || {});
     PF.err = '';
   } catch (e) { PF.txns = []; PF.err = 'Could not load your portfolio (' + (e.code || e) + ').'; }
+  try { PF.mkt = window.hniStore && window.hniStore.market ? await window.hniStore.market() : null; } catch (e) { PF.mkt = null; }
   PF.busy = false;
+  pfApplyRenames();
   PF_HELD = pfHeld();
   if ((location.hash || '') === '#/portfolio') route(); else pfMarkBags();
 }
 window.addEventListener('hni-ready', () => pfLoad());
+/* NSE renamed a held stock (portfolio_ltp.py publishes OLD → NEW): open holdings move to the new symbol by themselves.
+   Closed (locked) records keep their old symbol. */
+async function pfApplyRenames() {
+  const ren = (PF.mkt && PF.mkt.renames) || {};
+  if (!PF.txns || !Object.keys(ren).length) return;
+  const lock = pfReplay(PF.txns).lock, done = new Set();
+  PF.txns = PF.txns.map(t => (t.sym && ren[t.sym] && !lock.has(t.id)) ? (done.add(t.sym + ' → ' + ren[t.sym]), Object.assign({}, t, {sym: ren[t.sym]})) : t);
+  if (done.size) { await pfSave(); toast('Renamed on NSE: ' + [...done].join(', ')); }
+}
+/* LTP: live Angel price for held stocks when portfolio_ltp.py has run, else the latest close in this page */
+const pfLive = sym => PF.mkt && PF.mkt.prices && PF.mkt.prices[sym];
+const pfLtp = sym => { const l = pfLive(sym); if (l && l.ltp) return l.ltp; const s = TODAY.get(sym); return s && ok(s.cmp) ? s.cmp : null; };
 /* the bag next to a company name turns brass when you hold that stock */
 const pfHeld = () => { const h = new Set(); if (PF.txns) Object.values(pfReplay(PF.txns).pos).forEach(p => { if (p.qty > 0) h.add(p.sym); }); return h; };
 let PF_HELD = new Set();                                  // symbols held now; worked out once per change, read by every Company cell
@@ -2598,14 +2679,14 @@ const pfSorted = txns => txns.map((x, i) => [x, i]).sort((a, b) => (a[0].date ||
 function pfReplay(txns) {
   const pos = {}, led = [], closed = [], lock = new Set();
   let cash = 0, payIn = 0, payOut = 0, charges = 0, realized = 0, bad = null;
-  const fresh = x => ({sym: x.sym, qty: 0, cost: 0, realized: 0, charges: 0, bQty: 0, bAmt: 0, sQty: 0, sAmt: 0, first: x.date, last: x.date, ids: []});
+  const fresh = x => ({sym: x.sym, name: x.name, qty: 0, cost: 0, realized: 0, charges: 0, bQty: 0, bAmt: 0, sQty: 0, sAmt: 0, first: x.date, last: x.date, ids: []});
   for (const x of pfSorted(txns)) {
     const amt = (x.qty || 0) * (x.px || 0), ch = +x.ch || 0;
     if (x.t === 'in') { cash += x.amt; payIn += x.amt; }
     else if (x.t === 'out') { cash -= x.amt; payOut += x.amt; }
     else {
       const p = pos[x.sym] = pos[x.sym] || fresh(x);
-      p.ids.push(x.id); p.charges += ch; charges += ch; p.last = x.date || p.last;
+      p.ids.push(x.id); if (x.name) p.name = x.name; p.charges += ch; charges += ch; p.last = x.date || p.last;
       if (x.t === 'buy') { p.qty += x.qty; p.cost += amt; p.bQty += x.qty; p.bAmt += amt; cash -= amt + ch; }
       else {                                              // sell at average cost; never more than held at that date
         if (x.qty > p.qty + 1e-9) bad = bad || x;
@@ -2629,10 +2710,12 @@ const pfSymCell = r => r.known ? symCell(r) : `<b>${esc(r.sym)}</b> <span class=
 const pnlCell = r => r.priced ? `${signed(r.pnl)} <small class="${r.pnl >= 0 ? 'up' : 'dn'}">${r.pnlPct > 0 ? '+' : ''}${fmt(r.pnlPct, 1)}%</small>` : NA;
 const PFC = {
   edit: {k:'edit', label:'', noCsv:1, v:r => null, f:r => `<button type="button" class="pf-ico" data-trade="${esc(r.sym)}" title="Buy or sell ${esc(r.sym)}" aria-label="Buy or sell ${esc(r.sym)}">✎</button>`},
-  sym: Object.assign({}, C.sym, {f: r => pfSymCell(r) + (r.known ? `<div class="pf-co">${esc(r.name)}</div>` : '')}),
+  sym: Object.assign({}, C.sym, {f: r => pfSymCell(r) + (r.known || r.name !== r.sym ? `<div class="pf-co">${esc(r.name)}</div>` : '')}),
   qty: {k:'qty', label:'Qty', v:r => r.qty, f:r => fmt(r.qty, 0)},
   avg: {k:'avg', label:'Avg ₹', tip:'Average buy price', v:r => r.avg, f:r => fmt(r.avg, 2)},
-  cmp: Object.assign(pfKnown(C.cmp), {label:'LTP ₹'}),
+  cmp: {k:'ltp', label:'LTP ₹', v:r => r.ltp, f:r => r.ltp == null ? NA : fmt(r.ltp, 2)},
+  day: {k:'day', label:'Day', tip:'Change since yesterday\'s close (live prices)', v:r => r.dayPct, x:r => r.day == null ? '' : fmt(r.day, 0),
+        f:r => r.day == null ? NA : `${signed(r.day)} <small class="${r.day >= 0 ? 'up' : 'dn'}">${r.dayPct > 0 ? '+' : ''}${fmt(r.dayPct, 1)}%</small>`},
   val: {k:'val', label:'Value ₹', v:r => r.value, f:r => r.priced ? fmt(r.value, 0) : `<span class="na" title="No price: valued at cost">${fmt(r.value, 0)}</span>`},
   pnl: {k:'pnl', label:'P&L', tip:'Unrealised profit / loss, ₹ and %', v:r => r.priced ? r.pnlPct : null, x:r => r.priced ? fmt(r.pnl, 0) : '', f:pnlCell},
   wt: {k:'wt', label:'Wt %', tip:'Share of the holdings value', v:r => r.wt, f:r => fmt(r.wt, 1)},
@@ -2660,15 +2743,74 @@ const TXC = {
   act: {k:'tact', label:'', noCsv:1, v:r => null, f:r => PF_LAST && PF_LAST.lock.has(r.x.id)
          ? `<span class="pf-lock" title="Part of a closed position: remove it from the Closed list instead">🔒</span>` : `<span class="pf-acts2"><button type="button" class="pf-ico" data-edit="${esc(r.x.id)}" title="Edit" aria-label="Edit">✎</button><button type="button" class="pf-ico del" data-del="${esc(r.x.id)}" title="Delete" aria-label="Delete">×</button></span>`},
 };
+/* news of the last 7 days for the stocks held (news.json, written by the build from fetch_news.py) */
+let NEWS = null;
+function pfNewsPanel(host, syms) {
+  const p = document.createElement('section'); p.className = 'pf-panel pf-news'; host.appendChild(p);
+  p.innerHTML = '<h3 class="pf-h">News <span>7 days</span></h3><div class="pf-nl"><p class="na">Loading…</p></div>';
+  const paint = () => {
+    const items = [];
+    syms.forEach(sym => (NEWS[sym] || []).forEach(n => items.push([n[0], sym, n[1], n[2]])));
+    items.sort((a, b) => b[0].localeCompare(a[0]));
+    const d = v => { const t = new Date(v.replace(' ', 'T')); return isNaN(t) ? v : t.toLocaleDateString('en-IN', {day: '2-digit', month: 'short'}); };
+    $('.pf-h span', p).textContent = items.length + ' · 7 days';
+    $('.pf-nl', p).innerHTML = items.length ? items.slice(0, 60).map(n => `<a class="pf-ni" href="${esc(n[3] || '#')}" target="_blank" rel="noopener noreferrer">
+        <span class="d">${esc(d(n[0]))}</span><b>${esc(n[1])}</b><span class="t">${esc(n[2])}</span></a>`).join('')
+      : `<p class="na">${syms.length ? 'No news in the last 7 days for your holdings.' : 'News for the stocks you hold shows here.'}</p>`;
+  };
+  if (NEWS) return paint();
+  fetch('news.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : {}).catch(() => ({})).then(j => { NEWS = j || {}; if (p.isConnected) paint(); });
+}
 /* a table inside a panel: title on the left of its own tool row, body scrolls inside the panel */
 function pfPanel(host, title, sub, table) {
   const p = document.createElement('section'); p.className = 'pf-panel'; host.appendChild(p);
   p.appendChild(table);
   const bar = table.querySelector('.tbar');
   const h = `<h3 class="pf-h">${title}${sub != null ? ` <span>${sub}</span>` : ''}</h3>`;
-  if (bar) bar.insertAdjacentHTML('afterbegin', h); else p.insertAdjacentHTML('afterbegin', h);
+  if (bar) { bar.insertAdjacentHTML('afterbegin', h); const q = bar.querySelector('input[type=search]'); if (q) bar.querySelector('.pf-h').after(q); }   // search sits right after the title
+  else p.insertAdjacentHTML('afterbegin', h);
   return p;
 }
+function pfSummary(txns, mkt) {
+  const keep = PF.mkt; PF.mkt = mkt === undefined ? PF.mkt : mkt;   // admin view passes the market doc it read
+  const R = pfReplay(txns || []);
+  const withData = p => { const s = TODAY.get(p.sym); return Object.assign({}, s || {ind: ''}, p, {known: !!s, name: (s && s.name) || p.name || p.sym}); };   // list name wins; typed name for others
+  const open = Object.values(R.pos).filter(p => p.qty > 0).map(p => {
+    const r = withData(p), px = pfLtp(p.sym), lv = pfLive(p.sym);
+    r.avg = p.cost / p.qty; r.priced = px != null; r.ltp = px;
+    r.value = r.priced ? p.qty * px : p.cost;              // no price → valued at cost
+    r.pnl = r.value - p.cost; r.pnlPct = p.cost ? r.pnl / p.cost * 100 : null;
+    r.day = lv && lv.ltp && lv.prev ? p.qty * (lv.ltp - lv.prev) : null;
+    r.dayPct = lv && lv.prev ? (lv.ltp / lv.prev - 1) * 100 : null;
+    return r;
+  });
+  const closed = R.closed.map((p, i) => Object.assign(withData(p), {ci: i}));
+  const hold = open.reduce((t, r) => t + r.value, 0), cost = open.reduce((t, r) => t + r.cost, 0);
+  open.forEach(r => r.wt = hold ? r.value / hold * 100 : null);
+  const unreal = open.filter(r => r.priced).reduce((t, r) => t + r.pnl, 0);
+  const dayRows = open.filter(r => r.day != null), day = dayRows.length ? dayRows.reduce((t, r) => t + r.day, 0) : null;
+  const dayBase = dayRows.reduce((t, r) => t + r.value - r.day, 0);
+  const worth = R.cash + hold, deposits = R.payIn - R.payOut, gain = worth - deposits;
+  const gainPct = deposits > 0 ? gain / deposits * 100 : (cost ? gain / cost * 100 : null);
+  const out = {R, open, closed, hold, cost, unreal, day, dayPct: dayBase ? day / dayBase * 100 : null, worth, deposits, gain, gainPct, asOf: PF.mkt && PF.mkt.asOf};
+  PF.mkt = keep;
+  return out;
+}
+/* admin (auth.js Users list): read-only look at any user's portfolio */
+window.hniPf = {
+  summary(d, mkt) { const P = pfSummary(pfTxnsOf(d), mkt); return {worth: P.worth, gain: P.gain, gainPct: P.gainPct, day: P.day, dayPct: P.dayPct, n: P.open.length, cash: P.R.cash}; },
+  html(d, mkt) {
+    const t = pfTxnsOf(d), P = pfSummary(t, mkt);
+    const k = (a, b, c = '') => `<div class="pf-k ${c}"><span>${a}</span><b>${b}</b></div>`;
+    const rows = P.open.sort((a, b) => b.value - a.value).map(r => `<tr><td class="l"><b>${esc(r.sym)}</b></td><td>${fmt(r.qty, 0)}</td><td>${fmt(r.avg, 2)}</td><td>${r.ltp == null ? '–' : fmt(r.ltp, 2)}</td>
+      <td>${fmt(r.value, 0)}</td><td>${r.priced ? signed(r.pnl) : '–'}</td><td>${r.day == null ? '–' : signed(r.day)}</td></tr>`).join('');
+    const tx = pfSorted(t).slice(-12).reverse().map(x => `<tr><td class="l">${esc(x.date || '')}</td><td class="l">${TX_LABEL[x.t] || x.t}</td><td class="l">${x.sym ? esc(x.sym) + ' ' + fmt(x.qty, 0) + ' @ ' + fmt(x.px, 2) : '₹' + fmt(x.amt, 0)}</td></tr>`).join('');
+    return `<div class="pf-sum">${k('Net gain', rs(P.gain, true), 'gain ' + (P.gain >= 0 ? 'pos' : 'neg'))}${k('Day', P.day == null ? '–' : signed(P.day))}${k('Net worth', rs(P.worth))}${k('Cash', rs(P.R.cash))}${k('Holdings', rs(P.hold))}${k('Closed', P.closed.length)}</div>
+      <div class="au-tbl"><table><thead><tr><th>Stock</th><th>Qty</th><th>Avg</th><th>LTP</th><th>Value</th><th>P&amp;L</th><th>Day</th></tr></thead><tbody>${rows || '<tr><td class="l" colspan="7">No open holdings.</td></tr>'}</tbody></table></div>
+      <div class="au-sub" style="margin:12px 0 6px">Latest transactions</div>
+      <div class="au-tbl"><table><tbody>${tx || '<tr><td class="l">None yet.</td></tr>'}</tbody></table></div>`;
+  },
+};
 function portfolioView() {
   setNav('portfolio'); view.innerHTML = '';
   if (BACK) {                                             // a portfolio is about today; Historical would mix dates
@@ -2681,22 +2823,9 @@ function portfolioView() {
     view.insertAdjacentHTML('beforeend', `<p class="hint">${PF.err ? esc(PF.err) : 'Loading your portfolio…'}</p>`);
     return;
   }
-  const R = pfReplay(PF.txns);
-  const withData = p => { const s = TODAY.get(p.sym); return Object.assign({}, s || {sym: p.sym, name: p.sym, ind: ''}, p, {known: !!s}); };
-  const open = Object.values(R.pos).filter(p => p.qty > 0).map(p => {
-    const r = withData(p), s = TODAY.get(p.sym);
-    r.avg = p.cost / p.qty; r.priced = !!(s && ok(s.cmp));
-    r.value = r.priced ? p.qty * s.cmp : p.cost;            // no price → valued at cost
-    r.pnl = r.value - p.cost; r.pnlPct = p.cost ? r.pnl / p.cost * 100 : null;
-    return r;
-  });
-  const closed = R.closed.map((p, i) => Object.assign(withData(p), {ci: i}));
+  const P = pfSummary(PF.txns), R = P.R, open = P.open, closed = P.closed;
+  const {hold, cost, unreal, worth, deposits, gain, gainPct} = P;
   PF_LAST = R;
-  const hold = open.reduce((t, r) => t + r.value, 0), cost = open.reduce((t, r) => t + r.cost, 0);
-  open.forEach(r => r.wt = hold ? r.value / hold * 100 : null);
-  const unreal = open.filter(r => r.priced).reduce((t, r) => t + r.pnl, 0);
-  const worth = R.cash + hold, deposits = R.payIn - R.payOut, gain = worth - deposits;
-  const gainPct = deposits > 0 ? gain / deposits * 100 : (cost ? gain / cost * 100 : null);
   const tile = (k, v, sub, cls = '') => `<div class="pf-k ${cls}"><span>${k}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
   view.insertAdjacentHTML('beforeend', `<div class="pf-top">
       <div class="pf-acts">
@@ -2705,11 +2834,11 @@ function portfolioView() {
         <button type="button" class="btn" data-open="out">Pay out</button>
         <button type="button" class="btn ghost" data-open="rates" title="Brokerage and tax rates used to work out charges" aria-label="Charges settings">⚙<span class="lg"> Charges</span></button>
       </div>
-      <button type="button" class="btn pf-tg" id="pfWeekly"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg><span class="lg">Send </span>weekly updates</button>
     </div>${PF.err ? `<p class="pf-err">${esc(PF.err)}</p>` : ''}
     ${R.bad ? `<p class="pf-err">A sale of ${esc(R.bad.sym)} on ${esc(R.bad.date || 'an undated day')} is larger than the shares held then. Check the dates in Transactions.</p>` : ''}
     <div class="pf-sum">
       ${tile('Net gain', rs(gain, true), gainPct == null ? '' : (gainPct > 0 ? '+' : gainPct < 0 ? '−' : '') + fmt(Math.abs(gainPct), 1) + '% on money put in', 'gain ' + (gain >= 0 ? 'pos' : 'neg'))}
+      ${tile('Day gain', P.day == null ? '–' : signed(P.day), P.day == null ? 'live prices not on yet' : `${P.dayPct >= 0 ? '+' : '−'}${fmt(Math.abs(P.dayPct), 2)}% · LTP ${esc((P.asOf || '').slice(11))}`, P.day == null ? '' : 'day ' + (P.day >= 0 ? 'pos' : 'neg'))}
       ${tile('Net worth', rs(worth), 'holdings + cash')}
       ${tile('Cash', `<span class="${R.cash < 0 ? 'dn' : ''}">${rs(R.cash)}</span>`, R.cash < 0 && !R.payIn ? 'add a Pay in' : 'free to invest')}
       ${tile('Holdings', rs(hold), `${open.length} open · cost ${rs(cost)}`)}
@@ -2720,9 +2849,10 @@ function portfolioView() {
     <div class="pf-grid"><div class="pf-left"></div><div class="pf-right"></div></div>`);
   const L = $('.pf-left'), RT = $('.pf-right'), phone = isPhone();
   const hCols = phone ? [PFC.edit, PFC.msym, PFC.val, PFC.pnl]          // phone: qty sits under the symbol, so nothing scrolls sideways
-                      : [PFC.edit, PFC.sym, PFC.qty, PFC.avg, PFC.cmp, PFC.val, PFC.pnl, PFC.wt, PFC.score, PFC.mom, PFC.trend, PFC.flags];
+                      : [PFC.edit, PFC.sym, PFC.qty, PFC.avg, PFC.cmp, ...(P.day != null ? [PFC.day] : []), PFC.val, PFC.pnl, PFC.wt, PFC.score, PFC.mom, PFC.trend, PFC.flags];
   pfPanel(L, 'Holdings', open.length, makeTable('pf', hCols, open, {sortKey:'val', sortDir:-1, search:!phone || open.length > 6, noIndex:true, csv:() => 'Portfolio_holdings'}));
   if (!open.length) L.querySelector('tbody').innerHTML = `<tr><td class="l na" colspan="13">No open holdings. Start with <b>Pay in</b> (your opening cash), then <b>+ Buy / Sell</b> — or tap the bag next to any industry name on the other tabs.</td></tr>`;
+  pfNewsPanel(RT, open.map(r => r.sym));
   pfPanel(RT, 'Closed', closed.length, makeTable('pfc', phone ? [PFC.csym, PFC.net, PFC.rm] : [PFC.csym, PFC.cqty, PFC.cpx, PFC.net, PFC.closed, PFC.rm],
     closed, {sortKey:'closed', sortDir:-1, noIndex:true, csv:() => 'Portfolio_closed'}));
   if (!closed.length) RT.querySelector('tbody').innerHTML = '<tr><td class="l na" colspan="5">Stocks you sell fully move here; the money goes back to Cash.</td></tr>';
@@ -2757,13 +2887,12 @@ function portfolioView() {
   const wipe = $('#pfWipe');
   if (wipe) wipe.addEventListener('click', () => typeConfirm('Delete all', `Every holding, closed position, pay in / out and trade (${PF.txns.length} entries) is deleted. Your charge rates stay.`,
     async () => { PF.txns = []; await pfSave(); route(); }));
-  $('#pfWeekly').addEventListener('click', () => modal('Weekly updates', `<p>Work in progress. Soon you'll get your portfolio summary every week on Telegram.</p>`));
 }
 /* small dialog: × , Esc or a click outside closes it; returns the box */
-function modal(title, html) {
+function modal(title, html, opt = {}) {
   document.querySelectorAll('.wip-back').forEach(m => m.remove());
   const w = document.createElement('div'); w.className = 'wip-back open';
-  w.innerHTML = `<div class="wip-box" role="dialog" aria-modal="true"><button type="button" class="wip-x" aria-label="Close">×</button><h3>${title}</h3>${html}</div>`;
+  w.innerHTML = `<div class="wip-box${opt.ov ? ' ov' : ''}" role="dialog" aria-modal="true"><button type="button" class="wip-x" aria-label="Close">×</button><h3>${title}</h3>${html}</div>`;
   document.body.appendChild(w);
   const close = () => { w.remove(); document.removeEventListener('keydown', onKey, true); };
   const onKey = e => { if (e.key === 'Escape') { e.stopImmediatePropagation(); close(); } };
@@ -2771,7 +2900,7 @@ function modal(title, html) {
   $('.wip-x', w).addEventListener('click', close);
   w.addEventListener('mousedown', e => { if (e.target === w) close(); });
   w._close = close;
-  const first = w.querySelector('input:not([type=hidden]), .wip-x'); if (first) setTimeout(() => first.focus(), 30);
+  const first = w.querySelector(opt.noFocus ? '.wip-x' : 'input:not([type=hidden]), .wip-x'); if (first) setTimeout(() => first.focus({preventScroll: true}), 30);
   return w;
 }
 let PF_LAST = null;                                       // last replay shown, so transaction rows know which entries are locked
@@ -2786,23 +2915,60 @@ function typeConfirm(title, html, onOk) {
   setTimeout(() => f.c.focus(), 40);
 }
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
-/* Buy / Sell form (new, or edit an existing trade). Charges fill in by themselves; type over them to override. */
+/* symbol box with its own dropdown (the phone's datalist only shows above the keyboard):
+   matches symbol start first, then name; last row adds a symbol that is not in the lists */
+function symPicker(input, onPick) {
+  const box = document.createElement('div'); box.className = 'sp-list'; box.hidden = true;
+  input.parentNode.classList.add('sp-wrap'); input.after(box);
+  let items = [], hi = 0;
+  const paint = () => {
+    const q = input.value.trim().toUpperCase();
+    if (!q) { box.hidden = true; return; }
+    const a = [], b = [];
+    for (const s of D.stocks) {
+      if (s.sym.startsWith(q)) a.push(s); else if (s.sym.includes(q) || (s.name || '').toUpperCase().includes(q)) b.push(s);
+      if (a.length >= 8) break;
+    }
+    items = a.concat(b).slice(0, 8).map(s => ({sym: s.sym, name: s.name, held: PF_HELD.has(s.sym)}));
+    if (/^[A-Z0-9&._-]{1,20}$/.test(q) && !TODAY.has(q)) items.push({sym: q, name: 'Add as a stock not in these lists', add: true});
+    hi = 0;
+    box.innerHTML = items.map((it, i) => `<button type="button" class="sp-it${i === hi ? ' on' : ''}${it.add ? ' add' : ''}" data-i="${i}"><b>${esc(it.sym)}</b><span>${esc(it.name || '')}</span>${it.held ? '<i>held</i>' : ''}</button>`).join('');
+    box.hidden = !items.length;
+  };
+  const pick = i => { const it = items[i]; if (!it) return; input.value = it.sym; box.hidden = true; onPick(it); };
+  input.addEventListener('input', paint);
+  input.addEventListener('focus', paint);
+  input.addEventListener('keydown', e => {
+    if (box.hidden) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); hi = (hi + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      box.querySelectorAll('.sp-it').forEach((b, i) => b.classList.toggle('on', i === hi)); }
+    else if (e.key === 'Enter') { e.preventDefault(); pick(hi); }
+    else if (e.key === 'Escape') { e.stopPropagation(); box.hidden = true; }
+  });
+  box.addEventListener('mousedown', e => e.preventDefault());              // keep the focus in the box while choosing
+  box.addEventListener('click', e => { const b = e.target.closest('.sp-it'); if (b) pick(+b.dataset.i); });
+  input.addEventListener('blur', () => setTimeout(() => { box.hidden = true; }, 120));
+}
+/* Buy / Sell form (new, or edit an existing trade). Charges fill in by themselves; type over them to override.
+   Until you click a box: digits go to Qty, letters to Symbol. Empty price = LTP. */
 function pfTradeForm(x) {
   const edit = !!x.id, held = () => { const R = pfReplay(PF.txns.filter(t => t !== x)); return (R.pos[f.sym.value.trim().toUpperCase()] || {}).qty || 0; };
   const w = modal(edit ? 'Edit trade' : 'Buy / Sell', `<form class="pf-form" autocomplete="off">
     <div class="seg"><button type="button" data-t="buy">Buy</button><button type="button" data-t="sell">Sell</button></div>
-    <label class="fld"><span>Symbol</span><input name="sym" list="pfSyms" placeholder="e.g. TCS" required spellcheck="false"></label>
-    <div class="row2"><label class="fld"><span>Qty <i class="held"></i></span><input name="qty" type="number" min="0" step="any" required></label>
-    <label class="fld"><span>Price ₹ <i class="ltp"></i></span><input name="px" type="number" min="0" step="any"></label></div>
+    <label class="fld"><span>Symbol or company</span><input name="sym" placeholder="type e.g. TCS or Tata" required spellcheck="false" autocapitalize="characters" enterkeyhint="next"></label>
+    <label class="fld pf-name" hidden><span>Company name <i>optional, not in the lists</i></span><input name="nm" spellcheck="false"></label>
+    <div class="row2"><label class="fld"><span>Qty <i class="held"></i></span><input name="qty" type="number" inputmode="decimal" min="0" step="any" required></label>
+    <label class="fld"><span>Price ₹ <i class="ltp"></i></span><input name="px" type="number" inputmode="decimal" min="0" step="any"></label></div>
     <div class="row2"><label class="fld"><span>Date</span><input name="date" type="date"></label>
-    <label class="fld"><span>Charges ₹ <i>auto</i></span><input name="ch" type="number" min="0" step="any"></label></div>
+    <label class="fld"><span>Charges ₹ <i>auto</i></span><input name="ch" type="number" inputmode="decimal" min="0" step="any"></label></div>
     <p class="pf-calc"></p><p class="pf-err"></p>
-    <button type="submit" class="btn primary">Save</button>
-    <datalist id="pfSyms">${D.stocks.map(s => `<option value="${esc(s.sym)}">${esc(s.name)}</option>`).join('')}</datalist></form>`);
-  const f = $('form', w); let t = x.t || 'buy', chTyped = edit && x.ch != null;
+    <div class="pf-fix" hidden><span>No price for this symbol. Renamed or wrong?</span><button type="button" class="btn ghost" data-fix>Update symbol / name</button></div>
+    <button type="submit" class="btn primary">Save</button></form>`, {noFocus: true, ov: true});   // no box chosen yet: typing is routed below
+  const f = $('form', w); let t = x.t || 'buy', chTyped = edit && x.ch != null, touched = false;
   f.sym.value = x.sym || ''; f.qty.value = x.qty || ''; f.px.value = x.px || ''; f.date.value = x.date || today(); f.ch.value = edit ? (x.ch || 0) : '';
+  f.nm.value = x.name || '';
   const seg = () => w.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
-  const ltp = () => { const s = TODAY.get(f.sym.value.trim().toUpperCase()); return s && ok(s.cmp) ? s.cmp : null; };
+  const ltp = () => pfLtp(f.sym.value.trim().toUpperCase());
   const calc = () => {
     const sym = f.sym.value.trim().toUpperCase(), L = ltp(), q = +f.qty.value, p = +f.px.value || L || 0;   // empty price → LTP
     f.px.placeholder = L ? 'LTP ' + fmt(L, 2) : 'price';
@@ -2810,14 +2976,31 @@ function pfTradeForm(x) {
     const h = sym ? held() : 0; $('.held', w).textContent = sym && h ? `(holding ${fmt(h, 0)})` : '';
     const sb = w.querySelector('.seg [data-t=sell]'); sb.disabled = !(h > 0); sb.title = h > 0 ? '' : 'Nothing to sell: you hold none';
     if (t === 'sell' && !(h > 0)) { t = 'buy'; seg(); }        // can't sell what you don't hold
+    $('.pf-name', w).hidden = !sym || TODAY.has(sym);
+    $('.pf-fix', w).hidden = !(sym && h > 0 && L == null);     // a holding with no price at all: offer to fix its symbol
     if (!chTyped) f.ch.value = q > 0 && p > 0 ? pfCharges(t, q, p) : '';
     const ch = +f.ch.value || 0;
     $('.pf-calc', w).textContent = q > 0 && p > 0 ? (t === 'buy' ? `Cash out ₹${fmt(q * p + ch, 2)} (₹${fmt(q * p, 2)} + charges)` : `Cash in ₹${fmt(q * p - ch, 2)} (₹${fmt(q * p, 2)} − charges)`) : '';
   };
+  symPicker(f.sym, () => { calc(); f.qty.focus(); });
   w.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => { t = b.dataset.t; seg(); calc(); }));
   ['sym', 'qty', 'px'].forEach(k => f[k].addEventListener('input', calc));
   f.sym.addEventListener('change', calc);
   f.ch.addEventListener('input', () => { chTyped = f.ch.value !== ''; calc(); });
+  /* before the user clicks a box: digits → Qty, letters → Symbol */
+  w.addEventListener('pointerdown', e => { if (e.target.closest('input')) touched = true; });
+  const route1 = e => {
+    if (!w.isConnected) return document.removeEventListener('keydown', route1, true);
+    if (touched || e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') { touched = true; return; }
+    const into = /[0-9.]/.test(e.key) ? f.qty : /[A-Za-z&]/.test(e.key) ? f.sym : null;
+    if (!into) return;
+    e.preventDefault(); e.stopImmediatePropagation(); touched = true;   // the page's own "type to search" must not get it
+    into.focus(); into.value = into === f.sym && !x.sym ? e.key.toUpperCase() : (into.value && into === f.qty ? into.value : '') + e.key;
+    into.dispatchEvent(new Event('input'));
+  };
+  document.addEventListener('keydown', route1, true);
+  $('[data-fix]', w).addEventListener('click', () => pfRenameForm(f.sym.value.trim().toUpperCase()));
   seg(); calc();
   f.addEventListener('submit', async e => {
     e.preventDefault();
@@ -2825,18 +3008,39 @@ function pfTradeForm(x) {
     const sym = f.sym.value.trim().toUpperCase().replace(/^NSE:/, ''), qty = +f.qty.value, px = +f.px.value || ltp();
     if (!/^[A-Z0-9&._-]{1,20}$/.test(sym)) return err('Type a valid NSE symbol, e.g. TCS.');
     if (!(qty > 0)) return err('Quantity must be above 0.');
-    if (!(px > 0)) return err(`No price for ${sym} in today's data. Type the price.`);
+    if (!(px > 0)) return err(`No price for ${sym}. Type the price.`);
     if (t === 'sell' && !(held() > 0)) return err(`You hold no ${sym}, so there is nothing to sell.`);
     if (t === 'sell' && qty > held() + 1e-9) return err(`You hold ${fmt(held(), 0)} ${sym}; you can't sell ${fmt(qty, 0)}.`);
     if (!edit && PF.txns.length >= 3000) return err('Transaction limit reached (3000).');
     const rec = {id: x.id || pfId(), t, sym, qty, px, ch: f.ch.value === '' ? pfCharges(t, qty, px) : +f.ch.value, date: f.date.value || ''};
+    if (!TODAY.has(sym) && f.nm.value.trim()) rec.name = f.nm.value.trim().slice(0, 80);
     const next = edit ? PF.txns.map(o => o === x ? rec : o) : PF.txns.concat(rec);
-    const bad = pfReplay(next).bad;                         // dates matter: a sale can't exceed what was held on its day, now or after this change
+    const bad = pfReplay(next).bad;                         // a sale can't exceed what was held on its date, now or after this change
     if (bad) return err(`That would make the sale of ${bad.sym}${bad.date ? ' on ' + bad.date : ''} larger than the shares held then. Check the date and quantity.`);
     PF.txns = next;
     await pfSave(); w._close();
     if ((location.hash || '') === '#/portfolio') route();
     else { pfMarkBags(); toast(`${t === 'buy' ? 'Bought' : 'Sold'} ${fmt(qty, 0)} ${sym} @ ₹${fmt(px, 2)} · saved to Portfolio`); }
+  });
+}
+/* a held symbol that has no price (renamed on NSE, typo, delisted): move its open trades to a new symbol / name */
+function pfRenameForm(old) {
+  const lock = pfReplay(PF.txns).lock;
+  const ids = PF.txns.filter(t => t.sym === old && !lock.has(t.id)).map(t => t.id);
+  const w = modal('Update symbol / name', `<form class="pf-form" autocomplete="off">
+    <p class="pf-calc">Moves the ${ids.length} open trade${ids.length === 1 ? '' : 's'} of <b>${esc(old)}</b> to the new symbol. Closed records keep the old one.</p>
+    <label class="fld"><span>New symbol</span><input name="sym" value="${esc(old)}" spellcheck="false" autocapitalize="characters"></label>
+    <label class="fld"><span>Company name <i>optional</i></span><input name="nm" spellcheck="false"></label>
+    <p class="pf-err"></p><button type="submit" class="btn primary">Update</button></form>`, {ov: true});
+  const f = $('form', w);
+  symPicker(f.sym, () => {});
+  f.addEventListener('submit', async e => {
+    e.preventDefault();
+    const sym = f.sym.value.trim().toUpperCase();
+    if (!/^[A-Z0-9&._-]{1,20}$/.test(sym)) { $('.pf-err', w).textContent = 'Type a valid NSE symbol.'; return; }
+    const nm = f.nm.value.trim().slice(0, 80);
+    PF.txns = PF.txns.map(t => ids.includes(t.id) ? Object.assign({}, t, {sym}, nm ? {name: nm} : {}) : t);
+    await pfSave(); w._close(); route(); toast(`${old} → ${sym}`);
   });
 }
 /* Pay in / Pay out (new, or edit) */
@@ -3224,6 +3428,7 @@ if (WEB) {                                                  // website: back but
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
 }
+$('#weeklyBtn').addEventListener('click', () => modal('Weekly updates', `<p>Work in progress. Soon you'll get your portfolio summary every week on Telegram.</p>`));
 window.addEventListener('hashchange', route);
 route();
 </script>
@@ -3279,6 +3484,34 @@ def render_html(now, backs, asof, web=False, smnow=None, embed_all=False):
     return html.replace("__DATA__", data), span
 
 
+NEWS_CSV, NEWS_DAYS, NEWS_PER_STOCK = "multi_stock_news.csv", 7, 8
+
+
+def write_news_json(csv_path, out_dir):
+    """multi_stock_news.csv (fetch_news.py) → news.json {SYMBOL: [[datetime, headline, link], …]}, last 7 days,
+    newest first, at most 8 per stock. Loaded by the Portfolio page only for the stocks a user holds."""
+    csv_path = pathlib.Path(csv_path)
+    if not csv_path.exists():
+        return 0
+    try:
+        n = pd.read_csv(csv_path, encoding="utf-8-sig", usecols=["stockname", "datetime", "news", "link"]).dropna(subset=["stockname", "news"])
+    except Exception as e:
+        print("    news.json skipped:", e)
+        return 0
+    n["dt"] = pd.to_datetime(n["datetime"].astype(str).str.replace(" IST", "", regex=False), errors="coerce")
+    cut = pd.Timestamp.now(tz="Asia/Kolkata").tz_localize(None) - pd.Timedelta(days=NEWS_DAYS)
+    n = n[n["dt"] >= cut].sort_values("dt", ascending=False)
+    out = {}
+    for r in n.itertuples():
+        sym = str(r.stockname).strip().upper()
+        lst = out.setdefault(sym, [])
+        if len(lst) < NEWS_PER_STOCK:
+            lst.append([r.dt.strftime("%Y-%m-%d %H:%M"), str(r.news).strip(), str(r.link).strip() if isinstance(r.link, str) else ""])
+    txt = json.dumps(out, ensure_ascii=False, separators=(",", ":"))
+    (pathlib.Path(out_dir) / "news.json").write_text(txt, encoding="utf-8")
+    return len(txt.encode("utf-8"))
+
+
 def build_site(paths, out_path, minify=None, prices_path=None):
     """Called from build.py: read only `paths`, write the web version to `out_path`.
     prices.csv (fetch_prices.py) is picked up from the CSVs' folder automatically when present."""
@@ -3301,6 +3534,10 @@ def build_site(paths, out_path, minify=None, prices_path=None):
         txt = json.dumps(clean(b), allow_nan=False, separators=(",", ":"))
         (out_path.parent / ("fundamentals_back_%s.json" % k)).write_text(txt, encoding="utf-8")
         extra += len(txt.encode("utf-8"))
+    if paths:
+        nb = write_news_json(pathlib.Path(str(paths[0])).parent / NEWS_CSV, out_path.parent)
+        if nb:
+            print("    news.json: %.2f MB (Portfolio news panel)" % (nb / 1e6))
     print("    Fundamentals: %d stocks, data as of %s, back periods %s, page %.1f MB + %.1f MB on demand -> %s" % (
         len(now), asof.strftime("%d %b %Y"), "/".join(b["label"] for b in backs.values()),
         len(html.encode("utf-8")) / 1e6, extra / 1e6, out_path))
