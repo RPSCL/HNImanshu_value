@@ -1054,6 +1054,17 @@ body.day .toggle-thumb{transform:translateX(16px)}
   .fbtns .btn{padding:0 9px}
 }
 
+/* phone: floating Filters button, bottom-right. 50% normally, 5% while scrolling or holding a finger down > 1 s */
+#ffab{display:none}
+@media (max-width:700px){
+  #ffab.show{display:flex;align-items:center;justify-content:center;position:fixed;right:16px;bottom:18px;z-index:80;width:52px;height:52px;border-radius:50%;
+    border:0;background:var(--brass);color:var(--bg);box-shadow:0 6px 18px rgba(0,0,0,.35);opacity:.5;transition:opacity .25s;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  #ffab.dim{opacity:.05}
+  #ffab .cnt{position:absolute;top:-2px;right:-2px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--ink);color:var(--bg);font:700 10.5px/18px var(--mono);text-align:center}
+  #ffab .cnt:empty{display:none}
+  body.fmodal #ffab{display:none}
+}
+
 /* custom dropdown: replaces the native <select> popup (which ignores the theme) */
 .fsel{position:relative;display:inline-flex;align-items:center}
 .fsel > select{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
@@ -1104,10 +1115,15 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:16p
 .chip.ytoggle:has(input:checked){background:var(--brass);border-color:var(--brass);color:var(--bg)}
 .chip.ytoggle:has(input:checked)::before{background:radial-gradient(circle, currentColor 0 2px, transparent 2.6px)}   /* dot inside the ring */
 /* header never shifts: chips that change content get a fixed width (set in JS from their widest option) */
-.global .chip{position:relative;flex-shrink:0}
-.global .chip .fsel{position:static;flex:1;min-width:0}
-.global .chip .fsel-btn{width:100%;justify-content:space-between}
-.global .chip .fsel-menu{left:-1px;right:-1px;min-width:0;top:calc(100% + 6px)}   /* exactly under the chip, same width */
+.global .chip,.hgrp .chip{position:relative;flex-shrink:0}
+.global .chip .fsel,.hgrp .chip .fsel{position:static;flex:1;min-width:0}
+.global .chip .fsel-btn,.hgrp .chip .fsel-btn{width:100%;justify-content:space-between}
+.global .chip .fsel-menu,.hgrp .chip .fsel-menu{left:-1px;right:-1px;min-width:0;top:calc(100% + 6px)}   /* exactly under the chip, same width */
+.hgrp{display:flex;align-items:center;gap:8px;flex-shrink:0}
+nav .hgrp{margin-left:auto;padding:4px 0}                       /* desktop: Historical + date at the far right of the tabs row */
+nav .hgrp .chip{height:30px}
+.btn.back .arr{display:none}
+.gsep{display:none;width:1px;height:20px;background:var(--line);margin:0 2px;flex-shrink:0}
 #backChip{justify-content:center}
 .chip:has(input:focus-visible){outline:2px solid var(--brass);outline-offset:2px}
 .chip select{border:0;background:transparent;padding:0 2px;color:var(--ink);font-size:12.5px}
@@ -1121,7 +1137,8 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:16p
 .btn.back:hover{background:var(--brassbg)}
 .btn.theme{width:32px;justify-content:center;padding:0;font-size:14px}
 
-nav{display:flex;gap:2px;padding:0 16px;border-bottom:1px solid var(--line);overflow-x:auto;position:sticky;top:0;z-index:5;background:var(--panel)}
+nav{display:flex;align-items:center;gap:2px;padding:0 16px;border-bottom:1px solid var(--line);overflow-x:auto;position:sticky;top:0;z-index:5;background:var(--panel)}
+@media (min-width:701px){nav{overflow:visible;z-index:30}}    /* the date menu drops out of the tabs row, above the table tools */
 nav a{padding:11px 14px 9px;color:var(--mute);font:500 12px var(--mono);letter-spacing:.3px;border-bottom:2px solid transparent;white-space:nowrap}
 nav a:hover{color:var(--ink);text-decoration:none}
 nav a.on{color:var(--brass);border-color:var(--brass)}
@@ -1198,24 +1215,14 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
 .doc p{margin:6px 0;max-width:80ch}
 .doc code{background:var(--panel2);border:1px solid var(--line);padding:1px 6px;border-radius:5px;font:12px var(--mono)}
 .doc .wrap{max-height:none;margin:8px 0 12px}
-/* Same method diagram */
-.smd{display:grid;gap:12px;margin:10px 0 14px}
-.smd .lane{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--panel)}
-.smd .tag{display:inline-block;font:700 10.5px var(--mono);letter-spacing:1px;text-transform:uppercase;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--mute);margin-bottom:10px}
-.smd .tag.on{background:var(--brass);border-color:var(--brass);color:var(--bg)}
-.smd .flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.smd .nd{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--bg);min-width:120px;max-width:230px}
-.smd .nd b{display:block;font:700 12px var(--mono);color:var(--ink)}
-.smd .nd span{display:block;font-size:11.5px;color:var(--faint);line-height:1.4;margin-top:2px}
-.smd .nd.eng{border-color:var(--brass);background:var(--brassbg)}
-.smd .nd.out{border-color:var(--brass)}
-.smd .nd.good{border-color:var(--good);background:var(--goodbg)}
-.smd .ar,.smd .plus{font:700 18px var(--mono);color:var(--brass)}
-.smd .pair{display:flex;flex-direction:column;align-items:center;gap:4px}
-.smd .eq{font:600 10.5px var(--mono);color:var(--good)}
-.smd .use{margin-top:10px;font-size:12.5px;color:var(--good)}
-.smd .use b{color:var(--ink)}
-@media (max-width:700px){.smd .flow{flex-direction:column;align-items:stretch}.smd .nd{max-width:none}.smd .ar{transform:rotate(90deg);align-self:center}.smd .plus{align-self:center}}
+/* Methodology: quick cards + glossary tables with a one-line example column */
+.doc .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:8px 0 14px}
+.doc .card{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel)}
+.doc .card b{display:block;font:700 12.5px var(--mono);color:var(--brass);margin-bottom:3px}
+.doc .card span{font-size:12.5px;color:var(--mute);line-height:1.45}
+.doc table.gl td:first-child{white-space:nowrap}
+.doc table.gl td.ex{color:var(--mute);font-style:italic}
+@media (max-width:700px){.doc table.gl td:first-child{white-space:normal;min-width:90px}}
 .doc td,.doc th{text-align:left;white-space:normal;cursor:default;position:static;vertical-align:top}
 .doc td{font-family:var(--sans)}
 @media (max-width:700px){
@@ -1223,6 +1230,8 @@ td .co{color:var(--mute);display:inline-block;max-width:260px;overflow:hidden;te
   .brand{gap:8px}
   .brand .sub{font-size:11.5px;width:100%}
   .global{gap:6px;width:100%}
+  .btn.back .arr{display:inline-block}
+  .gsep{display:inline-block}
   .chip,.btn{height:30px;font-size:11.5px;padding:0 9px}
   .btn.theme{width:30px;padding:0}
   nav{padding:0 6px}
@@ -1256,13 +1265,16 @@ __AUTH_BODY__<script>
     <div class="sub" id="meta"></div>
   </div>
   <div class="global">
-    <a class="btn back" id="backBtn" href="./"><span class="lg">Back to </span>Screener</a>
+    <a class="btn back" id="backBtn" href="./"><svg class="arr" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg><span class="lg">Back to </span>Screener</a>
+    <span class="gsep" aria-hidden="true"></span>
     <label class="chip" id="uniChip">List <select id="uniSel"></select></label>
     <label class="chip strike" title="Click to hide PSU stocks (struck through = hidden)"><input type="checkbox" id="hidePSU"><span>PSU</span></label>
     <label class="chip strike" title="Click to hide semi-PSU stocks (struck through = hidden)"><input type="checkbox" id="hideSemi"><span>Semi PSU</span></label>
-    <label class="chip" id="sameChip" title="Same method: rebuild TODAY's numbers with the exact engine used for 1Y back (raw yearly / quarterly rows + one Angel price), instead of Screener's own ratios, so today and 1Y back are like-for-like. Always on in 1Y back."><input type="checkbox" id="sameM"> Same method</label>
-    <label class="chip ytoggle" id="backChip"><input type="checkbox" id="histOn"> Historical</label>
-    <label class="chip backsel" id="backPer" title="Historical date"><select id="backSel" aria-label="Historical period"></select></label>
+    <span class="gsep" id="histSep" aria-hidden="true"></span>
+    <div class="hgrp" id="histGrp">
+      <label class="chip ytoggle" id="backChip"><input type="checkbox" id="histOn"> Historical</label>
+      <label class="chip backsel" id="backPer" title="Historical date"><select id="backSel" aria-label="Historical period"></select></label>
+    </div>
     <button class="btn primary" id="saveHtml">Save as HTML</button>
     <div id="theme-toggle" title="Day / night">
       <span class="toggle-icon moon-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
@@ -1278,12 +1290,13 @@ __AUTH_BODY__<script>
   <a href="#/all" data-t="all">All Stocks</a>
 </nav>
 <main id="view"></main>
+<button type="button" id="ffab" aria-label="Filters" title="Filters"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 3.5h12M4.5 8h7M7 12.5h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><b class="cnt"></b></button>
 
 <script>
 const WEB = __WEB__;
 const D = __DATA__;
 let S = D.stocks, BACK = false, SAME = false, NOPRICE = false;
-/* SAME    = the same-method engine is on screen (always when 1Y back; optional for today)
+/* SAME    = past-date engine on screen (= Historical on)
    NOPRICE = no price for this date (1Y back without prices.csv): price filters / columns / Screens switch off */
 const $ = (s, el=document) => el.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -1296,7 +1309,8 @@ const lsSet = (k, v) => { mem[k] = String(v); try { localStorage.setItem(LSP + k
 const lsJson = (k, def) => { try { return Object.assign({}, def, JSON.parse(lsGet(k) || '{}')); } catch (e) { return Object.assign({}, def); } };
 let method = lsGet('pemethod') || 'median';
 /* global PSU filter: applies to every tab (industry benchmarks still use all stocks) */
-const GF = lsJson('gf', {psu:false, semi:false, back:false, backP:'1Y', same:false, uni:'all'});
+const GF = lsJson('gf', {psu:false, semi:false, back:false, backP:'1Y', uni:'all'});
+delete GF.same;                                              // old "Same method" setting from earlier visits: dropped
 const QP = new URLSearchParams(location.search);
 if (QP.has('uni') && history.replaceState) history.replaceState(null, '', location.pathname + location.hash);   // old ?uni= links: ignored, URL cleaned
 const vis = s => !(GF.psu && s.psu === 'psu') && !(GF.semi && s.psu === 'semi')
@@ -1315,12 +1329,9 @@ let industries = {};
 function setMode() {
   BACK = !!(GF.back && D.then && (D.then.key || '1Y') === GF.backP);   // the chosen period once its data is in
   const bp = $('#backPer'); if (bp) bp.classList.toggle('on', BACK);
-  const smOk = D.smNow && D.smNow.stocks && D.smNow.stocks.length;
-  SAME = BACK || !!(GF.same && smOk);
-  S = BACK ? D.then.stocks : (SAME ? D.smNow.stocks : D.stocks);
+  SAME = BACK;                                                    // today = Screener's own figures; past dates = rebuilt from raw rows
+  S = BACK ? D.then.stocks : D.stocks;
   NOPRICE = BACK && !D.then.hasPrice;
-  const sc = $('#sameM');
-  if (sc) { sc.checked = SAME; sc.disabled = BACK || !smOk; }       // 1Y back always uses the same engine
   industries = {};
   S.forEach(s => (industries[s.ind] = industries[s.ind] || {name:s.ind, stocks:[]}).stocks.push(s));
   Object.values(industries).forEach(buildIndustry);
@@ -1787,7 +1798,7 @@ function yoyTiles(rows) {                                 // current view only: 
       + `<span>${label}, 1Y ago → now</span><b>${fmt(r[0], d)} → ${fmt(r[1], d)}<small class="${ch >= 0 ? 'up' : 'dn'}">${ch > 0 ? '+' : ''}${fmt(ch, 1)}${pp ? ' pp' : '%'}</small></b></div>`;
   };
   const html = tile('Median PE', Y.pe, 1) + tile('Median PB', Y.pb, 2) + tile('Median ROE %', Y.roe, 1, true);
-  return html ? `<div class="stat cap" data-key="yoy" title="Stocks in this list that also existed 1 year ago (${both.length} of ${rows.length}); newer listings are left out. 1Y-ago values use the same-method engine; tick Same method for an exact like-for-like.">`
+  return html ? `<div class="stat cap" data-key="yoy" title="Stocks in this list that also existed 1 year ago (${both.length} of ${rows.length}); newer listings are left out. 1Y-ago values are rebuilt from the results published by then.">`
     + `<span>vs 1Y ago</span><b>${both.length} stocks</b></div>${html}` : '';
 }
 const stats = (arr, rows, extra) => {                            // ONE compact strip: list stats, then (1Y back) results since that date
@@ -1940,10 +1951,32 @@ function filterBox(o, rerender) {
 document.addEventListener('click', e => {
   if (!document.querySelector('.fbox.dopen')) return;
   const t = e.target;
-  if (t.closest && (t.closest('.fdrop') || t.closest('.fbtn'))) return;
+  if (t.closest && (t.closest('.fdrop') || t.closest('.fbtn') || t.closest('#ffab'))) return;
   closeDrops();
 }, true);
 addEventListener('resize', () => { const f = document.querySelector('.fbox.dopen'); if (f) placeDrop(f); });
+/* phone: floating Filters button (bottom-right) opens the same filter window as the page's Filters button */
+const FAB = $('#ffab');
+function syncFab() {                                       // shown only on tabs that have filters; badge = filters changed
+  const b = view.querySelector('.fbox .fbtn');
+  FAB.classList.toggle('show', !!b);
+  const c = b && b.querySelector('.cnt');
+  FAB.querySelector('.cnt').textContent = c ? c.textContent : '';
+}
+FAB.addEventListener('click', () => { const b = view.querySelector('.fbox .fbtn'); if (b) b.click(); });
+new MutationObserver(syncFab).observe(view, {childList:true, subtree:true});
+let fabScrollT = 0, fabHoldT = 0;
+const fabDim = on => FAB.classList.toggle('dim', on);
+addEventListener('scroll', () => {                         // fades while the page (or a table) scrolls, back 0.6 s after it stops
+  fabDim(true); clearTimeout(fabScrollT); fabScrollT = setTimeout(() => { if (!fabHoldT) fabDim(false); }, 600);
+}, {passive:true, capture:true});
+addEventListener('touchstart', e => {                      // finger held anywhere else for 1 s → fade
+  if (e.target.closest && e.target.closest('#ffab')) return;
+  clearTimeout(fabHoldT); fabHoldT = setTimeout(() => fabDim(true), 1000);
+}, {passive:true});
+const fabRelease = () => { clearTimeout(fabHoldT); fabHoldT = 0; clearTimeout(fabScrollT); fabScrollT = setTimeout(() => fabDim(false), 600); };
+addEventListener('touchend', fabRelease, {passive:true});
+addEventListener('touchcancel', fabRelease, {passive:true});
 const pageSearch = () => view.querySelector('.tbar input[type=search]');
 const typingIn = t => t && (t.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName));
 document.addEventListener('keydown', e => {
@@ -2335,25 +2368,25 @@ function improvingView() {
 }
 
 /* ---------- METHODOLOGY ---------- */
-/* ---------- BACKTEST MATCH: 1Y back and "Same method" today run one engine; only prices decide what is available ---------- */
+/* ---------- BACKTEST MATCH: what each tab can show on a past date; only prices decide what is available ---------- */
 const btOf = k => {
   const px = D.then && D.then.hasPrice, roce = 'ROCE is EBIT ÷ total assets at both dates until the scraper stores Borrowings.';
   const T = px ? {
-    home:     ['Same method', 'Industry PE, PB, ROE and yields from the same engine at both dates.'],
-    value:    ['Same method', 'Same 7-metric Value score, same filters and Screens at both dates. ' + roce],
-    magic:    ['Same method', 'Full Magic Formula (earnings yield + ROCE) at both dates. ' + roce],
-    qv:       ['Same method', 'Both halves at both dates. Promoter-drop and FII + DII use a 3-quarter window at both dates (all the CSV holds 1 year back). ' + roce],
-    promoter: ['Same method', 'Same maths at both dates on a 3-quarter window.'],
-    public:   ['Same method', 'Same maths at both dates on a 3-quarter window.'],
-    improving:['Same method', 'Same 7 checks at both dates, quarterly checks on 2 year-on-year comparisons.'],
+    home:     ['Like-for-like', 'Industry PE, PB, ROE and yields from the same engine at both dates.'],
+    value:    ['Like-for-like', 'Same 7-metric Value score, same filters and Screens at both dates. ' + roce],
+    magic:    ['Like-for-like', 'Full Magic Formula (earnings yield + ROCE) at both dates. ' + roce],
+    qv:       ['Like-for-like', 'Both halves at both dates. Promoter-drop and FII + DII use a 3-quarter window at both dates (all the CSV holds 1 year back). ' + roce],
+    promoter: ['Like-for-like', 'Same maths at both dates on a 3-quarter window.'],
+    public:   ['Like-for-like', 'Same maths at both dates on a 3-quarter window.'],
+    improving:['Like-for-like', 'Same 7 checks at both dates, quarterly checks on 2 year-on-year comparisons.'],
   } : {
     home:     ['Fundamentals only', 'No prices.csv yet: industry PE, PB and yields are blank 1Y back.'],
     value:    ['Fundamentals only', 'No prices.csv yet: score uses ROCE / ROE, EPS growth and cash conversion only; price filters and Screens are off.'],
     magic:    ['Not comparable', 'No prices.csv yet: earnings yield needs a price, so the rank is ROCE only.'],
     qv:       ['Quality half only', 'No prices.csv yet: value half needs a price.'],
-    promoter: ['Same method', 'Same maths at both dates on a 3-quarter window; Max PE off without prices.'],
-    public:   ['Same method', 'Same maths at both dates on a 3-quarter window; Max PE off without prices.'],
-    improving:['Same method', 'Same 7 checks at both dates, quarterly checks on 2 year-on-year comparisons.'],
+    promoter: ['Like-for-like', 'Same maths at both dates on a 3-quarter window; Max PE off without prices.'],
+    public:   ['Like-for-like', 'Same maths at both dates on a 3-quarter window; Max PE off without prices.'],
+    improving:['Like-for-like', 'Same 7 checks at both dates, quarterly checks on 2 year-on-year comparisons.'],
   };
   return T[k] ? {lvl:T[k][0], why:T[k][1]} : null;
 };
@@ -2376,170 +2409,128 @@ function allView() {
 function methodView() {
   setNav('method'); view.innerHTML = '';
   const W = lsJson('vw', W_DEF);
-  const avgOf = arr => { const t = arr.filter(s => s.tr); return t.length ? fmt(t.reduce((a,s) => a + s.tr.of, 0) / t.length, 1) : '–'; };
-  const nTr = arr => arr.filter(s => s.tr).length;
-  const N = D.stocks, T = D.then ? D.then.stocks : [];
-  const row = (...c) => `<tr>${c.map(x => `<td>${x}</td>`).join('')}</tr>`;
+  const N = D.stocks;
+  /* one glossary row: name · what it means · a one-line example */
+  const g = (name, what, ex) => `<tr><td><b>${name}</b></td><td>${what}</td><td class="ex">${ex}</td></tr>`;
+  const head = '<tr><th>Number</th><th>What it means</th><th>Example</th></tr>';
+  const tbl = rows => `<div class="wrap"><table class="gl">${head}${rows}</table></div>`;
+  const backs = (D.backs || []).map(b => `${esc(b.label)} = ${esc(b.date)}${b.hasPrice ? '' : ' (no prices yet)'}`).join(' · ');
   view.insertAdjacentHTML('beforeend', `<div class="doc">
-  <p>Everything comes from the screener's valuation CSVs (downloaded ${esc(D.asOf)}): ${D.lists.map(esc).join(', ')}. Consolidated figures (standalone for companies that do not publish consolidated accounts; both pages are scraped and merged weekly), ${N.length} unique stocks (a stock in two lists is kept once, with the row that has the most data).
-  Prices for 1Y back and the Same method view come from prices.csv (Angel One, fetched in the weekly run). "Financials" = industries matching bank / finance / NBFC / insurance / broking / AMC; they skip metrics that don't apply to them.
-  Stocks whose latest annual figure is older than ${D.staleDays} days are treated as having no history. The <b>List</b> picker and the <b>Hide PSU</b> switches apply to both tabs; industry benchmarks and Value score peers always use every stock.</p>
 
-  <h2>Same method: ticked vs not ticked</h2>
-  <div class="smd">
-    <div class="lane">
-      <div class="tag">Not ticked</div>
-      <div class="flow">
-        <div class="nd src"><b>Screener's own ratios</b><span>PE · PB · ROE · ROCE · div yield, as Screener publishes them</span></div>
-        <div class="ar">→</div>
-        <div class="nd out good"><b>Today</b><span>full data: true ROCE, profit that belongs to shareholders, latest book value</span></div>
-      </div>
-      <div class="use">✓ Use to <b>pick stocks today</b>, the most accurate figures</div>
-    </div>
-    <div class="lane">
-      <div class="tag on">Ticked</div>
-      <div class="flow">
-        <div class="nd src"><b>Raw rows</b><span>yearly + quarterly results, balance sheet, shareholding</span></div>
-        <div class="plus">+</div>
-        <div class="nd src"><b>One price</b><span>Angel close for that date</span></div>
-        <div class="ar">→</div>
-        <div class="nd eng"><b>One engine</b><span>same formulas, same windows</span></div>
-        <div class="ar">→</div>
-        <div class="pair">
-          <div class="nd out"><b>Today (ticked)</b></div>
-          <div class="eq">⇅ like-for-like</div>
-          <div class="nd out"><b>${D.then && D.then.label ? esc(D.then.label) : '1Y'} back</b><span>${D.then ? esc(D.then.date) : ''}</span></div>
-        </div>
-      </div>
-      <div class="use">✓ Use to <b>compare today with 1Y back</b>, the only way both dates are computed identically</div>
-    </div>
+  <h2>In one minute</h2>
+  <div class="cards">
+    <div class="card"><b>Industries</b><span>Every sector with its typical PE, PB and ROE. Tap a sector to see its stocks, cheapest first.</span></div>
+    <div class="card"><b>Value screen</b><span>Stocks that look cheap <i>and</i> healthy, ranked by Value score. Four ready-made Screens sit on top.</span></div>
+    <div class="card"><b>All Stocks</b><span>Every stock, no filter switched on. Turn on only the filters you want.</span></div>
+    <div class="card"><b>Historical</b><span>Switch it on and pick a date (3M to 1.5Y) to see the page as it looked then, and how each stock did since.</span></div>
   </div>
-  <p>The filters never change between the two. Only these inputs do, which moves stocks near a cut-off in or out:</p>
-  <div class="wrap"><table><tr><th>Input</th><th>Not ticked</th><th>Ticked</th><th>Typical effect</th></tr>
-  ${row('ROCE', 'EBIT ÷ (equity + borrowings), Screener', (D.smNow && D.smNow.stocks.some(s => s.roceSrc === 'ta')) ? 'EBIT ÷ total assets until Borrowings are scraped ("proxy")' : 'EBIT ÷ (equity + borrowings) from the raw rows', 'proxy reads ~30% lower, so stocks near ROCE 10% drop out')}
-  ${row('PE', 'Screener PE', 'last 4 quarters\' PAT ÷ today\'s shares, at the Angel close', 'a few % either way')}
-  ${row('PB', 'latest book value (can be the half-year balance sheet)', 'reserves + share capital, last annual balance sheet', 'small; can push PE × PB just over 22.5')}
-  ${row('ROE', 'Screener ROE', 'PAT ÷ average equity, last financial year', 'small')}
-  ${row('Holding companies', 'profit that belongs to the shareholders', 'group profit incl. subsidiaries\' outside shareholders', 'PE looks too cheap, ROE too high (e.g. a holding company at PE 4 instead of 10)')}
-  ${row('Dividend yield', 'Screener', 'payout % × PAT ÷ market cap', 'small')}</table></div>
+  <p><b>Where the numbers come from:</b> Screener.in data for ${D.lists.map(esc).join(', ')} (downloaded ${esc(D.asOf)}), ${N.length} stocks, consolidated accounts where published.
+  Prices for past dates come from Angel One daily closes, adjusted for splits and bonuses. Everything refreshes in the weekly run.</p>
+  <p><b>Header switches:</b> <b>List</b> picks the index, <b>PSU</b> / <b>Semi PSU</b> hide government companies (struck through = hidden). They apply to every tab; industry averages always use all stocks so they stay fair.</p>
 
-  <h2>Backtesting with the Historical dropdown: read this first</h2>
-  <p><b>Historical dates:</b> ${(D.backs || []).map(b => `${esc(b.label)} = ${esc(b.date)}${b.hasPrice ? '' : ' (no prices yet)'}`).join(' · ')}. Each one is the same engine run on that date, priced with that date's Angel close.
-  The further back, the fewer quarters of history the CSV holds, so Trend and shareholding checks have less data at 1.25Y and 1.5Y. <b>All Stocks</b> lists every stock in the chosen List with a price on the date shown, with no screen or filter.</p>
-  <p><b>One engine, two dates.</b> 1Y back rebuilds each company as it stood on ${D.then ? esc(D.then.date) : '–'} with the <b>same function</b> that computes the <b>Same method</b> view of today:
-  every metric from the raw yearly and quarterly rows known at that date (quarters ≥ 45 days old, financial years ≥ 60 days, shareholding ≥ 21 days) plus one price.
-  So "Same method" today vs 1Y back differ only in their inputs, never in their formulas. Windows are clipped to what the CSV holds 1 year back and the <b>same</b> windows are used today:
-  Trend checks on ${D.sm.trendQ} year-on-year comparisons, shareholding changes over ${D.sm.shQ - 1} quarters.
-  The default today view (Same method off) keeps Screener's own ratios and longer windows; compare 1Y back with <b>Same method on</b>.</p>
-  <p><b>Prices:</b> ${D.then && D.then.hasPrice
-     ? `Angel One closes from prices.csv: ${esc(D.then.priceDateThen || '–')} for 1Y back, ${esc(D.then.priceDate || '–')} for today (${D.then.nPrice} stocks priced then). Splits and bonuses after the old date are divided out, so both prices sit on today's share basis.
-        "Price return since" = latest close ÷ close then − 1${D.then.bench ? `; NIFTY 500 over the same dates: ${fmt(D.then.bench.ret,1)}%` : ''}.`
-     : 'none yet (prices.csv missing), so 1Y back is fundamentals-only: price filters, columns and Screens are off at that date.'}</p>
-  <div class="wrap"><table><tr><th>Tab</th><th>1Y back vs today</th><th>Notes</th></tr>
-  ${[['home','Industries'],['value','Value screen']]
-     .map(([k,n]) => row(n, `<b>${btOf(k).lvl}</b>`, btOf(k).why)).join('')}
-  </table></div>
-  <p><b>What is still not identical</b> (data limits, not formula differences):</p>
-  <div class="wrap"><table><tr><th>Issue</th><th>Effect</th></tr>
-  ${row('Today\'s index members only', 'Survivorship bias: stocks that left the index since are missing, and they were often the losers. Stocks listed after the 1Y-back date are excluded from it.')}
-  ${row('Figures as Screener shows them today', 'Past results are as restated now, not as first reported (usually small).')}
-  ${row('Today\'s share count', 'Per-share values and market cap use today\'s share count (splits / bonuses handled through the price). Shares issued since (QIP, ESOP, merger) make the old market cap slightly too high.')}
-  ${row('ROCE proxy', 'EBIT ÷ total assets until the scraper stores Borrowings; runs about 30% below Screener\'s ROCE, equally at both dates. With Borrowings it switches to EBIT ÷ (equity + borrowings) automatically.')}
-  ${row('Split detection', 'An overnight drop matching a standard split / bonus ratio is treated as one (NSE price bands make 38%+ real drops practically impossible). Listed per stock in prices.csv.')}
-  ${row('PSU tags', 'Fixed list in the script; ownership changes since then are not reflected.')}
-  ${row('Shorter history then', `Trend score: ${nTr(D.smNow.stocks)} stocks today vs ${nTr(T)} 1Y back, ${avgOf(D.smNow.stocks)} vs ${avgOf(T)} checks per stock on average.`)}
-  </table></div>
+  <h2>Price and valuation</h2>
+  ${tbl(
+    g('CMP ₹', 'Current market price of one share.', 'CMP 250 = one share costs ₹250.')
+  + g('Mcap ₹ Cr', 'Market cap: price × all shares. What the whole company costs.', 'Mcap 5,000 = the market values it at ₹5,000 crore.')
+  + g('PE', 'Price ÷ yearly profit per share. Years of today\'s profit to earn back the price.', 'PE 15 = you pay ₹15 for every ₹1 of yearly profit.')
+  + g('Core PE', 'PE after removing "other income" (interest, one-offs) from profit. Shows how cheap the main business is.', 'PE 10 but Core PE 18 = half the profit is not from the business.')
+  + g('Industry PE', 'Typical PE of the sector (median by default; average or Mcap-weighted from the picker).', 'Industry PE 25 = a normal stock here trades at 25×.')
+  + g('vs Industry PE', 'How much cheaper (−) or dearer (+) than its sector.', '−30% = PE 30% below the sector\'s.')
+  + g('PB', 'Price ÷ book value (what shareholders own on the balance sheet).', 'PB 1 = you pay exactly the book value.')
+  + g('PEG', 'PE ÷ yearly EPS growth. Below 1 = cheap for its growth.', 'PE 20 with 25% growth → PEG 0.8.')
+  + g('Earnings yield %', '100 ÷ PE: profit as a % of the price, like an interest rate.', 'PE 12.5 → earnings yield 8%.')
+  + g('Div yield %', 'Yearly dividend ÷ price.', '₹5 dividend on a ₹250 share = 2%.')
+  + g('Graham upside', 'Gap to Graham\'s fair price √(22.5 × EPS × book value per share).', '+40% = price is 40% below Graham\'s number.')
+  + g('Mcap ÷ Assets', 'Market cap ÷ everything the company owns on its books. Below 1× = valued under its assets.', '0.8× = buy ₹100 of assets for ₹80.')
+  + (has('pfa') ? g('Mcap ÷ Fixed assets', 'Market cap ÷ plant, buildings and land at book cost.', '0.5× = the factories alone are worth twice the Mcap.') : '')
+  + (has('invp') ? g('Investments % Mcap', 'Investments held ÷ market cap. High for holding companies.', '60% = the shares it owns are 60% of its own price.') : '')
+  + g('vs 52W high', 'How far the price is below its 1-year high.', '−35% = 35% below the year\'s top.')
+  )}
 
-  <h2>Basic ratios (used across tabs)</h2>
-  <div class="wrap"><table>
-  <tr><th>Metric</th><th>Default today view (Screener's figures)</th><th>Same method (today and 1Y back)</th></tr>
-  ${row('Price', 'CSV <code>CMP</code>', 'Angel close (prices.csv), today\'s share basis; CSV CMP for today if prices.csv is missing')}
-  ${row('TTM EPS', '<code>CMP ÷ PE</code>', 'sum of the last 4 published quarters\' PAT ÷ today\'s shares')}
-  ${row('PE', '<code>PE</code> column', '<code>price ÷ TTM EPS</code>')}
-  ${row('Market cap', '<code>MARKET_CAP_CR</code>', '<code>price × today\'s shares</code>')}
-  ${row('PB', '<code>CMP ÷ BOOK_VALUE</code>', '<code>price ÷ ((reserves + share capital) ÷ shares)</code>, latest FY known')}
-  ${row('ROE', '<code>ROE_PCT</code> column', 'PAT ÷ average (reserves + share capital), latest FY known')}
-  ${row('ROCE', '<code>ROCE_PCT</code> column', 'EBIT ÷ (equity + borrowings); EBIT ÷ total assets until Borrowings are scraped (label shows "proxy")')}
-  ${row('Dividend yield', '<code>DIV_YIELD_PCT</code>', 'payout % × PAT ÷ market cap, latest FY known')}
-  ${row('Core PE', '<code>PE ÷ (1 − other income ÷ PBT)</code>, non-financials', 'same formula on the values above')}
-  ${row('EPS CAGR', '<code>(EPS latest FY ÷ EPS up to 5 FY earlier)^(1/yrs) − 1</code>, min 2.5 yrs; PAT CAGR if the share base changed 2.5×+, marked (PAT)', 'same')}
-  ${row('PEG, Graham, earnings yield', '<code>PE ÷ EPS CAGR</code>, <code>√(22.5 × EPS × BVPS)</code>, <code>100 ÷ PE</code>', 'same formulas')}
-  ${row('Cash conversion, FCF yield', `<code>Σ CFO ÷ Σ PAT</code> and <code>avg(CFO + CFI) ÷ Mcap</code>, last ${D.cashYears} FY, non-financials`, 'same, on history known at the date')}
-  ${row('OPM vs 5Y, other income %, interest cover', 'CSV columns', 'latest FY known: OPM − 5Y average; other income ÷ PBT; (PBT + interest) ÷ interest')}
-  ${row('52-week high', '<code>HIGH_52W</code>', 'from Angel daily highs, on today\'s share basis')}
-  ${row('Trend checks (quarterly)', '6 year-on-year comparisons, 4 must be green', `${D.sm.trendQ} comparisons, all must be green`)}
-  ${row('Industry PE', 'median / average / Mcap-weighted of positive PEs', 'same, on the PEs above')}
-  ${row('Mcap ÷ Assets', '<code>Mcap ÷ total assets</code>, latest balance sheet, non-financials', 'same, balance sheet known at the date')}
-  ${row('Mcap ÷ Fixed assets, Investments % Mcap', has('pfa') || has('invp') ? '<code>Mcap ÷ (net block + CWIP)</code>; <code>investments ÷ Mcap</code>' : 'not in the CSV yet (needs the scraper\'s Fixed assets / Investments rows)', 'same, balance sheet known at the date')}
-  </table></div>
-  <p><b>Asset backing.</b> Mcap ÷ Assets below 1x means the market prices the company below everything it owns on its books. Total assets are funded partly by debt, so read it together with PB (equity only) and interest cover.
-  Book values are at historical cost: land bought decades ago sits at its old price, so a company rich in land can look less asset-backed than it really is. Not shown for financials, whose assets are mainly loans.</p>
+  <h2>Quality and growth</h2>
+  ${tbl(
+    g('ROE %', 'Profit ÷ shareholders\' money. How well it uses owners\' capital.', 'ROE 18 = ₹18 profit a year on every ₹100 of equity.')
+  + g('ROCE %', 'Operating profit ÷ (equity + debt). Return on all the money in the business. Banks use ROE instead.', 'ROCE 20 = ₹20 a year on every ₹100 employed.')
+  + g('ROCE 5Y med', 'Middle value of the last 5 years\' ROCE, so one great or bad year can\'t fool it.', '22, 8, 15, 18, 12 → median 15.')
+  + g('EPS CAGR', 'Yearly growth of profit per share over up to 5 years. "(PAT)" = total profit used because the share count changed a lot.', 'EPS 10 → 16 in 5 years ≈ 10% a year.')
+  + g('Profit ↑ yrs', 'Years (of the last 10) in which profit grew.', '8/10 = profit rose in 8 of 10 years.')
+  + g('OPM vs 5Y', 'Operating margin now minus its 5-year average, in percentage points.', '+3 pp = margin 18% vs usual 15%.')
+  + g('ROA %', 'Profit ÷ total assets. The key return for banks / NBFCs.', 'ROA 1.5 = ₹1.5 profit per ₹100 of loans and assets.')
+  )}
+
+  <h2>Cash and debt</h2>
+  ${tbl(
+    g('Cash conv.', `Cash from operations ÷ reported profit, last ${D.cashYears} years. Shows if profit turns into real cash.`, '0.9× = ₹90 cash for every ₹100 of profit.')
+  + g('CFO+ yrs', 'Years (of the last 10) with positive operating cash flow.', '9/10 = cash came in 9 of 10 years.')
+  + g('FCF yield', 'Average free cash flow (operations + investing) ÷ market cap.', '5% = ₹5 spare cash a year per ₹100 of Mcap.')
+  + g('Debt ÷ Equity', 'Borrowings ÷ shareholders\' money.', '0.3 = ₹30 of loans for every ₹100 of equity.')
+  + g('Debt ÷ EBITDA', 'Years of operating profit needed to repay all debt.', '2× = two years of profit clears the debt.')
+  )}
+
+  <h2>Banks and NBFCs</h2>
+  ${tbl(
+    g('Gross NPA %', 'Loans not being repaid, as % of all loans.', '2% = ₹2 of every ₹100 lent is bad.')
+  + g('Net NPA %', 'Bad loans left after money set aside for them.', '0.5% = only ₹0.5 per ₹100 still uncovered.')
+  + g('PCR %', 'Share of bad loans already provided for (≈ 1 − Net ÷ Gross NPA).', 'Gross 2%, Net 0.5% → PCR 75%.')
+  )}
+  <p>Financials skip numbers that don't fit them (cash conversion, FCF yield, debt ratios, Mcap ÷ Assets) and use ROE instead of ROCE.</p>
+
+  <h2>Scores</h2>
+  ${tbl(
+    g('Value score (0–100)', 'How cheap and healthy a stock is <b>versus its own industry</b>. Each metric below is ranked within the sector, then weighted.', '80 = better than ~80% of its sector on the mix below.')
+  + g('Momentum (0–100)', 'How strongly the price has been rising: 3-month, 6-month and 12-month (minus the last month) returns, ranked against every stock.', '75 = price trend stronger than 75% of stocks.')
+  + g('Trend', 'Business-improvement checks passed: profit, revenue, margin, promoter holding, ROE, ROCE, cash conversion vs a year earlier.', '6/7 = six of seven things got better.')
+  + g('Promoter Δ', 'Change in promoter holding over the quarters available, in percentage points.', '+1.5 pp = promoters bought more.')
+  )}
+  <p><b>Value score weights</b> (change them under Filters → Scoring). Each metric is ranked within the stock's industry (all stocks if the sector has fewer than 4); a score needs a positive PE and at least half the weight.</p>
+  <div class="wrap"><table class="gl"><tr><th>Metric</th><th>Better when</th><th>Weight</th></tr>
+  ${Object.keys(W_DEF).map(k => `<tr><td>${W_LABEL[k]}</td><td>${METRICS[k].hi ? 'higher' : 'lower'}</td><td>${W[k]}</td></tr>`).join('')}</table></div>
+  <p><b>Momentum tip:</b> it is not part of the Value score. Cheap stocks are often falling; Min momentum 40 (the Value screen default) skips the ones still in free fall.</p>
+
+  <h2>Screens (Value screen)</h2>
+  ${tbl(
+    g('Asset-backed', 'Mcap ÷ Assets ≤ 1, PB ≤ 1.5, ROCE ≥ 10%, Debt ÷ Equity ≤ 0.5.', 'Company owns ₹1,000 Cr of assets, priced at ₹800 Cr, little debt.')
+  + g('Graham defensive', 'PE × PB ≤ 22.5 plus all the safety tests below.', 'PE 12 × PB 1.5 = 18 ✓.')
+  + g('Graham deep value', 'Graham defensive + PE ≤ 15 and PB ≤ 2.', 'PE 9, PB 1.2, safe balance sheet.')
+  + g('Deep value', 'PE ≤ 15, PB ≤ 2, ROCE ≥ 10%.', 'PE 11, PB 1.6, ROCE 14% ✓.')
+  )}
+  <p>Every screen also hides value traps and keeps only dividend payers (Min div yield 0.01%). Click a screen again to switch it off.</p>
+
+  <h2>Graham safety tests</h2>
+  ${tbl(
+    g('Steady returns', 'ROCE 5Y median ≥ 12% (ROE for financials).', 'Median 14% ✓; one good year among bad ones ✗.')
+  + g('Steady profits', 'Profit grew in at least 7 of the last 10 years.', '7/10 ✓, 5/10 ✗.')
+  + g('Low debt', 'Debt ÷ Equity &lt; 1 <b>or</b> Debt ÷ EBITDA &lt; 2.5× (non-financials).', 'D/E 1.4 but debt = 2 years of profit ✓.')
+  + g('Bank profitability', 'ROA ≥ 1.5% (banks, NBFCs, insurers).', 'ROA 1.8% ✓.')
+  + g('Clean loan book', 'Gross NPA &lt; 2.5%, Net NPA &lt; 1%, PCR &gt; 70% (banks).', 'Gross 1.9%, Net 0.4%, PCR 79% ✓.')
+  )}
+  <p>A test with no data yet is skipped, never failed. Each test is also its own filter under Filters → More.</p>
 
   <h2>Value-trap flags (Hide value traps)</h2>
-  <div class="wrap"><table><tr><th>Flag</th><th>Rule</th></tr>
-  ${row('EPS shrinking','EPS CAGR ≤ 0')}${row('no growth data / loss now','EPS CAGR cannot be measured')}
-  ${row('loss yr','any negative EPS year in the last 5')}${row('EPS near 5Y low','TTM EPS within 10% of its 5-year low')}
-  ${row('weak cash conversion','&lt; 0.5x (non-financials)')}${row('other-income heavy','other income &gt; 40% of PBT (non-financials)')}
-  ${row('low interest cover','&lt; 2x (non-financials)')}${row('equity dilution','share count growing &gt; 6% a year')}</table></div>
-  <p>1Y back the same rules run on the data known then; "EPS near 5Y low" can misfire there because quarterly EPS is not split-adjusted.</p>
+  ${tbl(
+    g('EPS shrinking', 'Profit per share fell over the years (EPS CAGR ≤ 0).', 'EPS 20 → 14.')
+  + g('no growth data / loss now', 'Growth can\'t be measured, usually because of a loss now.', 'EPS −3 this year.')
+  + g('loss yr', 'A loss in any of the last 5 years.', 'Loss in FY22.')
+  + g('EPS near 5Y low', 'Last 12 months\' EPS within 10% of its 5-year low.', '5Y low 10, now 10.8.')
+  + g('weak cash conversion', 'Less than 0.5× of profit turns into cash.', '₹100 profit, ₹35 cash.')
+  + g('other-income heavy', 'Over 40% of pre-tax profit is other income.', '₹50 of ₹100 PBT is interest income.')
+  + g('low interest cover', 'Operating profit &lt; 2× the interest bill.', 'EBIT ₹15 Cr, interest ₹10 Cr.')
+  + g('equity dilution', 'Share count growing over 6% a year.', '100 Cr shares → 135 Cr in 5 years.')
+  )}
 
-  <h2>Industries</h2>
-  <p>One row per sector bucket from the CSV: industry PE (method picker), median PB, ROE and dividend yield, stock counts, total Mcap and the lowest-PE stock. Click a row for its stocks, sorted by PE with premium / discount to the industry PE.
-  Sector buckets are broad, so industry PE is a rough benchmark.
-  <b>1Y back:</b> ${btOf('home').why} "Since" medians per industry are added.</p>
+  <h2>Historical (backtest)</h2>
+  <p>Switch <b>Historical</b> on and pick a date: ${backs || '–'}. Every company is rebuilt as it stood then, from the results already published by that date, priced at that day's close.
+  Extra "since" columns show what happened next (price return, profit growth, ROE change). The same formulas run on every date, so dates compare fairly.</p>
+  <p><b>Example:</b> Historical 1Y + Graham deep value → the stocks that passed a year ago, and how much each has returned since.</p>
+  <p><b>Keep in mind:</b> only today's index members are included (stocks that dropped out, often the losers, are missing), and older dates have fewer quarters of history, so Trend has less to work with.
+  ${D.then && D.then.hasPrice ? '' : '<b>No prices yet:</b> price-based filters are off on past dates.'}</p>
 
-  <h2>Value screen</h2>
-  <p><b>Value score (0–100)</b>: each stock is ranked against its own industry on each metric (fewer than 4 peers → against all stocks); ranks become percentiles from 0 (worst) to 1 (best); the weighted average × 100 is the score.
-  A score needs a positive PE and at least half of the applicable weight. Financials skip FCF yield, cash conversion and CFO consistency. Current weights (Scoring ▾):</p>
-  <div class="wrap"><table><tr><th>Metric</th><th>Better when</th><th>Weight</th><th>Used 1Y back?</th></tr>
-  ${Object.keys(W_DEF).map(k => row(W_LABEL[k], METRICS[k].hi ? 'higher' : 'lower', W[k], (D.then.hasPrice || BACK_KEYS.includes(k)) ? 'yes' : '<b>no</b> (needs prices.csv)')).join('')}</table></div>
-  <p><b>Filters</b> today: Max PE, Min ROCE / ROE, Min score, Min Trend %, Hide value traps; More: Max PB, Max vs industry PE %, Max PEG, Min FCF yield, Min div yield, Min cash conversion, Max Mcap ÷ Assets (plus Mcap ÷ Fixed assets / Investments % once scraped), Min / Max Mcap, Graham pass.
-  <b>Screens</b>: Asset-backed (Mcap ÷ Assets ≤ 1, PB ≤ 1.5, ROCE ≥ 10%, debt ÷ equity ≤ 0.5), Graham defensive (PE × PB ≤ 22.5 + the safety tests below), Graham deep value (Graham defensive + PE ≤ 15, PB ≤ 2, ROCE ≥ 10%), Deep value (PE ≤ 15, PB ≤ 2, ROCE ≥ 10%); all hide value traps and need a dividend. Click again to switch off.</p>
-  <p><b>Graham safety tests</b> (both Graham screens; each also a filter under More filters):</p>
-  <div class="wrap"><table><tr><th>Test</th><th>Applies to</th><th>Pass when</th><th>Data</th></tr>
-  ${row('Return through the cycle', 'all', 'median ROCE of the last 5 financial years ≥ 12% (ROE for financials); replaces the single-year ROCE floor', S.some(x => !x.fin && x.q5 != null) ? 'yearly, available' : 'financials: available; others use this year\'s ROCE <b>until the next full scrape</b> (Borrowings rows)')}
-  ${row('Cash-flow consistency', 'non-financials', 'operating cash flow positive in at least N of the last 10 financial years (Min CFO-positive yrs filter; also 5% of the Value score)', 'yearly cash flow, available')}
-  ${row('Earnings stability', 'all', 'profit (PAT) grew in ≥ 7 of the last 10 financial years (scaled if the record is shorter, minimum 5 comparisons)', 'yearly P&amp;L, available')}
-  ${row('Leverage', 'non-financials', 'borrowings ÷ (reserves + share capital) &lt; 1 <b>or</b> borrowings ÷ EBITDA &lt; 2.5x (gross debt: Screener has no cash figure, so stricter than net debt ÷ EBITDA)', has('de') ? 'yearly balance sheet, available' : '<b>skipped until the next full scrape</b> (Borrowings rows)')}
-  ${row('Return on assets', 'banks, NBFCs, insurers', 'PAT ÷ total assets ≥ 1.5%', 'yearly, available')}
-  ${row('Cash conversion, dilution', 'non-financials / all', 'Σ CFO ÷ Σ PAT ≥ 0.5x over 5 years; share count growing ≤ 6% a year (part of Hide value traps, on in every screen)', 'available')}
-  ${row('Credit quality', 'banks', 'Gross NPA &lt; 2.5%, Net NPA &lt; 1%, provision coverage (≈ 1 − Net ÷ Gross NPA) &gt; 70%, latest quarter', has('gnpa') ? 'quarterly results, available' : '<b>skipped until the next full scrape</b> (NPA rows)')}
-  ${row('Capital adequacy (CRAR) &gt; 16%', 'banks', '<b>not tested</b>', 'Screener does not publish it')}
-  ${row('Debt &lt; net current assets', 'non-financials', '<b>not tested</b> (debt ÷ equity &lt; 0.5 used instead)', 'Screener\'s summary balance sheet has no current assets / liabilities')}</table></div>
-  <p>A test with no data yet is skipped, never counted as a fail. NBFCs without NPA rows on Screener are judged on ROA only. Min div yield starts at 0.01%, so every screen keeps only dividend payers unless you clear that box. All fields, Scoring and Reset sit under the Filters button.
-  <b>1Y back:</b> ${btOf('value').why}${D.then.hasPrice ? '' : ' The score is renamed "Quality score (then)" so it isn\'t mistaken for the Value score; the Screens need prices, so they are hidden.'}</p>
+  <h2>Downloads, copy and PSU tags</h2>
+  <p><b>⤓ Download</b> saves the table you see (all rows, search and sort applied) as CSV. The name starts with the list (<code>all</code>, <code>N500</code>, <code>NS500</code>, <code>NM250</code>) and the filters set, e.g. <code>N500_Value_screen_mcap_20K_ROE12.csv</code>. <b>Copy</b> puts Symbol, Company, Industry, CMP, PE and PB on the clipboard.</p>
+  <p><b>PSU</b> (${N.filter(s => s.psu === 'psu').length} stocks): government owns a majority. <b>Semi</b> (${N.filter(s => s.psu === 'semi').length}): large government / PSU stake without control. Tags come from a fixed list in the script.</p>
 
-  <h2>Momentum (Momentum column, Min momentum)</h2>
-  <p>Price momentum, 0–100: each stock's 3-month, 6-month and 12-minus-1-month price returns (split / bonus adjusted, Angel closes) are turned into percentiles against every stock on screen and averaged (needs 2 of 3).
-  12-minus-1 means the return from 12 months ago to 1 month ago: the latest month is left out because very short-term moves tend to reverse. 70+ = strong, under 30 = weak.
-  With the Historical dropdown it is computed from prices up to that date only, so it can be backtested. It is a filter and a column, not part of the Value score:
-  value works best on beaten-down stocks, so pairing a cheap screen with Min momentum 50+ avoids "falling knives" without chasing the most expensive winners.</p>
-
-  <h2>Trend score (Trend column, Min Trend %)</h2>
-  <p>Seven pass / fail checks; Trend % = checks passed ÷ checks with data (needs ≥ 4, or ≥ 3 for financials, who get 4 checks). Ratios are compared in pp, never as CAGR.</p>
-  <div class="wrap"><table><tr><th>Check</th><th>Green when</th><th>Data</th></tr>
-  ${row('Profit','TTM PAT ≥ TTM PAT four quarters earlier, in at least 4 of the last 6 quarter-ends','quarterly')}
-  ${row('Revenue','same test on TTM revenue','quarterly')}
-  ${row('Operating margin','TTM OPM (EBITDA ÷ revenue) ≥ a year earlier, in at least 4 of the last 6 quarter-ends; not financials','quarterly')}
-  ${row('Promoter holding','promoter % now ≥ 6 quarters ago (no promoter: n/a)','quarterly')}
-  ${row('ROE','latest FY ≥ two FY earlier','annual')}
-  ${row('ROCE (proxy)','latest FY EBIT ÷ total assets ≥ two FY earlier; not financials','annual')}
-  ${row('Cash conversion','Σ CFO ÷ Σ PAT, last 3 FY ≥ the 3 FY before; not financials','annual')}</table></div>
-  <p>Profit uses PAT, not quarterly EPS, because quarterly EPS is not split-adjusted. Trend is only a filter, never part of the Value score.
-  Cyclicals score best here near a peak; use it alongside valuation.</p>
-
-  <h2>CSV download</h2>
-  <p>Exports the rows the table shows (search and sort applied, all rows, not only the 15 in view). The file name starts with the list picked in the header (<code>all</code>, <code>N500</code> = NIFTY 500, <code>NS500</code> = Smallcap 500, <code>NM250</code> = Microcap 250), then the tab and active filters, e.g. <code>N500_Value_screen_mcap_20K_RCE_ROE12_MT10.csv</code> (MA = max Mcap ÷ Assets): number filters when set and non-zero, tick boxes only when changed from default, dropdowns always; m = minus, p = decimal point.</p>
-
-  <h2>PSU and semi-PSU</h2>
-  <p>Tagged from a fixed list in the script (<code>PSU</code>, <code>SEMI_PSU</code>). <b>PSU</b> (${N.filter(s=>s.psu==='psu').length} stocks): government holds a majority, directly or via another PSU. <b>semi</b> (${N.filter(s=>s.psu==='semi').length}): large non-controlling or joint government / PSU stake.
-  The header switches hide them on every tab; industry benchmarks and Value score peers still use all stocks.</p>
-
-  <h2>How this relates to the screener</h2>
-  <p>The screener's Grade, Fair Value and Rank Score are a separate model (fair-value blend + Piotroski + quality). This page does not use them, so the two can disagree on the same stock.</p>
-
-  <h2>What this page cannot do</h2>
-  <p>No debt, pledge or enterprise-value data (no EV/EBITDA, debt-to-equity or pledge filters). No historical prices (no PE bands, no price-return backtest). Shareholding history is short (~${esc(D.shSpan)}).</p>
+  <h2>Limits</h2>
+  <p>Not available from Screener: cash balances (so debt is gross, not net), pledge data, capital adequacy (CRAR) for banks. Past figures are as Screener shows them today (restated), and the screener's Grade / Fair Value is a separate model, so the two pages can disagree.</p>
   </div>`);
 }
 
@@ -2547,7 +2538,7 @@ function backInfo() {                                    // small popover behind
   const mode = k => { const c = {}; S.forEach(s => { const v = sv(s,k); if (v) c[v] = (c[v]||0) + 1; });
                       return Object.keys(c).sort((a,b) => c[b]-c[a])[0] || '–'; };
   const bt = btOf(BT_ROUTE(location.hash || '#/')), T = D.then;
-  return `<b>As it stood on ${esc(T.date)}</b>Same engine as "Same method" today. Latest results then: quarter ${esc(mode('qThen'))}, FY ${esc(mode('fyThen'))}.
+  return `<b>As it stood on ${esc(T.date)}</b>Rebuilt from the results published by then. Latest results then: quarter ${esc(mode('qThen'))}, FY ${esc(mode('fyThen'))}.
     "Since" columns compare with the latest now (quarter ${esc(mode('qNow'))}, FY ${esc(mode('fyNow'))}).
     ${T.hasPrice ? `Prices: close on ${esc(T.priceDateThen || '–')} → ${esc(T.priceDate || '–')}${T.bench ? `; NIFTY 500 ${fmt(T.bench.ret,1)}%` : ''}.`
                  : 'No prices.csv yet, so price filters and columns are off at this date.'}`
@@ -2570,8 +2561,7 @@ function route() {
 function nowInfo() {                                     // (i) popover for the current view
   const T = D.then || {};
   return `<b>As on ${esc(D.asOf)}</b>Fundamentals from Screener, downloaded ${esc(D.asOf)}. `
-    + (SAME ? 'Same method is on: every ratio is rebuilt from the raw yearly / quarterly rows + one price, exactly like 1Y back. '
-            : "Ratios are Screener's own (PE, ROE, ROCE, yields). Tick Same method to compute them the 1Y-back way. ")
+    + "Ratios are Screener's own (PE, ROE, ROCE, yields). "
     + (T.hasPrice ? `Prices: Angel close ${esc(T.priceDate || '–')}.` : 'Prices: CMP from the CSV.')
     + ' <a href="#/method">Methodology</a>';
 }
@@ -2585,7 +2575,7 @@ function meta() {
 }
 document.addEventListener('click', e => { const p = $('#backPop'); if (p && !e.target.closest('#backPop')) p.classList.remove('open'); });
 const saveGF = () => lsSet('gf', JSON.stringify(GF));
-[['psu','#hidePSU'], ['semi','#hideSemi'], ['same','#sameM']].forEach(([k, id]) => {
+[['psu','#hidePSU'], ['semi','#hideSemi']].forEach(([k, id]) => {
   const el = $(id); el.checked = !!GF[k];
   el.addEventListener('change', () => { GF[k] = el.checked; saveGF(); route(); });
 });
@@ -2685,7 +2675,15 @@ function lockHeader() {
   const h = $('#backChip');                                // Historical: same width on and off
   if (h) { h.style.width = ''; h.style.width = Math.ceil(h.offsetWidth) + 'px'; }
 }
-lockHeader();
+/* Historical + date: far right of the tabs row on wide screens, back in the header (after a break) on phones */
+const HG = $('#histGrp'), NAVR = $('#nav'), HSEP = $('#histSep'), MQ = matchMedia('(max-width:700px)');
+function placeHist() {
+  if (MQ.matches) { if (HG.previousElementSibling !== HSEP) HSEP.after(HG); }
+  else if (HG.parentNode !== NAVR) NAVR.appendChild(HG);
+  lockHeader();
+}
+placeHist();
+if (MQ.addEventListener) MQ.addEventListener('change', placeHist); else MQ.addListener(placeHist);
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(lockHeader);
 new MutationObserver(() => view.querySelectorAll('select:not([data-fancy])').forEach(fancySelect))
   .observe(view, {childList:true, subtree:true});            // filter boxes re-render on every change, not only on route
@@ -2758,7 +2756,7 @@ def render_html(now, backs, asof, web=False, smnow=None, embed_all=False):
         "then": backs[DEFAULT_BACK],
         "backs": [{"key": k, "label": b["label"], "date": b["date"], "hasPrice": b["hasPrice"]} for k, b in backs.items()],
         "backData": {k: b for k, b in backs.items() if k != DEFAULT_BACK} if embed_all else {},
-        "smNow": {"stocks": smnow or []},
+        "smNow": {"stocks": []},                       # "Same method" removed from the page: not shipped any more
         "sm": {"trendQ": SM_TREND_QTRS, "shQ": SM_SH_QTRS},
     }
     data = json.dumps(clean(payload), allow_nan=False, separators=(",", ":")).replace("</", "<\\/")
