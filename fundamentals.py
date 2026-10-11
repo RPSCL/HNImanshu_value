@@ -1209,6 +1209,16 @@ input[type=number]{width:74px;font-family:var(--mono)}
 input[type=search]{width:300px;max-width:100%;padding:7px 12px}
 input[type=search]::placeholder{color:var(--faint)}
 input[type=checkbox]{accent-color:var(--brass);width:15px;height:15px}
+/* number boxes: no up / down arrows (they were white in day mode) */
+input[type=number]{-moz-appearance:textfield;appearance:textfield}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+/* tick boxes drawn in the theme's colours: page background, brass when ticked (the native one stays white in day mode) */
+input[type=checkbox]{-webkit-appearance:none;appearance:none;flex-shrink:0;margin:0;border:1.5px solid var(--faint);border-radius:4px;background:var(--bg);
+  display:inline-grid;place-content:center;cursor:pointer;transition:background .12s,border-color .12s}
+input[type=checkbox]:hover{border-color:var(--brass)}
+input[type=checkbox]:checked{background:var(--brass);border-color:var(--brass)}
+input[type=checkbox]:checked::after{content:"";width:8px;height:4px;border:2px solid var(--bg);border-top:0;border-right:0;transform:translateY(-1px) rotate(-45deg)}
+input[type=checkbox]:disabled{opacity:.5;cursor:default}
 input:focus,select:focus{border-color:var(--brass);outline:none}
 
 /* stat strip: always ONE line; if it is wider than the screen it scrolls sideways instead of wrapping */
@@ -1524,7 +1534,7 @@ const FN_CODE = {
   minChg:v=>'CHG'+fnNum(v), minNow:v=>'NOW'+fnNum(v), dir:v=>String(v).toUpperCase(),
   trap:v=>v?'NOTRAPS':'TRAPS', graham:v=>v?'GRAHAM':'', exFin:v=>v?'EXFIN':'INCLFIN',
   smart:v=>v?'SMART':'', hideJump:v=>v?'NOJUMPS':'JUMPS',
-  minQ5:v=>'RCE5Y'+fnNum(v), maxDebitda:v=>'DEBITDA'+fnNum(v), maxNnpa:v=>'NNPA'+fnNum(v), minPcr:v=>'PCR'+fnNum(v), minCfo:v=>'CFO'+fnNum(v), minMom:v=>'MOM'+fnNum(v), minUp:v=>'UP'+fnNum(v), maxDe:v=>'DE'+fnNum(v), minRoa:v=>'ROA'+fnNum(v), maxNpa:v=>'NPA'+fnNum(v), maxPta:v=>'MA'+fnNum(v), maxPfa:v=>'MFA'+fnNum(v), minInv:v=>'INV'+fnNum(v),
+  minQ5:v=>'RCE5Y'+fnNum(v), maxDebitda:v=>'DEBITDA'+fnNum(v), maxNnpa:v=>'NNPA'+fnNum(v), minPcr:v=>'PCR'+fnNum(v), minCfo:v=>'CFO'+fnNum(v), minMom:v=>'MOM'+fnNum(v), maxMom:v=>'MOMX'+fnNum(v), minUp:v=>'UP'+fnNum(v), maxDe:v=>'DE'+fnNum(v), minRoa:v=>'ROA'+fnNum(v), maxNpa:v=>'NPA'+fnNum(v), maxPta:v=>'MA'+fnNum(v), maxPfa:v=>'MFA'+fnNum(v), minInv:v=>'INV'+fnNum(v),
   minRoce:v=>'ROCE'+fnNum(v), minRoe:v=>'ROE'+fnNum(v), minRoeFin:v=>'ROEFIN'+fnNum(v), minIcov:v=>'ICR'+fnNum(v),
   maxProDrop:v=>'PRODROP'+fnNum(v), exPsu:v=>v?'':'WITHPSU', peers:v=>v==='all'?'PEERSALL':'', showFail:v=>v?'WITHFAILS':'',
 };
@@ -2463,17 +2473,22 @@ function allView() {
   if (!priced.length) view.insertAdjacentHTML('beforeend', '<p class="hint">No prices for this date yet (prices.csv has no price for it), so nothing to list.</p>');
 }
 
-/* ---------- MOMENTUM: price momentum above 40 and below 95, strongest first; no other filter ---------- */
-const MOM_MIN = 40, MOM_MAX = 95;
+/* ---------- MOMENTUM: stocks by price momentum, strongest first. Default: momentum 70+ and nothing else;
+   the Filters button has every Value-screen filter (off) plus Max momentum. ---------- */
+const MOM_DEF = Object.assign({}, AF_DEF, {minMom:70, maxMom:''});
+const momMain = st => vfMain(st) + fNum(st,'maxMom','Max momentum',{min:0,max:100,step:5});
 function momentumView() {
   setNav('momentum'); view.innerHTML = '';
-  const rows = V().filter(s => ok(s.momS) && Math.round(s.momS) > MOM_MIN && Math.round(s.momS) < MOM_MAX);   // same rounding as the column shows: 41 … 94
-  stats([['Showing', rows.length], ['Momentum', MOM_MIN + ' – ' + MOM_MAX], ['Median momentum', fmt(median(rows.map(s => s.momS)), 0)],
+  const mf = filterBox({key:'momf', def:MOM_DEF, main: momMain, more: vfMore, moreKeys: vfMoreKeys()}, momentumView);
+  const hasMax = !unsetF(mf.maxMom) && +mf.maxMom > 0;
+  const rows = V().filter(s => ok(s.momS) && s.cmp != null && passVF(s, mf) && (!hasMax || Math.round(s.momS) <= +mf.maxMom));   // same rounding as the column
+  const lo = unsetF(mf.minMom) || !+mf.minMom ? 0 : +mf.minMom;
+  stats([['Showing', rows.length], ['Momentum', hasMax ? lo + ' – ' + mf.maxMom : '≥ ' + lo], ['Median momentum', fmt(median(rows.map(s => s.momS)), 0)],
          ['Median PE', fmt(median(rows.map(s => s.pe)))], ['Median vs 52W high', fmt(median(rows.map(s => pctFrom(s.cmp, s.hi52)))) + '%']], rows);
   view.appendChild(makeTable('mom',
     [C.sym, C.ind, C.mom, C.name, C.score, C.trend, C.cmp, C.from52, C.pe, C.pb, C.q, C.cagr, C.dy, C.mcap, C.flags],
-    rows, {sortKey:'mom', sortDir:-1, search:true, csv:() => 'Momentum_' + MOM_MIN + '-' + MOM_MAX}));
-  if (!rows.length) view.insertAdjacentHTML('beforeend', '<p class="hint">No momentum for this date yet (it needs prices.csv), so nothing to list.</p>');
+    rows, {sortKey:'mom', sortDir:-1, search:true, csv:() => csvName('Momentum', mf, MOM_DEF, VF_CSV_KEYS().concat('maxMom'))}));
+  if (!V().some(s => ok(s.momS))) view.insertAdjacentHTML('beforeend', '<p class="hint">No momentum for this date yet (it needs prices.csv), so nothing to list.</p>');
 }
 
 /* ---------- PORTFOLIO: a small portfolio manager, built from one list of transactions ----------
