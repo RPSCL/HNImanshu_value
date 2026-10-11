@@ -1055,27 +1055,59 @@ body.day .toggle-thumb{transform:translateX(16px)}
 }
 
 /* Portfolio tab */
-.pf-top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
-.pf-add{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
-.pf-add .fld{display:flex;flex-direction:column;gap:4px}
-.pf-add .fld input{height:32px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:13px var(--sans);width:120px}
-.pf-add .fld input[name=sym]{width:150px;text-transform:uppercase}
-.pf-add .fld input[name=sym]::placeholder{text-transform:none}
-.pf-add .fld input:focus{outline:none;border-color:var(--brass)}
+.pf-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.pf-acts{display:flex;gap:8px;flex-wrap:wrap}
 .pf-tg{border-color:var(--brass);color:var(--brass);background:transparent}
 .pf-tg:hover{background:var(--brassbg)}
-.pf-msg,.pf-err{margin:0 0 8px;font-size:12.5px;color:var(--bad);min-height:0}
+.pf-err{margin:0 0 8px;font-size:12.5px;color:var(--bad)}
+.pf-err:empty{display:none}
 .pf-note{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--mute)}
-.pf-del{border:0;background:transparent;color:var(--faint);font-size:18px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:5px}
-.pf-del:hover{color:var(--bad);background:var(--badbg)}
+.pf-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0 0 16px}
+.pf-k{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel);display:flex;flex-direction:column;gap:2px;min-width:0}
+.pf-k > span{font:600 10.5px var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.6px}   /* label only, not the coloured number inside <b> */
+.pf-k b{font:700 16px var(--mono);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf-k small{font-size:11.5px;color:var(--faint)}
+/* Net gain: green tint + soft glow when up, red when down */
+.pf-k.gain.pos{border-color:var(--good);background:var(--goodbg);box-shadow:0 0 0 1px var(--goodbg),0 4px 18px -4px var(--good)}
+.pf-k.gain.neg{border-color:var(--bad);background:var(--badbg);box-shadow:0 0 0 1px var(--badbg),0 4px 18px -4px var(--bad)}
+.pf-k.gain b{font-size:19px}
+.pf-k.gain.pos b,.pf-k.gain.pos small{color:var(--good)}
+.pf-k.gain.neg b,.pf-k.gain.neg small{color:var(--bad)}
+.pf-h{font:700 13px var(--mono);color:var(--brass);margin:18px 0 8px;letter-spacing:.3px}
+.pf-h span{font:500 11.5px var(--sans);color:var(--faint);margin-left:8px;letter-spacing:0}
+.pf-ico{border:0;background:transparent;color:var(--faint);font-size:15px;line-height:1;cursor:pointer;padding:3px 6px;border-radius:5px}
+.pf-ico:hover{color:var(--brass);background:var(--brassbg)}
+.pf-ico.del{font-size:18px}
+.pf-ico.del:hover{color:var(--bad);background:var(--badbg)}
+.pf-t{font:600 11px var(--mono);padding:2px 7px;border-radius:5px;border:1px solid var(--line)}
+.pf-t.buy{color:var(--good);border-color:var(--good)}
+.pf-t.sell{color:var(--bad);border-color:var(--bad)}
+.pf-t.in,.pf-t.out{color:var(--brass);border-color:var(--brass)}
+.pf-form{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.pf-form .fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.pf-form .fld span{font:500 11px var(--mono);color:var(--faint)}
+.pf-form .fld span i{font-style:normal;color:var(--brass)}
+.pf-form input{height:36px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:14px var(--sans);width:100%;box-sizing:border-box}
+.pf-form input[name=sym]{text-transform:uppercase}
+.pf-form input[name=sym]::placeholder{text-transform:none}
+.pf-form input:focus{outline:none;border-color:var(--brass)}
+.pf-form .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pf-form .btn.primary{height:38px;justify-content:center}
+.pf-calc{margin:0;font-size:12.5px;color:var(--mute);line-height:1.5}
+.pf-calc:empty{display:none}
+.pf-btns{display:flex;gap:8px;justify-content:flex-end}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:3px;border:1px solid var(--line);border-radius:9px;background:var(--bg)}
+.seg button{border:0;background:transparent;color:var(--mute);font:600 12.5px var(--mono);padding:8px 0;border-radius:6px;cursor:pointer}
+.seg button.on[data-t=buy],.seg button.on[data-t=in]{background:var(--good);color:var(--bg)}
+.seg button.on[data-t=sell],.seg button.on[data-t=out]{background:var(--bad);color:var(--bg)}
 .wip-back{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5)}
 .wip-back.open{display:flex}
-.wip-box{position:relative;width:min(360px,100%);background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:20px 22px;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+.wip-box{position:relative;width:min(420px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:20px 22px;box-shadow:0 18px 50px rgba(0,0,0,.35);box-sizing:border-box}
 .wip-box h3{margin:0 0 8px;font:700 15px var(--mono);color:var(--brass)}
-.wip-box p{margin:0;color:var(--mute);font-size:13.5px;line-height:1.5}
+.wip-box > p{margin:0;color:var(--mute);font-size:13.5px;line-height:1.5}
 .wip-x{position:absolute;top:10px;right:10px;width:30px;height:30px;border:0;background:transparent;color:var(--faint);font-size:20px;line-height:1;cursor:pointer;border-radius:6px}
 .wip-x:hover{color:var(--ink);background:var(--hover)}
-@media (max-width:700px){.pf-add .fld input,.pf-add .fld input[name=sym]{width:calc(50vw - 30px)}.pf-top{align-items:stretch}.pf-tg{width:100%;justify-content:center}}
+@media (max-width:700px){.pf-sum{grid-template-columns:1fr 1fr}.pf-k.gain{grid-column:1 / -1}.pf-top{align-items:stretch}.pf-tg{width:100%;justify-content:center}.wip-back{align-items:flex-start;padding-top:40px}}
 
 /* phone: floating Filters button, bottom-right. 50% normally, 5% while scrolling or holding a finger down > 1 s */
 #ffab{display:none}
@@ -1091,7 +1123,7 @@ body.day .toggle-thumb{transform:translateX(16px)}
 /* custom dropdown: replaces the native <select> popup (which ignores the theme) */
 .fsel{position:relative;display:inline-flex;align-items:center}
 .fsel > select{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
-.fsel-btn{display:inline-flex;align-items:center;gap:8px;background:transparent;border:0;padding:0 2px;color:var(--ink);font:inherit;font-size:12.5px;cursor:pointer;line-height:1}
+.fsel-btn{display:inline-flex;align-items:center;gap:8px;background:transparent;border:0;padding:0 2px;color:var(--ink);font:inherit;font-size:12.5px;cursor:pointer;line-height:1;white-space:nowrap}   /* one line: "Smallcap 500" never wraps */
 .fsel-btn.boxed{border:1px solid var(--line);border-radius:6px;padding:6px 10px;background:var(--bg)}
 .fsel-btn.boxed:hover,.fsel.open .fsel-btn.boxed{border-color:var(--brass)}
 .fsel-btn svg{flex-shrink:0;opacity:.7;transition:transform .15s}
@@ -2444,53 +2476,108 @@ function momentumView() {
   if (!rows.length) view.insertAdjacentHTML('beforeend', '<p class="hint">No momentum for this date yet (it needs prices.csv), so nothing to list.</p>');
 }
 
-/* ---------- PORTFOLIO: each user's own holdings (any symbol, in the lists or not) ----------
+/* ---------- PORTFOLIO: a small portfolio manager, built from one list of transactions ----------
+   Every buy, sell, pay-in and pay-out is a transaction; holdings, cash, closed positions and gains are recomputed
+   from that list each time, so deleting or editing a wrong entry fixes everything after it.
    Website: saved in Firestore under the user's account (hni_portfolio/{uid}) through auth.js (window.hniStore).
    Offline saved copy: kept in this browser only. Prices, scores and flags always come from TODAY's data. */
-const PF = {items: null, busy: false, err: ''};
+const PF_RATES = {brokPct:0, brokCap:0, stt:0.1, exch:0.00297, sebi:0.0001, stamp:0.015, gst:18, dp:15.93};   // equity delivery, NSE; editable under Charges
+const PF_RATE_LABEL = {brokPct:'Brokerage % (0 = free)', brokCap:'Brokerage max ₹ per order (0 = no cap)', stt:'STT % (buy and sell)',
+  exch:'Exchange charge %', sebi:'SEBI fee %', stamp:'Stamp duty % (buy only)', gst:'GST % (on brokerage + exchange + SEBI)', dp:'DP charge ₹ per sell'};
+const PF = {txns: null, rates: Object.assign({}, PF_RATES), busy: false, err: ''};
 const pfStore = () => (WEB && window.hniStore) ? window.hniStore : {
-  load: async () => { try { return JSON.parse(lsGet('portfolio') || '[]'); } catch (e) { return []; } },
-  save: async items => lsSet('portfolio', JSON.stringify(items)),
+  load: async () => { try { return JSON.parse(lsGet('portfolio') || '{}'); } catch (e) { return {}; } },
+  save: async data => lsSet('portfolio', JSON.stringify(data)),
 };
+const pfId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 async function pfLoad() {
-  if (PF.items || PF.busy) return;
+  if (PF.txns || PF.busy) return;
   if (WEB && !window.hniStore) return;                   // login still being checked: auth.js fires "hni-ready"
   PF.busy = true;
-  try { PF.items = await pfStore().load(); PF.err = ''; } catch (e) { PF.items = []; PF.err = 'Could not load your portfolio (' + (e.code || e) + ').'; }
+  try {
+    const d = await pfStore().load() || {};
+    PF.txns = Array.isArray(d.txns) ? d.txns
+      : (Array.isArray(d.items) ? d.items : (Array.isArray(d) ? d : [])).map(it => ({id: it.id || pfId(), t:'buy', sym: it.sym, qty: it.qty, px: it.buy, ch: 0, date: it.date || ''}));   // first version: plain holdings → buys
+    PF.rates = Object.assign({}, PF_RATES, d.rates || {});
+    PF.err = '';
+  } catch (e) { PF.txns = []; PF.err = 'Could not load your portfolio (' + (e.code || e) + ').'; }
   PF.busy = false;
   if ((location.hash || '') === '#/portfolio') route();
 }
 window.addEventListener('hni-ready', pfLoad);
 async function pfSave() {
-  try { await pfStore().save(PF.items); PF.err = ''; } catch (e) { PF.err = 'Could not save (' + (e.code || e) + '). Your last change may be lost on reload.'; }
+  try { await pfStore().save({txns: PF.txns, rates: PF.rates}); PF.err = ''; }
+  catch (e) { PF.err = 'Could not save (' + (e.code || e) + '). Your last change may be lost on reload.'; }
+}
+/* charges for one equity-delivery order (₹), from the editable rates */
+function pfCharges(t, qty, px, r = PF.rates) {
+  const v = qty * px;
+  let brok = v * r.brokPct / 100; if (r.brokCap > 0) brok = Math.min(brok, r.brokCap);
+  const exch = v * r.exch / 100, sebi = v * r.sebi / 100;
+  const tot = brok + v * r.stt / 100 + exch + sebi + (t === 'buy' ? v * r.stamp / 100 : 0) + (brok + exch + sebi) * r.gst / 100 + (t === 'sell' ? r.dp : 0);
+  return Math.round(tot * 100) / 100;
+}
+const pfSorted = txns => txns.map((x, i) => [x, i]).sort((a, b) => (a[0].date || '').localeCompare(b[0].date || '') || a[1] - b[1]).map(p => p[0]);   // by date, then entry order
+/* replay every transaction: average-cost holdings, realised P&L, charges and cash */
+function pfReplay(txns, upto) {
+  const pos = {}, led = [];
+  let cash = 0, payIn = 0, payOut = 0, charges = 0, realized = 0, bad = null;
+  for (const x of pfSorted(txns)) {
+    if (upto && x === upto) break;
+    const amt = (x.qty || 0) * (x.px || 0), ch = +x.ch || 0;
+    if (x.t === 'in') { cash += x.amt; payIn += x.amt; }
+    else if (x.t === 'out') { cash -= x.amt; payOut += x.amt; }
+    else {
+      const p = pos[x.sym] = pos[x.sym] || {sym: x.sym, qty: 0, cost: 0, realized: 0, charges: 0, bQty: 0, bAmt: 0, sQty: 0, sAmt: 0, first: x.date, last: x.date};
+      p.charges += ch; charges += ch; p.last = x.date || p.last;
+      if (x.t === 'buy') { p.qty += x.qty; p.cost += amt; p.bQty += x.qty; p.bAmt += amt; cash -= amt + ch; }
+      else {                                              // sell at average cost
+        if (x.qty > p.qty + 1e-9) bad = bad || x;
+        const q = Math.min(x.qty, p.qty), avg = p.qty ? p.cost / p.qty : 0;
+        p.realized += (x.px - avg) * q; realized += (x.px - avg) * q;
+        p.cost -= avg * q; p.qty -= q; p.sQty += x.qty; p.sAmt += amt; cash += amt - ch;
+        if (p.qty < 1e-9) { p.qty = 0; p.cost = 0; }
+      }
+    }
+    led.push({x, cash});
+  }
+  return {pos, led, cash, payIn, payOut, charges, realized, bad};
 }
 const TODAY = new Map(D.stocks.map(s => [s.sym, s]));
-function pfRows() {                                       // one row per lot, merged with today's data when the symbol is known
-  return (PF.items || []).map(it => {
-    const s = TODAY.get(it.sym);
-    const r = Object.assign({}, s || {sym: it.sym, name: it.sym, ind: ''}, {lot: it, known: !!s});
-    r.invested = it.qty * it.buy;
-    r.value = s && ok(s.cmp) ? it.qty * s.cmp : null;
-    r.pnl = r.value == null ? null : r.value - r.invested;
-    r.pnlPct = r.value == null ? null : (r.value / r.invested - 1) * 100;
-    return r;
-  });
-}
 const pfKnown = c => Object.assign({}, c, {v: r => r.known ? c.v(r) : null, f: r => r.known ? c.f(r) : NA});   // not in the lists → blank
-const money = v => v == null ? NA : '₹' + fmt(v, 0);
+const rs = (v, plus) => (v < 0 ? '−' : plus && v > 0 ? '+' : '') + '₹' + fmt(Math.abs(v), 0);   // −₹6, not ₹-6
+const signed = (v, d = 0) => v == null ? NA : `<span class="${v >= 0 ? 'up' : 'dn'}">${v > 0 ? '+' : ''}${fmt(v, d)}</span>`;
+const pfSymCell = r => r.known ? symCell(r) : `<b>${esc(r.sym)}</b> <span class="na" title="Not in NIFTY 500 / Smallcap 500 / Microcap 250, so no price or scores (valued at cost)">not in list</span>`;
 const PFC = {
-  sym: Object.assign({}, C.sym, {f: r => r.known ? symCell(r) : `<b>${esc(r.sym)}</b> <span class="na" title="Not in NIFTY 500 / Smallcap 500 / Microcap 250, so no price or scores">not in list</span>`}),
-  name: pfKnown(C.name), ind: pfKnown(C.ind),
-  qty: {k:'qty', label:'Qty', v:r => r.lot.qty, f:r => fmt(r.lot.qty, 0)},
-  buy: {k:'buy', label:'Buy ₹', v:r => r.lot.buy, f:r => fmt(r.lot.buy, 2)},
-  date: {k:'bdate', label:'Bought', v:r => r.lot.date || '', f:r => r.lot.date ? esc(r.lot.date) : NA},
-  inv: {k:'inv', label:'Invested ₹', v:r => r.invested, f:r => fmt(r.invested, 0)},
-  cmp: pfKnown(C.cmp),
-  val: {k:'val', label:'Value ₹', v:r => r.value, f:r => r.value == null ? NA : fmt(r.value, 0)},
-  pnl: {k:'pnl', label:'P&L ₹', v:r => r.pnl, f:r => r.pnl == null ? NA : `<span class="${r.pnl >= 0 ? 'up' : 'dn'}">${r.pnl > 0 ? '+' : ''}${fmt(r.pnl, 0)}</span>`},
-  pnlPct: {k:'pnlp', label:'P&L %', v:r => r.pnlPct, f:r => pctPill(r.pnlPct, v => v >= 0)},
+  sym: Object.assign({}, C.sym, {f: pfSymCell}),
+  name: pfKnown(C.name), ind: pfKnown(C.ind), cmp: pfKnown(C.cmp),
+  qty: {k:'qty', label:'Qty', v:r => r.qty, f:r => fmt(r.qty, 0)},
+  avg: {k:'avg', label:'Avg buy ₹', v:r => r.avg, f:r => fmt(r.avg, 2)},
+  inv: {k:'inv', label:'Invested ₹', v:r => r.cost, f:r => fmt(r.cost, 0)},
+  val: {k:'val', label:'Value ₹', v:r => r.value, f:r => r.priced ? fmt(r.value, 0) : `<span class="na" title="No price: valued at cost">${fmt(r.value, 0)}</span>`},
+  pnl: {k:'pnl', label:'P&L ₹', v:r => r.priced ? r.pnl : null, f:r => r.priced ? signed(r.pnl) : NA},
+  pnlPct: {k:'pnlp', label:'P&L %', v:r => r.priced ? r.pnlPct : null, f:r => r.priced ? pctPill(r.pnlPct, v => v >= 0) : NA},
+  wt: {k:'wt', label:'Weight %', v:r => r.wt, f:r => fmt(r.wt, 1)},
   score: pfKnown(C.score), mom: pfKnown(C.mom), trend: pfKnown(C.trend), flags: pfKnown(C.flags),
-  del: {k:'del', label:'', noCsv:1, v:r => null, f:r => `<button type="button" class="pf-del" data-del="${esc(r.lot.id)}" title="Remove this holding" aria-label="Remove">×</button>`},
+  edit: {k:'edit', label:'', noCsv:1, v:r => null, f:r => `<button type="button" class="pf-ico" data-trade="${esc(r.sym)}" title="Buy or sell ${esc(r.sym)}" aria-label="Buy or sell ${esc(r.sym)}">✎</button>`},
+  bought: {k:'bq', label:'Bought', v:r => r.bQty, f:r => fmt(r.bQty, 0) + ' @ ' + fmt(r.bQty ? r.bAmt / r.bQty : null, 2)},
+  sold: {k:'sq', label:'Sold', v:r => r.sQty, f:r => fmt(r.sQty, 0) + ' @ ' + fmt(r.sQty ? r.sAmt / r.sQty : null, 2)},
+  real: {k:'real', label:'Realised P&L ₹', v:r => r.realized, f:r => signed(r.realized)},
+  chg: {k:'chg', label:'Charges ₹', v:r => r.charges, f:r => fmt(r.charges, 2)},
+  net: {k:'net', label:'Net ₹', v:r => r.realized - r.charges, f:r => signed(r.realized - r.charges)},
+  closed: {k:'closed', label:'Closed', v:r => r.last || '', f:r => r.last ? esc(r.last) : NA},
+};
+const TX_LABEL = {buy:'Buy', sell:'Sell', in:'Pay in', out:'Pay out'};
+const TXC = {
+  date: {k:'date', label:'Date', l:1, v:r => r.x.date || '', f:r => r.x.date ? esc(r.x.date) : NA},
+  type: {k:'type', label:'Type', l:1, v:r => r.x.t, f:r => `<span class="pf-t ${r.x.t}">${TX_LABEL[r.x.t]}</span>`},
+  sym: {k:'tsym', label:'Symbol', l:1, v:r => r.sym, f:r => r.x.sym ? `<b>${esc(r.x.sym)}</b>` : NA},
+  qty: {k:'tqty', label:'Qty', v:r => r.x.qty, f:r => r.x.qty ? fmt(r.x.qty, 0) : NA},
+  px: {k:'tpx', label:'Price ₹', v:r => r.x.px, f:r => r.x.px ? fmt(r.x.px, 2) : NA},
+  amt: {k:'tamt', label:'Amount ₹', v:r => r.amt, f:r => signed(r.amt)},
+  ch: {k:'tch', label:'Charges ₹', v:r => r.x.ch || 0, f:r => r.x.ch ? fmt(r.x.ch, 2) : NA},
+  cash: {k:'tcash', label:'Cash after ₹', v:r => r.cash, f:r => signed(r.cash)},
+  act: {k:'tact', label:'', noCsv:1, v:r => null, f:r => `<button type="button" class="pf-ico" data-edit="${esc(r.x.id)}" title="Edit" aria-label="Edit">✎</button><button type="button" class="pf-ico del" data-del="${esc(r.x.id)}" title="Delete" aria-label="Delete">×</button>`},
 };
 function portfolioView() {
   setNav('portfolio'); view.innerHTML = '';
@@ -2499,72 +2586,171 @@ function portfolioView() {
     $('#pfNow').addEventListener('click', () => setHistorical(false));
     return;
   }
-  if (!PF.items) {
+  if (!PF.txns) {
     pfLoad();
     view.insertAdjacentHTML('beforeend', `<p class="hint">${PF.err ? esc(PF.err) : 'Loading your portfolio…'}</p>`);
     return;
   }
-  const rows = pfRows(), priced = rows.filter(r => r.value != null);
-  const inv = priced.reduce((t, r) => t + r.invested, 0), val = priced.reduce((t, r) => t + r.value, 0);
-  const pnl = val - inv, pct = inv ? (val / inv - 1) * 100 : null;
-  view.insertAdjacentHTML('beforeend', `<div class="pf-top">
-    <form class="pf-add" autocomplete="off">
-      <label class="fld"><span>Symbol</span><input name="sym" list="pfSyms" placeholder="e.g. TCS" required spellcheck="false" autocapitalize="characters"></label>
-      <label class="fld"><span>Qty</span><input name="qty" type="number" min="0" step="any" required></label>
-      <label class="fld"><span>Buy price ₹</span><input name="buy" type="number" min="0" step="any" required></label>
-      <label class="fld"><span>Buy date</span><input name="date" type="date"></label>
-      <button type="submit" class="btn primary">Add</button>
-      <datalist id="pfSyms">${D.stocks.map(s => `<option value="${esc(s.sym)}">${esc(s.name)}</option>`).join('')}</datalist>
-    </form>
-    <button type="button" class="btn pf-tg" id="pfWeekly"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>Send weekly updates</button>
-  </div>${PF.err ? `<p class="pf-err">${esc(PF.err)}</p>` : ''}<p class="pf-msg" aria-live="polite"></p>`);
-  stats([['Holdings', rows.length], ['Invested ₹', fmt(inv, 0)],   // totals cover holdings with a price today (not-in-list ones are counted apart)
-         ['Value ₹', fmt(val, 0)],
-         ['P&L ₹', (pnl > 0 ? '+' : '') + fmt(pnl, 0)], ['P&L %', pct == null ? '–' : (pct > 0 ? '+' : '') + fmt(pct) + '%'],
-         ['Not in list', rows.length - rows.filter(r => r.known).length]], null);
-  view.appendChild(makeTable('pf',
-    [PFC.sym, PFC.name, PFC.qty, PFC.buy, PFC.date, PFC.inv, PFC.cmp, PFC.val, PFC.pnl, PFC.pnlPct, PFC.score, PFC.mom, PFC.trend, PFC.ind, PFC.flags, PFC.del],
-    rows, {sortKey:'val', sortDir:-1, search:true, csv:() => 'Portfolio'}));
-  if (!rows.length) view.querySelector('.card tbody').innerHTML = `<tr><td class="l na" colspan="17">No holdings yet. Add your first one above: any NSE symbol works, including ones not in these lists (they show without a price).</td></tr>`;
-  const f = $('.pf-add'), msg = $('.pf-msg');
-  f.sym.addEventListener('change', () => {                 // known symbol + empty price → suggest today's price
-    const s = TODAY.get(f.sym.value.trim().toUpperCase());
-    if (s && ok(s.cmp) && !f.buy.value) f.buy.value = s.cmp;
+  const R = pfReplay(PF.txns);
+  const open = [], closed = [];
+  Object.values(R.pos).forEach(p => {
+    const s = TODAY.get(p.sym), r = Object.assign({}, s || {sym: p.sym, name: p.sym, ind: ''}, p, {known: !!s});
+    if (p.qty > 0) {
+      r.avg = p.cost / p.qty; r.priced = !!(s && ok(s.cmp));
+      r.value = r.priced ? p.qty * s.cmp : p.cost;          // no price → valued at cost
+      r.pnl = r.value - p.cost; r.pnlPct = p.cost ? r.pnl / p.cost * 100 : null;
+      open.push(r);
+    } else closed.push(r);
   });
+  const hold = open.reduce((t, r) => t + r.value, 0), cost = open.reduce((t, r) => t + r.cost, 0);
+  open.forEach(r => r.wt = hold ? r.value / hold * 100 : null);
+  const unreal = open.filter(r => r.priced).reduce((t, r) => t + r.pnl, 0);
+  const worth = R.cash + hold, deposits = R.payIn - R.payOut, gain = worth - deposits;
+  const gainPct = deposits > 0 ? gain / deposits * 100 : (cost ? gain / cost * 100 : null);
+  view.insertAdjacentHTML('beforeend', `<div class="pf-top">
+      <div class="pf-acts">
+        <button type="button" class="btn primary" data-open="trade">+ Buy / Sell</button>
+        <button type="button" class="btn" data-open="in">Pay in</button>
+        <button type="button" class="btn" data-open="out">Pay out</button>
+        <button type="button" class="btn ghost" data-open="rates" title="Brokerage and tax rates used to work out charges">Charges ⚙</button>
+      </div>
+      <button type="button" class="btn pf-tg" id="pfWeekly"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>Send weekly updates</button>
+    </div>${PF.err ? `<p class="pf-err">${esc(PF.err)}</p>` : ''}
+    ${R.bad ? `<p class="pf-err">A sale of ${esc(R.bad.sym)} on ${esc(R.bad.date || 'an undated day')} is larger than the shares held then. Check the dates in Transactions.</p>` : ''}
+    <div class="pf-sum">
+      <div class="pf-k gain ${gain >= 0 ? 'pos' : 'neg'}"><span>Net gain</span><b>${rs(gain, true)}</b><small>${gainPct == null ? '' : (gainPct > 0 ? '+' : gainPct < 0 ? '−' : '') + fmt(Math.abs(gainPct), 1) + '%'}</small></div>
+      <div class="pf-k"><span>Net worth</span><b>${rs(worth)}</b><small>holdings + cash</small></div>
+      <div class="pf-k"><span>Cash in hand</span><b class="${R.cash < 0 ? 'dn' : ''}">${rs(R.cash)}</b><small>${R.cash < 0 && !R.payIn ? 'add a Pay in for your opening cash' : 'after all trades and charges'}</small></div>
+      <div class="pf-k"><span>Holdings</span><b>₹${fmt(hold, 0)}</b><small>${open.length} stocks · cost ₹${fmt(cost, 0)}</small></div>
+      <div class="pf-k"><span>Unrealised</span><b>${signed(unreal)}</b><small>open positions</small></div>
+      <div class="pf-k"><span>Realised</span><b>${signed(R.realized)}</b><small>before charges</small></div>
+      <div class="pf-k"><span>Charges</span><b>₹${fmt(R.charges, 0)}</b><small>all trades</small></div>
+      <div class="pf-k"><span>Pay in / out</span><b>₹${fmt(R.payIn, 0)} / ₹${fmt(R.payOut, 0)}</b><small>net ${rs(deposits)}</small></div>
+    </div>`);
+  view.insertAdjacentHTML('beforeend', '<h3 class="pf-h">Holdings</h3>');
+  view.appendChild(makeTable('pf',
+    [PFC.edit, PFC.sym, PFC.name, PFC.qty, PFC.avg, PFC.inv, PFC.cmp, PFC.val, PFC.pnl, PFC.pnlPct, PFC.wt, PFC.score, PFC.mom, PFC.trend, PFC.ind, PFC.flags],
+    open, {sortKey:'val', sortDir:-1, search:true, csv:() => 'Portfolio_holdings'}));
+  if (!open.length) view.querySelector('.card:last-of-type tbody').innerHTML = `<tr><td class="l na" colspan="17">No holdings. Start with <b>Pay in</b> (your opening cash), then <b>+ Buy / Sell</b>. Any NSE symbol works, also ones not in these lists.</td></tr>`;
+  if (closed.length) {
+    view.insertAdjacentHTML('beforeend', '<h3 class="pf-h">Closed positions <span>sold fully, the money is back in cash</span></h3>');
+    view.appendChild(makeTable('pfc', [PFC.sym, PFC.name, PFC.bought, PFC.sold, PFC.real, PFC.chg, PFC.net, PFC.closed],
+      closed, {sortKey:'closed', sortDir:-1, csv:() => 'Portfolio_closed'}));
+  }
+  const ledRows = R.led.map(l => ({x: l.x, cash: l.cash, sym: l.x.sym || '', name: '', ind: '',
+    amt: l.x.t === 'in' ? l.x.amt : l.x.t === 'out' ? -l.x.amt : l.x.t === 'buy' ? -(l.x.qty * l.x.px + (l.x.ch || 0)) : l.x.qty * l.x.px - (l.x.ch || 0)})).reverse();
+  view.insertAdjacentHTML('beforeend', `<h3 class="pf-h">Transactions <span>${ledRows.length}</span></h3>`);
+  view.appendChild(makeTable('pft', [TXC.date, TXC.type, TXC.sym, TXC.qty, TXC.px, TXC.ch, TXC.amt, TXC.cash, TXC.act],
+    ledRows, {noIndex:true, csv:() => 'Portfolio_transactions'}));
+  view.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.open; k === 'trade' ? pfTradeForm({}) : k === 'rates' ? pfRatesForm() : pfCashForm({t: k});
+  }));
+  view.querySelectorAll('[data-trade]').forEach(b => b.addEventListener('click', () => pfTradeForm({sym: b.dataset.trade, t: 'sell'})));
+  view.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => {
+    const x = PF.txns.find(t => t.id === b.dataset.edit); if (!x) return;
+    x.t === 'in' || x.t === 'out' ? pfCashForm(x) : pfTradeForm(x);
+  }));
+  view.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
+    const x = PF.txns.find(t => t.id === b.dataset.del);
+    if (!x || !confirm(`Delete this ${TX_LABEL[x.t].toLowerCase()}${x.sym ? ' of ' + x.sym : ''}${x.date ? ' on ' + x.date : ''}? Holdings and cash are recalculated.`)) return;
+    PF.txns = PF.txns.filter(t => t !== x); await pfSave(); route();
+  }));
+  $('#pfWeekly').addEventListener('click', () => modal('Weekly updates', `<p>Work in progress. Soon you'll get your portfolio summary every week on Telegram.</p>`));
+}
+/* small dialog: × , Esc or a click outside closes it; returns the box */
+function modal(title, html) {
+  document.querySelectorAll('.wip-back').forEach(m => m.remove());
+  const w = document.createElement('div'); w.className = 'wip-back open';
+  w.innerHTML = `<div class="wip-box" role="dialog" aria-modal="true"><button type="button" class="wip-x" aria-label="Close">×</button><h3>${title}</h3>${html}</div>`;
+  document.body.appendChild(w);
+  const close = () => { w.remove(); document.removeEventListener('keydown', onKey, true); };
+  const onKey = e => { if (e.key === 'Escape') { e.stopImmediatePropagation(); close(); } };
+  document.addEventListener('keydown', onKey, true);
+  $('.wip-x', w).addEventListener('click', close);
+  w.addEventListener('mousedown', e => { if (e.target === w) close(); });
+  w._close = close;
+  const first = w.querySelector('input:not([type=hidden]), .wip-x'); if (first) setTimeout(() => first.focus(), 30);
+  return w;
+}
+const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+/* Buy / Sell form (new, or edit an existing trade). Charges fill in by themselves; type over them to override. */
+function pfTradeForm(x) {
+  const edit = !!x.id, held = () => { const R = pfReplay(PF.txns.filter(t => t !== x)); return (R.pos[f.sym.value.trim().toUpperCase()] || {}).qty || 0; };
+  const w = modal(edit ? 'Edit trade' : 'Buy / Sell', `<form class="pf-form" autocomplete="off">
+    <div class="seg"><button type="button" data-t="buy">Buy</button><button type="button" data-t="sell">Sell</button></div>
+    <label class="fld"><span>Symbol</span><input name="sym" list="pfSyms" placeholder="e.g. TCS" required spellcheck="false"></label>
+    <div class="row2"><label class="fld"><span>Qty <i class="held"></i></span><input name="qty" type="number" min="0" step="any" required></label>
+    <label class="fld"><span>Price ₹</span><input name="px" type="number" min="0" step="any" required></label></div>
+    <div class="row2"><label class="fld"><span>Date</span><input name="date" type="date"></label>
+    <label class="fld"><span>Charges ₹ <i>auto</i></span><input name="ch" type="number" min="0" step="any"></label></div>
+    <p class="pf-calc"></p><p class="pf-err"></p>
+    <button type="submit" class="btn primary">Save</button>
+    <datalist id="pfSyms">${D.stocks.map(s => `<option value="${esc(s.sym)}">${esc(s.name)}</option>`).join('')}</datalist></form>`);
+  const f = $('form', w); let t = x.t || 'buy', chTyped = edit && x.ch != null;
+  f.sym.value = x.sym || ''; f.qty.value = x.qty || ''; f.px.value = x.px || ''; f.date.value = x.date || today(); f.ch.value = edit ? (x.ch || 0) : '';
+  const seg = () => w.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  const calc = () => {
+    const sym = f.sym.value.trim().toUpperCase(), s = TODAY.get(sym), q = +f.qty.value, p = +f.px.value;
+    if (s && ok(s.cmp) && !f.px.value && !edit) f.px.placeholder = 'today ' + fmt(s.cmp, 2);
+    const h = sym ? held() : 0; $('.held', w).textContent = sym && h ? `(holding ${fmt(h, 0)})` : '';
+    if (!chTyped) f.ch.value = q > 0 && p > 0 ? pfCharges(t, q, p) : '';
+    const ch = +f.ch.value || 0;
+    $('.pf-calc', w).textContent = q > 0 && p > 0 ? (t === 'buy' ? `Cash out ₹${fmt(q * p + ch, 2)} (₹${fmt(q * p, 2)} + charges)` : `Cash in ₹${fmt(q * p - ch, 2)} (₹${fmt(q * p, 2)} − charges)`) : '';
+  };
+  w.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => { t = b.dataset.t; seg(); calc(); }));
+  ['sym', 'qty', 'px'].forEach(k => f[k].addEventListener('input', calc));
+  f.sym.addEventListener('change', () => { const s = TODAY.get(f.sym.value.trim().toUpperCase()); if (s && ok(s.cmp) && !f.px.value) f.px.value = s.cmp; calc(); });
+  f.ch.addEventListener('input', () => { chTyped = f.ch.value !== ''; calc(); });
+  seg(); calc();
   f.addEventListener('submit', async e => {
     e.preventDefault();
-    const sym = f.sym.value.trim().toUpperCase().replace(/^NSE:/, ''), qty = +f.qty.value, buy = +f.buy.value;
-    if (!/^[A-Z0-9&._-]{1,20}$/.test(sym)) { msg.textContent = 'Type a valid NSE symbol, e.g. TCS.'; return; }
-    if (!(qty > 0) || !(buy > 0)) { msg.textContent = 'Quantity and buy price must be above 0.'; return; }
-    if (PF.items.length >= 300) { msg.textContent = 'Portfolio is full (300 holdings).'; return; }
-    PF.items.push({id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), sym, qty, buy, date: f.date.value || ''});
-    await pfSave(); route();
+    const err = m => { $('.pf-err', w).textContent = m; };
+    const sym = f.sym.value.trim().toUpperCase().replace(/^NSE:/, ''), qty = +f.qty.value, px = +f.px.value;
+    if (!/^[A-Z0-9&._-]{1,20}$/.test(sym)) return err('Type a valid NSE symbol, e.g. TCS.');
+    if (!(qty > 0) || !(px > 0)) return err('Quantity and price must be above 0.');
+    if (t === 'sell' && qty > held() + 1e-9) return err(`You hold ${fmt(held(), 0)} ${sym}; you can't sell ${fmt(qty, 0)}.`);
+    if (!edit && PF.txns.length >= 3000) return err('Transaction limit reached (3000).');
+    const rec = {id: x.id || pfId(), t, sym, qty, px, ch: +f.ch.value || 0, date: f.date.value || ''};
+    PF.txns = edit ? PF.txns.map(o => o === x ? rec : o) : PF.txns.concat(rec);
+    await pfSave(); w._close(); route();
   });
-  view.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
-    const it = PF.items.find(x => x.id === b.dataset.del);
-    if (!it || !confirm(`Remove ${it.sym} (${fmt(it.qty, 0)} @ ₹${fmt(it.buy, 2)})?`)) return;
-    PF.items = PF.items.filter(x => x !== it);
-    await pfSave(); route();
-  }));
-  $('#pfWeekly').addEventListener('click', openWip);
 }
-/* "Send weekly updates": not built yet → small overlay; × , Esc or a click outside closes it */
-function openWip() {
-  let w = $('#wip');
-  if (!w) {
-    w = document.createElement('div'); w.id = 'wip'; w.className = 'wip-back';
-    w.innerHTML = `<div class="wip-box" role="dialog" aria-modal="true" aria-labelledby="wipT">
-      <button type="button" class="wip-x" aria-label="Close">×</button>
-      <h3 id="wipT">Weekly updates</h3>
-      <p>Work in progress. Soon you'll get your portfolio summary every week on Telegram.</p></div>`;
-    document.body.appendChild(w);
-    const close = () => w.classList.remove('open');
-    $('.wip-x', w).addEventListener('click', close);
-    w.addEventListener('click', e => { if (e.target === w) close(); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && w.classList.contains('open')) { e.stopImmediatePropagation(); close(); } }, true);
-  }
-  w.classList.add('open');
-  $('.wip-x', w).focus();
+/* Pay in / Pay out (new, or edit) */
+function pfCashForm(x) {
+  const edit = !!x.id;
+  const w = modal(edit ? 'Edit cash entry' : 'Pay in / Pay out', `<form class="pf-form" autocomplete="off">
+    <div class="seg"><button type="button" data-t="in">Pay in</button><button type="button" data-t="out">Pay out</button></div>
+    <label class="fld"><span>Amount ₹</span><input name="amt" type="number" min="0" step="any" required></label>
+    <label class="fld"><span>Date</span><input name="date" type="date"></label>
+    <p class="pf-calc">Pay in = money added (your opening cash too). Pay out = money taken out.</p><p class="pf-err"></p>
+    <button type="submit" class="btn primary">Save</button></form>`);
+  const f = $('form', w); let t = x.t || 'in';
+  f.amt.value = x.amt || ''; f.date.value = x.date || today();
+  const seg = () => w.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  w.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => { t = b.dataset.t; seg(); }));
+  seg();
+  f.addEventListener('submit', async e => {
+    e.preventDefault();
+    const amt = +f.amt.value;
+    if (!(amt > 0)) { $('.pf-err', w).textContent = 'Amount must be above 0.'; return; }
+    const rec = {id: x.id || pfId(), t, amt, date: f.date.value || ''};
+    PF.txns = edit ? PF.txns.map(o => o === x ? rec : o) : PF.txns.concat(rec);
+    await pfSave(); w._close(); route();
+  });
+}
+/* brokerage / tax rates used for new trades (old trades keep the charges they were saved with) */
+function pfRatesForm() {
+  const w = modal('Charges', `<form class="pf-form" autocomplete="off">
+    <p class="pf-calc">Equity delivery on NSE. Defaults follow the published statutory rates; set brokerage to your broker's
+    (e.g. 0.1% with a ₹20 cap). Rates change from time to time, so check your contract note. Only new trades use these.</p>
+    <div class="row2">${Object.keys(PF_RATES).map(k => `<label class="fld"><span>${PF_RATE_LABEL[k]}</span><input name="${k}" type="number" min="0" step="any" value="${PF.rates[k]}"></label>`).join('')}</div>
+    <p class="pf-calc ex"></p>
+    <div class="pf-btns"><button type="button" class="btn ghost" data-def>Defaults</button><button type="submit" class="btn primary">Save</button></div></form>`);
+  const f = $('form', w), read = () => Object.fromEntries(Object.keys(PF_RATES).map(k => [k, f[k].value === '' ? PF_RATES[k] : +f[k].value]));
+  const ex = () => { const r = read(); $('.ex', w).textContent = `Example: ₹1,00,000 buy = ₹${fmt(pfCharges('buy', 1, 1e5, r), 2)}, sell = ₹${fmt(pfCharges('sell', 1, 1e5, r), 2)} in charges.`; };
+  f.addEventListener('input', ex); ex();
+  $('[data-def]', w).addEventListener('click', () => { Object.keys(PF_RATES).forEach(k => f[k].value = PF_RATES[k]); ex(); });
+  f.addEventListener('submit', async e => { e.preventDefault(); PF.rates = read(); await pfSave(); w._close(); route(); });
 }
 
 function methodView() {
