@@ -1173,6 +1173,8 @@ body.day .toggle-thumb{transform:translateX(16px)}
 .pf-form input[name=sym]{text-transform:uppercase}
 .pf-form input::placeholder{text-transform:none;color:var(--faint)}
 .pf-form input:focus{outline:none;border-color:var(--brass)}
+.pf-form input.bad,.pf-form input.bad:focus{border-color:var(--bad);background:var(--badbg);color:var(--bad)}
+.pf-form .held.bad{color:var(--bad)}
 .pf-form .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .pf-form .btn.primary{height:38px;justify-content:center}
 .pf-calc{margin:0;font-size:12.5px;color:var(--mute);line-height:1.5}
@@ -1189,6 +1191,25 @@ body.day .toggle-thumb{transform:translateX(16px)}
 .wip-box > p{margin:0;color:var(--mute);font-size:13.5px;line-height:1.5}
 .wip-x{position:absolute;top:10px;right:10px;width:30px;height:30px;border:0;background:transparent;color:var(--faint);font-size:20px;line-height:1;cursor:pointer;border-radius:6px}
 .wip-x:hover{color:var(--ink);background:var(--hover)}
+/* stock overlay (tap a symbol) */
+.wip-box.no-box{width:min(560px,100%)}
+.no-name{margin:-4px 0 10px!important;color:var(--mute);font-size:13px}
+.no-name span{color:var(--faint)}
+.no-kv{display:flex;flex-wrap:wrap;gap:6px 18px;margin-bottom:12px}
+.no-kv div{display:flex;flex-direction:column}
+.no-kv span{font:600 9.5px var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.6px}
+.no-kv b{font:700 14px var(--mono);color:var(--ink)}
+.no-acts{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.no-acts .btn{text-decoration:none}
+.no-h{font:700 11px var(--mono);color:var(--brass);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+.no-list{max-height:min(46vh,420px);overflow:auto;border:1px solid var(--line);border-radius:10px}
+.no-list .na{padding:12px;margin:0}
+.no-it{display:block;padding:9px 12px;border-bottom:1px solid var(--line);color:var(--ink);font-size:13px;line-height:1.45;text-decoration:none}
+.no-it:last-child{border-bottom:0}
+.no-it:hover{background:var(--hover);text-decoration:none}
+.no-it span{display:block;font:500 10.5px var(--mono);color:var(--faint);margin-bottom:2px}
+.pf-ni b[data-news]{cursor:pointer}
+.pf-ni b[data-news]:hover{text-decoration:underline}
 @media (max-width:1100px){.pf-grid{grid-template-columns:1fr}.pf-right .wrap{max-height:340px}}
 @media (max-width:700px){
   .pf-top{gap:6px}
@@ -1808,7 +1829,7 @@ const epsSpark = s => s.ttm == null ? NA : sparkLine(s.eps.concat([['Now (TTM)',
 const pctPill = (v, good, d=1, suf='%') => v==null ? NA : `<span class="pill ${good(v)?'disc':'prem'}">${v>0?'+':''}${fmt(v,d)}${suf}</span>`;
 const ppPill = (v, upGood=true) => v==null ? NA : `<span class="pill ${Math.abs(v)<0.05?'':((v>0)===upGood?'disc':'prem')}">${v>0?'+':''}${fmt(v,2)} pp</span>`;
 const psuTag = s => s.psu === 'psu' ? '<span class="tag" title="Government-owned">PSU</span>' : s.psu === 'semi' ? '<span class="tag semi" title="Large government / PSU stake, not controlling">semi</span>' : '';
-const symCell = s => (s.url ? `<a class="sym" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.sym)}</a>` : `<b>${esc(s.sym)}</b>`) + psuTag(s);
+const symCell = s => `<a class="sym" href="${esc(s.url || '#')}" data-news="${esc(s.sym)}" title="News and details">${esc(s.sym)}</a>` + psuTag(s);   // opens the news overlay; Screener.in link inside
 const bagBtn = s => `<button type="button" class="bag${PF_HELD.has(s.sym) ? ' held' : ''}" data-bag="${esc(s.sym)}" title="Buy / sell ${esc(s.sym)} in your Portfolio" aria-label="Buy or sell ${esc(s.sym)}">${BAG}</button>`;
 const indLink = s => bagBtn(s) + `<a class="ind" href="#/industry/${encodeURIComponent(s.ind)}">${esc(s.ind)}</a>`;   // bag left of the industry: add / subtract in Portfolio
 const premCell = s => { const p = prem(s); if (p==null) return '<span class="na">N/A</span>';
@@ -2775,7 +2796,16 @@ const TXC = {
          ? `<span class="pf-lock" title="Part of a closed position: remove it from the Closed list instead">🔒</span>` : `<span class="pf-acts2"><button type="button" class="pf-ico" data-edit="${esc(r.x.id)}" title="Edit" aria-label="Edit">✎</button><button type="button" class="pf-ico del" data-del="${esc(r.x.id)}" title="Delete" aria-label="Delete">×</button></span>`},
 };
 /* news of the last 7 days for the stocks held (news.json, written by the build from fetch_news.py) */
-let NEWS = null;
+let NEWS = null, NEWS_P = null;
+function loadNewsMap() {                                    // news.json (build.py): compact, shared with the screener
+  return NEWS_P = NEWS_P || fetch('news.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : {}).catch(() => ({})).then(j => {
+    NEWS = {};
+    const dt = t => `20${t.slice(0, 2)}-${t.slice(2, 4)}-${t.slice(4, 6)} ${t.slice(6, 8)}:${t.slice(8, 10)}`;
+    for (const sym in (j.s || {})) NEWS[sym] = j.s[sym].map(i => { const a = j.a[i];
+      return [dt(a[0]), a[1] + (a[2] ? ' – ' + a[2] : ''), a[3][0] === '!' ? a[3].slice(1) : j.p + a[3] + j.q]; });
+    return NEWS;
+  });
+}
 function pfNewsPanel(host, syms) {
   const p = document.createElement('section'); p.className = 'pf-panel pf-news'; host.appendChild(p);
   p.innerHTML = '<h3 class="pf-h">News <span>7 days</span></h3><div class="pf-nl"><p class="na">Loading…</p></div>';
@@ -2786,17 +2816,11 @@ function pfNewsPanel(host, syms) {
     const d = v => { const t = new Date(v.replace(' ', 'T')); return isNaN(t) ? v : t.toLocaleDateString('en-IN', {day: '2-digit', month: 'short'}); };
     $('.pf-h span', p).textContent = items.length + ' · 7 days';
     $('.pf-nl', p).innerHTML = items.length ? items.slice(0, 60).map(n => `<a class="pf-ni" href="${esc(n[3] || '#')}" target="_blank" rel="noopener noreferrer">
-        <span class="d">${esc(d(n[0]))}</span><b>${esc(n[1])}</b><span class="t">${esc(n[2])}</span></a>`).join('')
+        <span class="d">${esc(d(n[0]))}</span><b data-news="${esc(n[1])}" title="All news for ${esc(n[1])}">${esc(n[1])}</b><span class="t">${esc(n[2])}</span></a>`).join('')
       : `<p class="na">${syms.length ? 'No news in the last 7 days for your holdings.' : 'News for the stocks you hold shows here.'}</p>`;
   };
   if (NEWS) return paint();
-  fetch('news.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : {}).catch(() => ({})).then(j => {
-    NEWS = {};                                             // compact news.json (build.py): articles once + per-stock indexes
-    const dt = t => `20${t.slice(0, 2)}-${t.slice(2, 4)}-${t.slice(4, 6)} ${t.slice(6, 8)}:${t.slice(8, 10)}`;
-    for (const sym in (j.s || {})) NEWS[sym] = j.s[sym].map(i => { const a = j.a[i];
-      return [dt(a[0]), a[1] + (a[2] ? ' – ' + a[2] : ''), a[3][0] === '!' ? a[3].slice(1) : j.p + a[3] + j.q]; });
-    if (p.isConnected) paint();
-  });
+  loadNewsMap().then(() => { if (p.isConnected) paint(); });
 }
 /* a table inside a panel: title on the left of its own tool row, body scrolls inside the panel */
 function pfPanel(host, title, sub, table) {
@@ -2808,8 +2832,10 @@ function pfPanel(host, title, sub, table) {
   else p.insertAdjacentHTML('afterbegin', h);
   return p;
 }
+let P_DAY = '';                                            // the trading day of the live prices (yyyy-mm-dd)
 function pfSummary(txns, mkt) {
   const keep = PF.mkt; PF.mkt = mkt === undefined ? PF.mkt : mkt;   // admin view passes the market doc it read
+  P_DAY = (PF.mkt && PF.mkt.asOf) || '';
   const R = pfReplay(txns || []);
   const withData = p => { const s = TODAY.get(p.sym); return Object.assign({}, s || {ind: ''}, p, {known: !!s, name: (s && s.name) || p.name || p.sym}); };   // list name wins; typed name for others
   const open = Object.values(R.pos).filter(p => p.qty > 0).map(p => {
@@ -2817,8 +2843,15 @@ function pfSummary(txns, mkt) {
     r.avg = p.cost / p.qty; r.priced = px != null; r.ltp = px;
     r.value = r.priced ? p.qty * px : p.cost;              // no price → valued at cost
     r.pnl = r.value - p.cost; r.pnlPct = p.cost ? r.pnl / p.cost * 100 : null;
-    r.day = lv && lv.ltp && lv.prev ? p.qty * (lv.ltp - lv.prev) : null;
-    r.dayPct = lv && lv.prev ? (lv.ltp / lv.prev - 1) * 100 : null;
+    if (lv && lv.ltp && lv.prev) {
+      /* today's gain: shares held from before today move from yesterday's close; shares bought today move from their
+         buy price (else a stock bought this morning would show yesterday-to-now as "your" gain) */
+      const d = (P_DAY || '').slice(0, 10), bt = (txns || []).filter(t => t.t === 'buy' && t.sym === p.sym && t.date === d);
+      const qNew = Math.min(p.qty, bt.reduce((a, t) => a + t.qty, 0)), qOld = p.qty - qNew;
+      const pxNew = qNew ? bt.reduce((a, t) => a + t.qty * t.px, 0) / bt.reduce((a, t) => a + t.qty, 0) : 0;
+      r.day = qOld * (lv.ltp - lv.prev) + qNew * (lv.ltp - pxNew);
+      const base = qOld * lv.prev + qNew * pxNew; r.dayPct = base ? r.day / base * 100 : null;
+    } else { r.day = null; r.dayPct = null; }
     return r;
   });
   const closed = R.closed.map((p, i) => Object.assign(withData(p), {ci: i}));
@@ -2826,7 +2859,7 @@ function pfSummary(txns, mkt) {
   open.forEach(r => r.wt = hold ? r.value / hold * 100 : null);
   const unreal = open.filter(r => r.priced).reduce((t, r) => t + r.pnl, 0);
   const dayRows = open.filter(r => r.day != null), day = dayRows.length ? dayRows.reduce((t, r) => t + r.day, 0) : null;
-  const dayBase = dayRows.reduce((t, r) => t + r.value - r.day, 0);
+  const dayBase = dayRows.reduce((t, r) => t + r.value - r.day, 0);   // value at yesterday's close (or buy price for today's buys)
   const worth = R.cash + hold, deposits = R.payIn - R.payOut, gain = worth - deposits;
   const gainPct = deposits > 0 ? gain / deposits * 100 : (cost ? gain / cost * 100 : null);
   const out = {R, open, closed, hold, cost, unreal, day, dayPct: dayBase ? day / dayBase * 100 : null, worth, deposits, gain, gainPct, asOf: PF.mkt && PF.mkt.asOf};
@@ -2903,33 +2936,64 @@ function portfolioView() {
   view.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => {
     const k = b.dataset.open; k === 'trade' ? pfTradeForm({}) : k === 'rates' ? pfRatesForm() : pfCashForm({t: k});
   }));
-  view.querySelectorAll('[data-trade]').forEach(b => b.addEventListener('click', () => pfTradeForm({sym: b.dataset.trade, t: 'sell'})));
-  view.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => {
-    const x = PF.txns.find(t => t.id === b.dataset.edit); if (!x) return;
-    x.t === 'in' || x.t === 'out' ? pfCashForm(x) : pfTradeForm(x);
-  }));
-  view.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
-    const x = PF.txns.find(t => t.id === b.dataset.del); if (!x) return;
-    const rest = PF.txns.filter(t => t !== x), bad = pfReplay(rest).bad;
-    if (bad) return modal('Can\'t delete', `<p>Without this ${TX_LABEL[x.t].toLowerCase()}, the sale of ${esc(bad.sym)}${bad.date ? ' on ' + esc(bad.date) : ''} would be more than the shares held. Delete or edit that sale first.</p>`);
-    typeConfirm(`Delete ${TX_LABEL[x.t].toLowerCase()}`, `${x.sym ? `<b>${esc(x.sym)}</b> ${fmt(x.qty, 0)} @ ₹${fmt(x.px, 2)}` : `₹${fmt(x.amt, 0)}`}${x.date ? ' on ' + esc(x.date) : ''}. Holdings and cash are recalculated.`,
-      async () => { PF.txns = rest; await pfSave(); route(); });
-  }));
-  view.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => {
-    const c = R.closed[+b.dataset.rm]; if (!c) return;
-    const ids = new Set(c.ids);
-    typeConfirm('Remove closed position', `<b>${esc(c.sym)}</b>: bought ${fmt(c.bQty, 0)}, sold ${fmt(c.sQty, 0)}, net ${rs(c.realized - c.charges, true)}. Its ${ids.size} trades are deleted, and cash drops or rises by that net amount.`,
-      async () => { PF.txns = PF.txns.filter(t => !ids.has(t.id)); await pfSave(); route(); });
-  }));
   const wipe = $('#pfWipe');
   if (wipe) wipe.addEventListener('click', () => typeConfirm('Delete all', `Every holding, closed position, pay in / out and trade (${PF.txns.length} entries) is deleted. Your charge rates stay.`,
     async () => { PF.txns = []; await pfSave(); route(); }));
+}
+/* Portfolio row buttons (✎ holding, ✎ / × transaction, Remove closed): ONE click handler for the whole page, so
+   rows re-drawn by the search box or added while scrolling work straight away */
+document.addEventListener('click', e => {
+  if ((location.hash || '') !== '#/portfolio' || !PF.txns) return;
+  const b = e.target.closest && e.target.closest('[data-trade],[data-edit],[data-del],[data-rm]');
+  if (!b || !view.contains(b)) return;
+  if (b.dataset.trade) return pfTradeForm({sym: b.dataset.trade, t: 'sell'});
+  if (b.dataset.edit) {
+    const x = PF.txns.find(t => t.id === b.dataset.edit); if (!x) return;
+    return x.t === 'in' || x.t === 'out' ? pfCashForm(x) : pfTradeForm(x);
+  }
+  if (b.dataset.del) {
+    const x = PF.txns.find(t => t.id === b.dataset.del); if (!x) return;
+    const rest = PF.txns.filter(t => t !== x), bad = pfReplay(rest).bad;
+    if (bad) return modal('Can\'t delete', `<p>Without this ${TX_LABEL[x.t].toLowerCase()}, the sale of ${esc(bad.sym)}${bad.date ? ' on ' + esc(bad.date) : ''} would be more than the shares held. Delete or edit that sale first.</p>`);
+    return typeConfirm(`Delete ${TX_LABEL[x.t].toLowerCase()}`, `${x.sym ? `<b>${esc(x.sym)}</b> ${fmt(x.qty, 0)} @ ₹${fmt(x.px, 2)}` : `₹${fmt(x.amt, 0)}`}${x.date ? ' on ' + esc(x.date) : ''}. Holdings and cash are recalculated.`,
+      async () => { PF.txns = rest; await pfSave(); route(); });
+  }
+  if (b.dataset.rm != null) {
+    const c = PF_LAST && PF_LAST.closed[+b.dataset.rm]; if (!c) return;
+    const ids = new Set(c.ids);
+    typeConfirm('Remove closed position', `<b>${esc(c.sym)}</b>: bought ${fmt(c.bQty, 0)}, sold ${fmt(c.sQty, 0)}, net ${rs(c.realized - c.charges, true)}. Its ${ids.size} trades are deleted, and cash drops or rises by that net amount.`,
+      async () => { PF.txns = PF.txns.filter(t => !ids.has(t.id)); await pfSave(); route(); });
+  }
+});
+/* stock name (any table, news panel) → light overlay: its last-7-days news, key numbers, Buy / Sell, Screener.in link */
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('[data-news]');
+  if (!a || e.ctrlKey || e.metaKey || e.shiftKey || e.button) return;   // ctrl / cmd-click still opens Screener.in in a new tab
+  e.preventDefault(); e.stopPropagation();
+  newsOverlay(a.dataset.news);
+}, true);
+function newsOverlay(sym) {
+  const s = TODAY.get(sym) || {sym, name: sym};
+  const k = (l, v) => v == null || v === '' ? '' : `<div><span>${l}</span><b>${v}</b></div>`;
+  const w = modal(esc(sym), `<p class="no-name">${esc(s.name || '')}${s.ind ? ` · <span>${esc(s.ind)}</span>` : ''}</p>
+    <div class="no-kv">${k('LTP ₹', pfLtp(sym) != null ? fmt(pfLtp(sym), 2) : null)}${k('PE', s.pe != null ? fmt(s.pe) : null)}${k('PB', s.pb != null ? fmt(s.pb, 2) : null)}
+      ${k('Value score', s.score != null ? fmt(s.score, 0) : null)}${k('Momentum', s.momS != null ? fmt(s.momS, 0) : null)}${k('Held', PF_HELD.has(sym) ? 'yes' : null)}</div>
+    <div class="no-acts"><button type="button" class="btn primary" data-nb>Buy / Sell</button>${s.url ? `<a class="btn" href="${esc(s.url)}" target="_blank" rel="noopener">Open on Screener.in ↗</a>` : ''}</div>
+    <div class="no-h">News · last 7 days</div><div class="no-list"><p class="na">Loading…</p></div>`, {noFocus: true, cls: 'no-box'});
+  $('[data-nb]', w).addEventListener('click', async () => { w._close(); await pfLoad(); pfTradeForm({sym}); });
+  loadNewsMap().then(N => {
+    if (!w.isConnected) return;
+    const items = (N[sym] || []);
+    const d = v => { const t = new Date(v.replace(' ', 'T')); return isNaN(t) ? v : t.toLocaleDateString('en-IN', {day: '2-digit', month: 'short'}) + ', ' + t.toLocaleTimeString('en-IN', {hour: '2-digit', minute: '2-digit'}); };
+    $('.no-list', w).innerHTML = items.length ? items.map(n => `<a class="no-it" href="${esc(n[2] || '#')}" target="_blank" rel="noopener noreferrer"><span>${esc(d(n[0]))}</span>${esc(n[1])}</a>`).join('')
+      : '<p class="na">No news in the last 7 days.</p>';
+  });
 }
 /* small dialog: × , Esc or a click outside closes it; returns the box */
 function modal(title, html, opt = {}) {
   document.querySelectorAll('.wip-back').forEach(m => m.remove());
   const w = document.createElement('div'); w.className = 'wip-back open';
-  w.innerHTML = `<div class="wip-box${opt.ov ? ' ov' : ''}" role="dialog" aria-modal="true"><button type="button" class="wip-x" aria-label="Close">×</button><h3>${title}</h3>${html}</div>`;
+  w.innerHTML = `<div class="wip-box${opt.ov ? ' ov' : ''}${opt.cls ? ' ' + opt.cls : ''}" role="dialog" aria-modal="true"><button type="button" class="wip-x" aria-label="Close">×</button><h3>${title}</h3>${html}</div>`;
   document.body.appendChild(w);
   const close = () => { w.remove(); document.removeEventListener('keydown', onKey, true); };
   const onKey = e => { if (e.key === 'Escape') { e.stopImmediatePropagation(); close(); } };
@@ -3015,6 +3079,11 @@ function pfTradeForm(x) {
     if (t === 'sell' && !(h > 0)) { t = 'buy'; seg(); }        // can't sell what you don't hold
     $('.pf-name', w).hidden = !sym || TODAY.has(sym);
     $('.pf-fix', w).hidden = !(sym && h > 0 && L == null);     // a holding with no price at all: offer to fix its symbol
+    const over = t === 'sell' && q > h + 1e-9;                  // selling more than held: red right away
+    f.qty.classList.toggle('bad', over);
+    $('.held', w).classList.toggle('bad', over);
+    f.querySelector('button[type=submit]').disabled = over;
+    $('.pf-err', w).textContent = over ? `You hold ${fmt(h, 0)}; you can't sell ${fmt(q, 0)}.` : ($('.pf-err', w).textContent.startsWith('You hold') ? '' : $('.pf-err', w).textContent);
     if (!chTyped) f.ch.value = q > 0 && p > 0 ? pfCharges(t, q, p) : '';
     const ch = +f.ch.value || 0;
     $('.pf-calc', w).textContent = q > 0 && p > 0 ? (t === 'buy' ? `Cash out ₹${fmt(q * p + ch, 2)} (₹${fmt(q * p, 2)} + charges)` : `Cash in ₹${fmt(q * p - ch, 2)} (₹${fmt(q * p, 2)} − charges)`) : '';
