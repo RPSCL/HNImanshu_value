@@ -1054,6 +1054,29 @@ body.day .toggle-thumb{transform:translateX(16px)}
   .fbtns .btn{padding:0 9px}
 }
 
+/* Portfolio tab */
+.pf-top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.pf-add{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.pf-add .fld{display:flex;flex-direction:column;gap:4px}
+.pf-add .fld input{height:32px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:13px var(--sans);width:120px}
+.pf-add .fld input[name=sym]{width:150px;text-transform:uppercase}
+.pf-add .fld input[name=sym]::placeholder{text-transform:none}
+.pf-add .fld input:focus{outline:none;border-color:var(--brass)}
+.pf-tg{border-color:var(--brass);color:var(--brass);background:transparent}
+.pf-tg:hover{background:var(--brassbg)}
+.pf-msg,.pf-err{margin:0 0 8px;font-size:12.5px;color:var(--bad);min-height:0}
+.pf-note{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--mute)}
+.pf-del{border:0;background:transparent;color:var(--faint);font-size:18px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:5px}
+.pf-del:hover{color:var(--bad);background:var(--badbg)}
+.wip-back{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5)}
+.wip-back.open{display:flex}
+.wip-box{position:relative;width:min(360px,100%);background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:20px 22px;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+.wip-box h3{margin:0 0 8px;font:700 15px var(--mono);color:var(--brass)}
+.wip-box p{margin:0;color:var(--mute);font-size:13.5px;line-height:1.5}
+.wip-x{position:absolute;top:10px;right:10px;width:30px;height:30px;border:0;background:transparent;color:var(--faint);font-size:20px;line-height:1;cursor:pointer;border-radius:6px}
+.wip-x:hover{color:var(--ink);background:var(--hover)}
+@media (max-width:700px){.pf-add .fld input,.pf-add .fld input[name=sym]{width:calc(50vw - 30px)}.pf-top{align-items:stretch}.pf-tg{width:100%;justify-content:center}}
+
 /* phone: floating Filters button, bottom-right. 50% normally, 5% while scrolling or holding a finger down > 1 s */
 #ffab{display:none}
 @media (max-width:700px){
@@ -1286,8 +1309,10 @@ __AUTH_BODY__<script>
 <nav id="nav">
   <a href="#/" data-t="home">Industries</a>
   <a href="#/value" data-t="value">Value screen</a>
+  <a href="#/momentum" data-t="momentum">Momentum</a>
   <a href="#/method" data-t="method">Methodology</a>
   <a href="#/all" data-t="all">All Stocks</a>
+  <a href="#/portfolio" data-t="portfolio">Portfolio</a>
 </nav>
 <main id="view"></main>
 <button type="button" id="ffab" aria-label="Filters" title="Filters"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 3.5h12M4.5 8h7M7 12.5h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><b class="cnt"></b></button>
@@ -2406,6 +2431,142 @@ function allView() {
   if (!priced.length) view.insertAdjacentHTML('beforeend', '<p class="hint">No prices for this date yet (prices.csv has no price for it), so nothing to list.</p>');
 }
 
+/* ---------- MOMENTUM: price momentum above 40 and below 95, strongest first; no other filter ---------- */
+const MOM_MIN = 40, MOM_MAX = 95;
+function momentumView() {
+  setNav('momentum'); view.innerHTML = '';
+  const rows = V().filter(s => ok(s.momS) && Math.round(s.momS) > MOM_MIN && Math.round(s.momS) < MOM_MAX);   // same rounding as the column shows: 41 … 94
+  stats([['Showing', rows.length], ['Momentum', MOM_MIN + ' – ' + MOM_MAX], ['Median momentum', fmt(median(rows.map(s => s.momS)), 0)],
+         ['Median PE', fmt(median(rows.map(s => s.pe)))], ['Median vs 52W high', fmt(median(rows.map(s => pctFrom(s.cmp, s.hi52)))) + '%']], rows);
+  view.appendChild(makeTable('mom',
+    [C.sym, C.ind, C.mom, C.name, C.score, C.trend, C.cmp, C.from52, C.pe, C.pb, C.q, C.cagr, C.dy, C.mcap, C.flags],
+    rows, {sortKey:'mom', sortDir:-1, search:true, csv:() => 'Momentum_' + MOM_MIN + '-' + MOM_MAX}));
+  if (!rows.length) view.insertAdjacentHTML('beforeend', '<p class="hint">No momentum for this date yet (it needs prices.csv), so nothing to list.</p>');
+}
+
+/* ---------- PORTFOLIO: each user's own holdings (any symbol, in the lists or not) ----------
+   Website: saved in Firestore under the user's account (hni_portfolio/{uid}) through auth.js (window.hniStore).
+   Offline saved copy: kept in this browser only. Prices, scores and flags always come from TODAY's data. */
+const PF = {items: null, busy: false, err: ''};
+const pfStore = () => (WEB && window.hniStore) ? window.hniStore : {
+  load: async () => { try { return JSON.parse(lsGet('portfolio') || '[]'); } catch (e) { return []; } },
+  save: async items => lsSet('portfolio', JSON.stringify(items)),
+};
+async function pfLoad() {
+  if (PF.items || PF.busy) return;
+  if (WEB && !window.hniStore) return;                   // login still being checked: auth.js fires "hni-ready"
+  PF.busy = true;
+  try { PF.items = await pfStore().load(); PF.err = ''; } catch (e) { PF.items = []; PF.err = 'Could not load your portfolio (' + (e.code || e) + ').'; }
+  PF.busy = false;
+  if ((location.hash || '') === '#/portfolio') route();
+}
+window.addEventListener('hni-ready', pfLoad);
+async function pfSave() {
+  try { await pfStore().save(PF.items); PF.err = ''; } catch (e) { PF.err = 'Could not save (' + (e.code || e) + '). Your last change may be lost on reload.'; }
+}
+const TODAY = new Map(D.stocks.map(s => [s.sym, s]));
+function pfRows() {                                       // one row per lot, merged with today's data when the symbol is known
+  return (PF.items || []).map(it => {
+    const s = TODAY.get(it.sym);
+    const r = Object.assign({}, s || {sym: it.sym, name: it.sym, ind: ''}, {lot: it, known: !!s});
+    r.invested = it.qty * it.buy;
+    r.value = s && ok(s.cmp) ? it.qty * s.cmp : null;
+    r.pnl = r.value == null ? null : r.value - r.invested;
+    r.pnlPct = r.value == null ? null : (r.value / r.invested - 1) * 100;
+    return r;
+  });
+}
+const pfKnown = c => Object.assign({}, c, {v: r => r.known ? c.v(r) : null, f: r => r.known ? c.f(r) : NA});   // not in the lists → blank
+const money = v => v == null ? NA : '₹' + fmt(v, 0);
+const PFC = {
+  sym: Object.assign({}, C.sym, {f: r => r.known ? symCell(r) : `<b>${esc(r.sym)}</b> <span class="na" title="Not in NIFTY 500 / Smallcap 500 / Microcap 250, so no price or scores">not in list</span>`}),
+  name: pfKnown(C.name), ind: pfKnown(C.ind),
+  qty: {k:'qty', label:'Qty', v:r => r.lot.qty, f:r => fmt(r.lot.qty, 0)},
+  buy: {k:'buy', label:'Buy ₹', v:r => r.lot.buy, f:r => fmt(r.lot.buy, 2)},
+  date: {k:'bdate', label:'Bought', v:r => r.lot.date || '', f:r => r.lot.date ? esc(r.lot.date) : NA},
+  inv: {k:'inv', label:'Invested ₹', v:r => r.invested, f:r => fmt(r.invested, 0)},
+  cmp: pfKnown(C.cmp),
+  val: {k:'val', label:'Value ₹', v:r => r.value, f:r => r.value == null ? NA : fmt(r.value, 0)},
+  pnl: {k:'pnl', label:'P&L ₹', v:r => r.pnl, f:r => r.pnl == null ? NA : `<span class="${r.pnl >= 0 ? 'up' : 'dn'}">${r.pnl > 0 ? '+' : ''}${fmt(r.pnl, 0)}</span>`},
+  pnlPct: {k:'pnlp', label:'P&L %', v:r => r.pnlPct, f:r => pctPill(r.pnlPct, v => v >= 0)},
+  score: pfKnown(C.score), mom: pfKnown(C.mom), trend: pfKnown(C.trend), flags: pfKnown(C.flags),
+  del: {k:'del', label:'', noCsv:1, v:r => null, f:r => `<button type="button" class="pf-del" data-del="${esc(r.lot.id)}" title="Remove this holding" aria-label="Remove">×</button>`},
+};
+function portfolioView() {
+  setNav('portfolio'); view.innerHTML = '';
+  if (BACK) {                                             // a portfolio is about today; Historical would mix dates
+    view.insertAdjacentHTML('beforeend', `<div class="pf-note">Portfolio uses today's prices. <button type="button" class="btn" id="pfNow">Switch Historical off</button></div>`);
+    $('#pfNow').addEventListener('click', () => setHistorical(false));
+    return;
+  }
+  if (!PF.items) {
+    pfLoad();
+    view.insertAdjacentHTML('beforeend', `<p class="hint">${PF.err ? esc(PF.err) : 'Loading your portfolio…'}</p>`);
+    return;
+  }
+  const rows = pfRows(), priced = rows.filter(r => r.value != null);
+  const inv = priced.reduce((t, r) => t + r.invested, 0), val = priced.reduce((t, r) => t + r.value, 0);
+  const pnl = val - inv, pct = inv ? (val / inv - 1) * 100 : null;
+  view.insertAdjacentHTML('beforeend', `<div class="pf-top">
+    <form class="pf-add" autocomplete="off">
+      <label class="fld"><span>Symbol</span><input name="sym" list="pfSyms" placeholder="e.g. TCS" required spellcheck="false" autocapitalize="characters"></label>
+      <label class="fld"><span>Qty</span><input name="qty" type="number" min="0" step="any" required></label>
+      <label class="fld"><span>Buy price ₹</span><input name="buy" type="number" min="0" step="any" required></label>
+      <label class="fld"><span>Buy date</span><input name="date" type="date"></label>
+      <button type="submit" class="btn primary">Add</button>
+      <datalist id="pfSyms">${D.stocks.map(s => `<option value="${esc(s.sym)}">${esc(s.name)}</option>`).join('')}</datalist>
+    </form>
+    <button type="button" class="btn pf-tg" id="pfWeekly"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>Send weekly updates</button>
+  </div>${PF.err ? `<p class="pf-err">${esc(PF.err)}</p>` : ''}<p class="pf-msg" aria-live="polite"></p>`);
+  stats([['Holdings', rows.length], ['Invested ₹', fmt(inv, 0)],   // totals cover holdings with a price today (not-in-list ones are counted apart)
+         ['Value ₹', fmt(val, 0)],
+         ['P&L ₹', (pnl > 0 ? '+' : '') + fmt(pnl, 0)], ['P&L %', pct == null ? '–' : (pct > 0 ? '+' : '') + fmt(pct) + '%'],
+         ['Not in list', rows.length - rows.filter(r => r.known).length]], null);
+  view.appendChild(makeTable('pf',
+    [PFC.sym, PFC.name, PFC.qty, PFC.buy, PFC.date, PFC.inv, PFC.cmp, PFC.val, PFC.pnl, PFC.pnlPct, PFC.score, PFC.mom, PFC.trend, PFC.ind, PFC.flags, PFC.del],
+    rows, {sortKey:'val', sortDir:-1, search:true, csv:() => 'Portfolio'}));
+  if (!rows.length) view.querySelector('.card tbody').innerHTML = `<tr><td class="l na" colspan="17">No holdings yet. Add your first one above: any NSE symbol works, including ones not in these lists (they show without a price).</td></tr>`;
+  const f = $('.pf-add'), msg = $('.pf-msg');
+  f.sym.addEventListener('change', () => {                 // known symbol + empty price → suggest today's price
+    const s = TODAY.get(f.sym.value.trim().toUpperCase());
+    if (s && ok(s.cmp) && !f.buy.value) f.buy.value = s.cmp;
+  });
+  f.addEventListener('submit', async e => {
+    e.preventDefault();
+    const sym = f.sym.value.trim().toUpperCase().replace(/^NSE:/, ''), qty = +f.qty.value, buy = +f.buy.value;
+    if (!/^[A-Z0-9&._-]{1,20}$/.test(sym)) { msg.textContent = 'Type a valid NSE symbol, e.g. TCS.'; return; }
+    if (!(qty > 0) || !(buy > 0)) { msg.textContent = 'Quantity and buy price must be above 0.'; return; }
+    if (PF.items.length >= 300) { msg.textContent = 'Portfolio is full (300 holdings).'; return; }
+    PF.items.push({id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), sym, qty, buy, date: f.date.value || ''});
+    await pfSave(); route();
+  });
+  view.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
+    const it = PF.items.find(x => x.id === b.dataset.del);
+    if (!it || !confirm(`Remove ${it.sym} (${fmt(it.qty, 0)} @ ₹${fmt(it.buy, 2)})?`)) return;
+    PF.items = PF.items.filter(x => x !== it);
+    await pfSave(); route();
+  }));
+  $('#pfWeekly').addEventListener('click', openWip);
+}
+/* "Send weekly updates": not built yet → small overlay; × , Esc or a click outside closes it */
+function openWip() {
+  let w = $('#wip');
+  if (!w) {
+    w = document.createElement('div'); w.id = 'wip'; w.className = 'wip-back';
+    w.innerHTML = `<div class="wip-box" role="dialog" aria-modal="true" aria-labelledby="wipT">
+      <button type="button" class="wip-x" aria-label="Close">×</button>
+      <h3 id="wipT">Weekly updates</h3>
+      <p>Work in progress. Soon you'll get your portfolio summary every week on Telegram.</p></div>`;
+    document.body.appendChild(w);
+    const close = () => w.classList.remove('open');
+    $('.wip-x', w).addEventListener('click', close);
+    w.addEventListener('click', e => { if (e.target === w) close(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && w.classList.contains('open')) { e.stopImmediatePropagation(); close(); } }, true);
+  }
+  w.classList.add('open');
+  $('.wip-x', w).focus();
+}
+
 function methodView() {
   setNav('method'); view.innerHTML = '';
   const W = lsJson('vw', W_DEF);
@@ -2554,6 +2715,8 @@ function route() {
   else if (h === '#/value') valueView();
   else if (h === '#/method') methodView();
   else if (h === '#/all') allView();
+  else if (h === '#/momentum') momentumView();
+  else if (h === '#/portfolio') portfolioView();
   else homeView();
   meta();
   window.scrollTo(0,0);
