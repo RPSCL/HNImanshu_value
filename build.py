@@ -748,14 +748,31 @@ def build(deploy=False):
 
     print("\nLoading News...\n")
     news_map = load_news(NEWS_CSV)
-    news_js  = build_news_js(news_map)
+    # News is no longer baked into the page (it was ~70% of index.html): it goes to public/screener_news.json and
+    # the page fetches it the first time someone opens a stock's news, so the home page loads fast even on 2G.
+    news_js  = build_news_js({})
+    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    (OUTPUT.parent / "screener_news.json").write_text(json.dumps(news_map, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
     # ── Build DATASETS JS ──
+    # Only NIFTY 500 (the list the page opens on) is inside index.html; Smallcap / Microcap are their own files,
+    # fetched the first time someone picks them (or quietly in the background on a fast connection).
+    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    def _nan_free(o):                                   # NaN / inf are fine inside the page's JS, but not in a .json file
+        if isinstance(o, dict):
+            return {k: _nan_free(v) for k, v in o.items()}
+        if isinstance(o, list):
+            return [_nan_free(v) for v in o]
+        if isinstance(o, float) and (o != o or o in (float("inf"), float("-inf"))):
+            return None
+        return o
+    for key, rows in (("sc250", data_sc250), ("mc250", data_mc250)):
+        (OUTPUT.parent / f"screener_{key}.json").write_text(json.dumps(_nan_free(rows), separators=(",", ":"), allow_nan=False), encoding="utf-8")
     datasets_js = (
         "const DATASETS = {\n"
         f"n500:{js_safe(json.dumps(data_n500, separators=(',', ':')))},\n"
-        f"sc250:{js_safe(json.dumps(data_sc250, separators=(',', ':')))},\n"
-        f"mc250:{js_safe(json.dumps(data_mc250, separators=(',', ':')))}\n"
+        "sc250:null,\n"
+        "mc250:null\n"
         "};"
     )
 

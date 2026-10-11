@@ -929,7 +929,13 @@ HTML = r"""<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HNImanshu — Fundamentals</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script>
+/* web fonts never block the page; skipped on 2G / data saver (the phone's own fonts are used instead) */
+(function(){ var c = navigator.connection || {}; if (c.saveData || /2g/.test(c.effectiveType || '')) return;
+  var l = document.createElement('link'); l.rel = 'stylesheet';
+  l.href = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap';
+  document.head.appendChild(l); })();
+</script>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141414'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='18' font-weight='bold' fill='%23a89060' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E">
 <style>
 :root{--mono:'IBM Plex Mono',ui-monospace,monospace;--serif:var(--mono);--sans:'DM Sans',system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -1484,7 +1490,7 @@ const mean = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
 let industries = {};
 /* switch between today's data and the 1-year-back snapshot */
 function setMode() {
-  BACK = !!(GF.back && D.then && (D.then.key || '1Y') === GF.backP);   // the chosen period once its data is in
+  BACK = !!(GF.back && D.then && D.then.stocks && (D.then.key || '1Y') === GF.backP);   // the chosen period once its data is in
   const bp = $('#backPer'); if (bp) bp.classList.toggle('on', BACK);
   SAME = BACK;                                                    // today = Screener's own figures; past dates = rebuilt from raw rows
   S = BACK ? D.then.stocks : D.stocks;
@@ -1542,6 +1548,9 @@ function pctl(sorted, v, hi) {
 }
 function computeScores() {
   const W = lsJson('vw', W_DEF);
+  const key = JSON.stringify(W) + '|' + method;                // same stocks, weights and PE method → scores are already on them
+  if (computeScores.S === S && computeScores.key === key) return;
+  computeScores.S = S; computeScores.key = key;
   const uni = {}, byInd = {};
   for (const k in METRICS) uni[k] = S.map(METRICS[k].v).filter(ok).sort((a,b)=>a-b);
   Object.values(industries).forEach(g => {
@@ -1736,7 +1745,7 @@ function makeTable(id, cols, rows, opt={}) {
   const tbl = document.createElement('table'); wrap.appendChild(tbl); card.appendChild(wrap);
   box.appendChild(card);
   const st = sortState[id] = sortState[id] || {k: opt.sortKey, dir: opt.sortDir || 1};
-  wrap.addEventListener('scroll', () => { TSCROLL[id] = wrap.scrollLeft; }, {passive: true});
+  wrap.addEventListener('scroll', () => { TSCROLL[id] = wrap.scrollLeft; if (wrap._more) wrap._more(); }, {passive: true});   // next batch near the bottom
   function draw() {
     const q = (searchState[id]||'').toLowerCase();
     let data = rows.filter(r => !q || (r.sym+' '+r.name+' '+(r.ind||'')).toLowerCase().includes(q));
@@ -1749,14 +1758,24 @@ function makeTable(id, cols, rows, opt={}) {
     tbl.innerHTML = '<thead><tr>' + (opt.noIndex ? '' : '<th class="l">#</th>') + cols.map(c =>
       `<th class="${c.l?'l':''} ${c.k===st.k?'sorted':''}" data-k="${c.k}" title="${esc(c.tip||'')}">${c.label}${c.k===st.k?(st.dir>0?' ▲':' ▼'):''}</th>`).join('') + '</tr></thead>';
     const tb = document.createElement('tbody');
-    data.forEach((r,i) => {
-      const tr = document.createElement('tr');
-      const sc = secColor(r.ind); if (sc) { tr.style.setProperty('--sc', sc); tr.dataset.sec = r.ind; }
-      if (opt.onRow) { tr.className='click'; tr.addEventListener('click', () => opt.onRow(r)); }
-      tr.innerHTML = (opt.noIndex ? '' : `<td class="l idx">${i+1}</td>`) + cols.map(c => `<td class="${c.l?'l':''}">${c.f(r)}</td>`).join('');
-      if (sc && tr.firstChild) tr.firstChild.title = r.ind;                 // hover the strip: sector name
-      tb.appendChild(tr);
-    });
+    /* rows are drawn in batches (40, then 60 more as the card scrolls): Momentum / All Stocks open at once even on cheap phones.
+       Sort, search, CSV and copy still use every row (data / shown). */
+    const rowHtml = (r, i) => {
+      const sc = secColor(r.ind), t = sc ? ` title="${esc(r.ind)}"` : '';            // hover the strip: sector name
+      const cells = cols.map((c, j) => `<td class="${c.l?'l':''}"${j === 0 && opt.noIndex ? t : ''}>${c.f(r)}</td>`).join('');
+      return `<tr data-i="${i}"${opt.onRow ? ' class="click"' : ''}${sc ? ` style="--sc:${sc}" data-sec="${esc(r.ind)}"` : ''}>`
+        + (opt.noIndex ? '' : `<td class="l idx"${t}>${i+1}</td>`) + cells + '</tr>';
+    };
+    let drawn = 0;
+    const more = () => {
+      if (drawn >= data.length) return;
+      const end = Math.min(data.length, drawn + (drawn ? 60 : 40));
+      let h = ''; for (let i = drawn; i < end; i++) h += rowHtml(data[i], i);
+      tb.insertAdjacentHTML('beforeend', h); drawn = end;
+    };
+    more();
+    wrap._more = () => { if (wrap.scrollTop + wrap.clientHeight > wrap.scrollHeight - 400) more(); };
+    if (opt.onRow) tb.addEventListener('click', e => { const tr = e.target.closest('tr[data-i]'); if (tr) opt.onRow(data[+tr.dataset.i]); });
     if (!data.length) tb.innerHTML = `<tr><td class="l na" colspan="${cols.length+1}">No stocks match these filters. Loosen a filter or press Reset.</td></tr>`;
     tbl.appendChild(tb);
     shown = data;
@@ -1936,8 +1955,18 @@ function holdStrip(st) {
     STAT_ANCHOR = st.scrollLeft > 2 && t ? {key: t.dataset.key, end: st.scrollLeft >= st.scrollWidth - st.clientWidth - 2} : null;
   }, {passive: true});
 }
-const THEN1 = D.then;                                     // the embedded 1Y snapshot: Industries "1Y ago" columns always use it
-const THEN_BY = new Map(THEN1 ? THEN1.stocks.map(s => [s.sym, s]) : []);
+/* the 1Y snapshot (Industries "1Y ago" columns, Historical 1Y): inside the offline file; on the website it is
+   fundamentals_back_1Y.json, fetched the first time Industries or Historical needs it */
+let THEN1 = D.then && D.then.stocks ? D.then : null;
+let THEN_BY = new Map(THEN1 ? THEN1.stocks.map(s => [s.sym, s]) : []);
+function ensureThen1() {
+  if (THEN1 || ensureThen1.p || !D.then) return;
+  const key = D.then.key || '1Y';
+  ensureThen1.p = fetch('fundamentals_back_' + key + '.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(j => { THEN1 = j; THEN_BY = new Map(j.stocks.map(s => [s.sym, s])); BACK_CACHE[key] = j;
+                 const h = location.hash || '#/'; if (!BACK && (h === '#/' || h.startsWith('#/industry/'))) route(); })
+    .catch(() => { ensureThen1.p = null; });
+}
 /* same stocks, 1 year ago vs now: medians over stocks that have the value at BOTH dates (listed < 1Y = ignored) */
 function yoyOf(rows) {
   const both = rows.map(s => [s, THEN_BY.get(s.sym)]).filter(x => x[1]);
@@ -1949,6 +1978,7 @@ function yoyOf(rows) {
 const yoyPct = r => r ? (r[1] / r[0] - 1) * 100 : null;          // PE / PB change, %
 const yoyPP = r => r ? r[1] - r[0] : null;                       // ROE change, pp
 function yoyTiles(rows) {                                 // current view only: these stocks a year ago vs now
+  if (!BACK && !THEN_BY.size) ensureThen1();
   if (BACK || !rows || !THEN_BY.size) return '';
   const Y = yoyOf(rows), both = {length: Y.n};
   const tile = (label, r, d, pp) => {
@@ -1977,6 +2007,7 @@ const cheapest = g => g.stocks.filter(s=>s.pe!=null && vis(s)).reduce((a,b)=>!a|
 function homeView() {
   setNav('home'); view.innerHTML = '';
   view.appendChild(pePicker());
+  if (!BACK && !THEN_BY.size) ensureThen1();                  // 1Y columns appear when the snapshot arrives
   const showYoy = !BACK && THEN_BY.size;
   if (showYoy) Object.values(industries).forEach(g => g.yoy = yoyOf(g.stocks.filter(vis)));
   const yTip = 'Median of the stocks in this industry that existed 1 year ago (newer listings ignored), value at both dates';
@@ -3300,7 +3331,7 @@ const saveGF = () => lsSet('gf', JSON.stringify(GF));
    Choosing a period switches Historical on; clicking the chip again switches it off. 1Y is inside the page,
    the other periods load once, on first use (fundamentals_back_<key>.json). */
 GF.back = false; GF.backP = '1Y';
-const BACK_CACHE = Object.assign({[D.then.key || '1Y']: D.then}, D.backData || {});
+const BACK_CACHE = Object.assign(D.then && D.then.stocks ? {[D.then.key || '1Y']: D.then} : {}, D.backData || {});   // website: 1Y loads like the others
 const bsel = $('#backSel'), hist = $('#histOn'), bchip = $('#backChip');
 bsel.innerHTML = (D.backs || [{key:'1Y', label:'1Y', date:D.then.date}]).map(b => `<option value="${b.key}">${esc(b.label)}</option>`).join('');
 bsel.value = '1Y';
@@ -3432,6 +3463,20 @@ $('#weeklyBtn').addEventListener('click', () => modal('Weekly updates', `<p>Work
 window.addEventListener('hashchange', route);
 route();
 </script>
+<script>
+/* offline cache (sw.js): repeat visits open at once, even with no signal; a quiet bar offers new data when it arrives */
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (!e.data || e.data.type !== 'hni-updated' || document.getElementById('hniUpd')) return;
+    const b = document.createElement('div'); b.id = 'hniUpd';
+    b.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:500;display:flex;gap:12px;align-items:center;padding:9px 10px 9px 16px;border-radius:10px;background:#d4b47a;color:#0e0e0f;font:600 13px system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.35)';
+    b.innerHTML = 'New data available<button type="button" style="border:0;border-radius:7px;padding:6px 12px;background:#0e0e0f;color:#d4b47a;font:inherit;cursor:pointer">Reload</button>';
+    b.querySelector('button').onclick = () => location.reload();
+    document.body.appendChild(b);
+  });
+}
+</script>
 </body>
 </html>
 """
@@ -3455,6 +3500,22 @@ AUTH_WEB = {
 AUTH_OFF = {k: "" for k in AUTH_WEB}
 
 
+def slim(stocks):
+    """What the page actually reads, nothing more: shareholding history → just the promoter change (Promoter Δ),
+    no empty top-level fields."""
+    out = []
+    for r in stocks:
+        r = {k: v for k, v in r.items() if v is not None}     # EPS series stays: the Value screen's EPS trend draws it
+        h = r.get("h") or {}
+        r["h"] = {"pro": {"chg": h["pro"].get("chg")}} if h.get("pro") and h["pro"].get("chg") is not None else {}
+        out.append(r)
+    return out
+
+
+def slim_back(b):
+    return dict(b, stocks=slim(b.get("stocks") or []))
+
+
 def render_html(now, backs, asof, web=False, smnow=None, embed_all=False):
     """Fill the HTML template with the computed records. The default back period is embedded; the others are
     listed in "backs" and (web) loaded on demand from fundamentals_back_<key>.json, or (embed_all) inlined."""
@@ -3462,8 +3523,12 @@ def render_html(now, backs, asof, web=False, smnow=None, embed_all=False):
     span = pd.Series([p["since"] + " → " + p["till"] for p in pro]).mode()[0] if pro else "n/a"
     lists = [u for u in UNIVERSES.values() if any(u in r["uni"] for r in now)]
     lists += sorted({u for r in now for u in r["uni"]} - set(lists))
+    then = slim_back(backs[DEFAULT_BACK])
+    if web:                                       # website: the 1Y snapshot loads on demand (Industries 1Y columns, Historical)
+        then = {k: v for k, v in then.items() if k != "stocks"}
+        then["lazy"] = True
     payload = {
-        "stocks": now,
+        "stocks": slim(now),
         "lists": lists,
         "asOf": asof.strftime("%d %b %Y"),
         "asOfIso": asof.strftime("%Y-%m-%d"),
@@ -3471,9 +3536,9 @@ def render_html(now, backs, asof, web=False, smnow=None, embed_all=False):
         "jumpPP": JUMP_PP,
         "cashYears": CASH_YEARS,
         "staleDays": MAX_STALE_DAYS,
-        "then": backs[DEFAULT_BACK],
+        "then": then,
         "backs": [{"key": k, "label": b["label"], "date": b["date"], "hasPrice": b["hasPrice"]} for k, b in backs.items()],
-        "backData": {k: b for k, b in backs.items() if k != DEFAULT_BACK} if embed_all else {},
+        "backData": {k: slim_back(b) for k, b in backs.items() if k != DEFAULT_BACK} if embed_all else {},
         "smNow": {"stocks": []},                       # "Same method" removed from the page: not shipped any more
         "sm": {"trendQ": SM_TREND_QTRS, "shQ": SM_SH_QTRS},
     }
@@ -3528,10 +3593,8 @@ def build_site(paths, out_path, minify=None, prices_path=None):
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")
     extra = 0
-    for k, b in backs.items():                            # other back periods: small JSON files next to the page
-        if k == DEFAULT_BACK:
-            continue
-        txt = json.dumps(clean(b), allow_nan=False, separators=(",", ":"))
+    for k, b in backs.items():                            # every back period (1Y too): its own JSON, loaded only when needed
+        txt = json.dumps(clean(slim_back(b)), allow_nan=False, separators=(",", ":"))
         (out_path.parent / ("fundamentals_back_%s.json" % k)).write_text(txt, encoding="utf-8")
         extra += len(txt.encode("utf-8"))
     if paths:

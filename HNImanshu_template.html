@@ -4,7 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>HNImanshu — Value Screener</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script>
+/* web fonts never block the page; skipped on 2G / data saver (the phone's own fonts are used instead) */
+(function(){ var c = navigator.connection || {}; if (c.saveData || /2g/.test(c.effectiveType || '')) return;
+  var l = document.createElement('link'); l.rel = 'stylesheet';
+  l.href = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap';
+  document.head.appendChild(l); })();
+</script>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141414'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='18' font-weight='bold' fill='%23a89060' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E">
 <style>
 /* ═══════════════════════════════════════════════
@@ -17,8 +23,8 @@
   --blue: #6b8cba;
   --gold: #b8962e;
   --orange: #c47a5a;
-  --mono: 'IBM Plex Mono', monospace;
-  --sans: 'DM Sans', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+  --sans: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --A:  #5a9e6f;
   --Bp: #4a8f5e;
   --B:  #6aaa7a;
@@ -129,6 +135,7 @@ input { font-family: var(--sans); }
 .hni-wordmark .hni { color: var(--accent); letter-spacing: 2px; font-size: 13px; }
 .hni-wordmark .manshu { color: var(--text3); font-weight: 400; font-size: 11px; letter-spacing: 0.5px; }
 .hni-tagline { font-size: 7.5px; color: var(--text3); font-family: var(--mono); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 2px; }
+.universe-switch .loading{opacity:.55;cursor:progress}
 .universe-switch {
   display: flex; gap: 2px;
   background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
@@ -1319,8 +1326,8 @@ var NEWS_DATA = {
   '__default__': []
 };
 
-// ── All Stocks: merge + deduplicate + re-rank ──
-(function(){
+// ── All Stocks: merge + deduplicate + re-rank (once Smallcap and Microcap have arrived) ──
+function buildAll(){
   var seen = {}, merged = [];
   var sources = (DATASETS.n500||[]).concat(DATASETS.sc250||[]).concat(DATASETS.mc250||[]);
   for(var i=0;i<sources.length;i++){
@@ -1334,7 +1341,18 @@ var NEWS_DATA = {
   });
   for(var j=0;j<merged.length;j++) merged[j].FINAL_RANK=j+1;
   DATASETS.all=merged;
-})();
+}
+/* Smallcap / Microcap live in screener_sc250.json / screener_mc250.json (build.py) and load on first use */
+var LIST_WAIT = {};
+function loadList(k){
+  if (DATASETS[k]) return Promise.resolve();
+  return LIST_WAIT[k] = LIST_WAIT[k] || fetch('screener_' + k + '.json', {cache:'no-cache'})
+    .then(function(r){ if(!r.ok) throw r.status; return r.json(); })
+    .then(function(j){ DATASETS[k] = j; DATASETS.all = null; })
+    .catch(function(e){ LIST_WAIT[k] = null; throw e; });
+}
+function needLists(u){ return u==='all' ? ['sc250','mc250'] : (u==='sc250'||u==='mc250') ? [u] : []; }
+(function(){ var c = navigator.connection || {}; if (!c.saveData && !/2g/.test(c.effectiveType || '')) setTimeout(function(){ loadList('sc250').catch(function(){}); loadList('mc250').catch(function(){}); }, 3000); })();
 </script>
 
 <script>
@@ -1395,7 +1413,22 @@ function fmtMC(v){ if(!v)return'—'; if(v>=1e5)return(v/1e5).toFixed(1)+'L Cr';
 function piotClass(v){ if(v==null||v==='')return'n-neu'; var n=+v; if(n>=7)return'piot-hi'; if(n>=4)return'piot-mid'; return'piot-lo'; }
 function combinedClass(v){ if(v==null||v==='')return'n-neu'; var n=+v; if(n>=15)return'combined-hi'; if(n>=8)return'combined-mid'; return'combined-lo'; }
 
+/* news lives in screener_news.json (written by build.py) and loads the first time a stock's news is opened;
+   on a fast connection it also loads quietly a few seconds after the page, so it is usually already there */
+var NEWS_READY = Object.keys(NEWS_DATA).length > 1, NEWS_WAIT = null, _newsSym = null;
+function loadNews(){
+  if (NEWS_READY || NEWS_WAIT) return NEWS_WAIT;
+  NEWS_WAIT = fetch('screener_news.json', {cache:'no-cache'}).then(function(r){ return r.ok ? r.json() : {}; }).then(function(j){
+    Object.assign(NEWS_DATA, j || {}); NEWS_READY = true;
+    var ns = document.getElementById('dp-news-sym'), sc = document.getElementById('dp-news-scroll');
+    if (ns && sc && ns.textContent && ns.textContent !== '—') sc.innerHTML = buildNewsHTML(ns.textContent);
+    var sh = document.getElementById('news-sheet-scroll'); if (_newsOpen && _newsSym && sh) sh.innerHTML = buildNewsHTML(_newsSym);
+  }).catch(function(){ NEWS_WAIT = null; });
+  return NEWS_WAIT;
+}
+(function(){ var c = navigator.connection || {}; if (!c.saveData && !/2g/.test(c.effectiveType || '')) setTimeout(loadNews, 4000); })();
 function buildNewsHTML(sym){
+  if (!NEWS_READY) { loadNews(); return '<div class="news-empty">Loading news…</div>'; }
   var items = NEWS_DATA[sym] || NEWS_DATA['__default__'] || [];
   if(!items.length) return '<div class="news-empty">No recent news available.</div>';
   return items.map(function(n){
@@ -1436,6 +1469,16 @@ function updateFundLink(){
 }
 
 function switchUniverse(u){
+  var miss = needLists(u).filter(function(k){ return !DATASETS[k]; });
+  if (miss.length || (u==='all' && !DATASETS.all)) {                     // list not here yet: fetch it, then switch
+    var btn = document.getElementById('btn-' + u); if (btn) btn.classList.add('loading');
+    Promise.all(miss.map(loadList)).then(function(){
+      if (btn) btn.classList.remove('loading');
+      if (u==='all' && !DATASETS.all) buildAll();
+      switchUniverse(u);
+    }).catch(function(){ if (btn) btn.classList.remove('loading'); alert('Could not load this list. Check your connection and try again.'); });
+    return;
+  }
   universe=u; rawData=DATASETS[u]; selectedSym=null; closeDetail();
   document.getElementById('btn-n500').classList.toggle('active',u==='n500');
   document.getElementById('btn-sc250').classList.toggle('active',u==='sc250');
@@ -1554,6 +1597,7 @@ function openNewsSheet(sym){
   var nameEl=document.getElementById('news-sheet-name');
   var s=rawData.find(function(d){return d.SYMBOL===sym;});
   if(nameEl) nameEl.textContent=s?s.COMPANY_NAME:sym;
+  _newsSym=sym;
   if(scroll)  scroll.innerHTML=buildNewsHTML(sym);
   _newsOpen=true;
   sheet.classList.add('open');
@@ -1971,5 +2015,19 @@ buildSidebar(); buildMobileSheet(); updateFundLink(); run();   // updateFundLink
 })();
 </script>
 
+<script>
+/* offline cache (sw.js): repeat visits open at once, even with no signal; a quiet bar offers new data when it arrives */
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (!e.data || e.data.type !== 'hni-updated' || document.getElementById('hniUpd')) return;
+    const b = document.createElement('div'); b.id = 'hniUpd';
+    b.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:500;display:flex;gap:12px;align-items:center;padding:9px 10px 9px 16px;border-radius:10px;background:#d4b47a;color:#0e0e0f;font:600 13px system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.35)';
+    b.innerHTML = 'New data available<button type="button" style="border:0;border-radius:7px;padding:6px 12px;background:#0e0e0f;color:#d4b47a;font:inherit;cursor:pointer">Reload</button>';
+    b.querySelector('button').onclick = () => location.reload();
+    document.body.appendChild(b);
+  });
+}
+</script>
 </body>
 </html>
