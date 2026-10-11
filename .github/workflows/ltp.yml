@@ -1,0 +1,39 @@
+name: Portfolio LTP
+
+# Live prices for the stocks people hold (portfolio_ltp.py → Firestore hni_market/ltp).
+# Every 30 min in market hours, Mon–Fri, plus one run after the close for the final prices.
+# No build, no deploy: the page reads the prices straight from Firestore.
+on:
+  schedule:
+    - cron: "*/30 3-9 * * 1-5"    # 09:00–15:30 IST, every 30 min
+    - cron: "20 10 * * 1-5"       # 15:50 IST: closing prices
+  workflow_dispatch:
+
+concurrency:
+  group: portfolio-ltp
+  cancel-in-progress: true
+
+jobs:
+  ltp:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install firebase-admin smartapi-python pyotp logzero websocket-client requests pandas
+      - name: Service account
+        run: echo '${{ secrets.GOOGLE_CREDENTIALS }}' > serviceAccount.json
+      - name: Fetch LTP for held stocks
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: serviceAccount.json
+          ANGEL_API_KEY:     ${{ secrets.ANGEL_API_KEY }}
+          ANGEL_CLIENT_CODE: ${{ secrets.ANGEL_CLIENT_CODE }}
+          ANGEL_PIN:         ${{ secrets.ANGEL_PIN }}
+          ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
+        run: python -u portfolio_ltp.py
+      - name: Clean up
+        if: always()
+        run: rm -f serviceAccount.json
