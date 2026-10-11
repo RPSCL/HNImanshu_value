@@ -9,6 +9,7 @@ import requests
 from io import StringIO
 import pandas as pd
 from gnews import GNews
+from news_dedup import dedup_frame        # same story, different words ("₹59 crore" = "Rs 59 cr")
 
 IST          = timezone(timedelta(hours=5, minutes=30))
 NEWS_DAYS    = 7
@@ -198,8 +199,8 @@ def trim_and_dedup(df: pd.DataFrame, cutoff) -> pd.DataFrame:
     # 3. Exact title dedup
     df = df.drop_duplicates(subset=["stockname", "news"])
 
-    # 4. Near-duplicate title dedup (per stock)
-    df = dedup_similar_news(df, threshold=0.6)
+    # 4. Same story told twice (per stock): news_dedup.py normalises ₹/Rs/crore/%, compares key figures + wording
+    df = dedup_frame(df)                                  # already sorted newest first, so the newest version is kept
 
     return df[["stockname", "datetime", "news", "link"]].reset_index(drop=True)
 

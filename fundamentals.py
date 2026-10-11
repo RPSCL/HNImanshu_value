@@ -2790,7 +2790,13 @@ function pfNewsPanel(host, syms) {
       : `<p class="na">${syms.length ? 'No news in the last 7 days for your holdings.' : 'News for the stocks you hold shows here.'}</p>`;
   };
   if (NEWS) return paint();
-  fetch('news.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : {}).catch(() => ({})).then(j => { NEWS = j || {}; if (p.isConnected) paint(); });
+  fetch('news.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : {}).catch(() => ({})).then(j => {
+    NEWS = {};                                             // compact news.json (build.py): articles once + per-stock indexes
+    const dt = t => `20${t.slice(0, 2)}-${t.slice(2, 4)}-${t.slice(4, 6)} ${t.slice(6, 8)}:${t.slice(8, 10)}`;
+    for (const sym in (j.s || {})) NEWS[sym] = j.s[sym].map(i => { const a = j.a[i];
+      return [dt(a[0]), a[1] + (a[2] ? ' – ' + a[2] : ''), a[3][0] === '!' ? a[3].slice(1) : j.p + a[3] + j.q]; });
+    if (p.isConnected) paint();
+  });
 }
 /* a table inside a panel: title on the left of its own tool row, body scrolls inside the panel */
 function pfPanel(host, title, sub, table) {
@@ -3549,34 +3555,6 @@ def render_html(now, backs, asof, web=False, smnow=None, embed_all=False):
     return html.replace("__DATA__", data), span
 
 
-NEWS_CSV, NEWS_DAYS, NEWS_PER_STOCK = "multi_stock_news.csv", 7, 8
-
-
-def write_news_json(csv_path, out_dir):
-    """multi_stock_news.csv (fetch_news.py) → news.json {SYMBOL: [[datetime, headline, link], …]}, last 7 days,
-    newest first, at most 8 per stock. Loaded by the Portfolio page only for the stocks a user holds."""
-    csv_path = pathlib.Path(csv_path)
-    if not csv_path.exists():
-        return 0
-    try:
-        n = pd.read_csv(csv_path, encoding="utf-8-sig", usecols=["stockname", "datetime", "news", "link"]).dropna(subset=["stockname", "news"])
-    except Exception as e:
-        print("    news.json skipped:", e)
-        return 0
-    n["dt"] = pd.to_datetime(n["datetime"].astype(str).str.replace(" IST", "", regex=False), errors="coerce")
-    cut = pd.Timestamp.now(tz="Asia/Kolkata").tz_localize(None) - pd.Timedelta(days=NEWS_DAYS)
-    n = n[n["dt"] >= cut].sort_values("dt", ascending=False)
-    out = {}
-    for r in n.itertuples():
-        sym = str(r.stockname).strip().upper()
-        lst = out.setdefault(sym, [])
-        if len(lst) < NEWS_PER_STOCK:
-            lst.append([r.dt.strftime("%Y-%m-%d %H:%M"), str(r.news).strip(), str(r.link).strip() if isinstance(r.link, str) else ""])
-    txt = json.dumps(out, ensure_ascii=False, separators=(",", ":"))
-    (pathlib.Path(out_dir) / "news.json").write_text(txt, encoding="utf-8")
-    return len(txt.encode("utf-8"))
-
-
 def build_site(paths, out_path, minify=None, prices_path=None):
     """Called from build.py: read only `paths`, write the web version to `out_path`.
     prices.csv (fetch_prices.py) is picked up from the CSVs' folder automatically when present."""
@@ -3597,10 +3575,6 @@ def build_site(paths, out_path, minify=None, prices_path=None):
         txt = json.dumps(clean(slim_back(b)), allow_nan=False, separators=(",", ":"))
         (out_path.parent / ("fundamentals_back_%s.json" % k)).write_text(txt, encoding="utf-8")
         extra += len(txt.encode("utf-8"))
-    if paths:
-        nb = write_news_json(pathlib.Path(str(paths[0])).parent / NEWS_CSV, out_path.parent)
-        if nb:
-            print("    news.json: %.2f MB (Portfolio news panel)" % (nb / 1e6))
     print("    Fundamentals: %d stocks, data as of %s, back periods %s, page %.1f MB + %.1f MB on demand -> %s" % (
         len(now), asof.strftime("%d %b %Y"), "/".join(b["label"] for b in backs.values()),
         len(html.encode("utf-8")) / 1e6, extra / 1e6, out_path))

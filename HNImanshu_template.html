@@ -1413,13 +1413,22 @@ function fmtMC(v){ if(!v)return'—'; if(v>=1e5)return(v/1e5).toFixed(1)+'L Cr';
 function piotClass(v){ if(v==null||v==='')return'n-neu'; var n=+v; if(n>=7)return'piot-hi'; if(n>=4)return'piot-mid'; return'piot-lo'; }
 function combinedClass(v){ if(v==null||v==='')return'n-neu'; var n=+v; if(n>=15)return'combined-hi'; if(n>=8)return'combined-mid'; return'combined-lo'; }
 
-/* news lives in screener_news.json (written by build.py) and loads the first time a stock's news is opened;
+/* news lives in news.json (written by build.py, shared with Fundamentals) and loads the first time a stock's news is opened;
    on a fast connection it also loads quietly a few seconds after the page, so it is usually already there */
 var NEWS_READY = Object.keys(NEWS_DATA).length > 1, NEWS_WAIT = null, _newsSym = null;
+/* news.json (build.py) is compact: each article once [yymmddHHMM, headline, source, link-id] + per-stock indexes */
+function unpackNews(j){
+  var out = {}, M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var when = function(t){ var h = +t.slice(6,8), ap = h >= 12 ? 'PM' : 'AM', h12 = (h % 12) || 12;
+    return (+t.slice(4,6)) + ' ' + M[+t.slice(2,4) - 1] + ' 20' + t.slice(0,2) + ', ' + (h12 < 10 ? '0' : '') + h12 + ':' + t.slice(8,10) + ' ' + ap; };
+  for (var sym in (j.s || {})) out[sym] = j.s[sym].map(function(i){ var a = j.a[i];
+    return {headline: a[1], source: a[2], time: when(a[0]), link: a[3].charAt(0) === '!' ? a[3].slice(1) : j.p + a[3] + j.q}; });
+  return out;
+}
 function loadNews(){
   if (NEWS_READY || NEWS_WAIT) return NEWS_WAIT;
-  NEWS_WAIT = fetch('screener_news.json', {cache:'no-cache'}).then(function(r){ return r.ok ? r.json() : {}; }).then(function(j){
-    Object.assign(NEWS_DATA, j || {}); NEWS_READY = true;
+  NEWS_WAIT = fetch('news.json', {cache:'no-cache'}).then(function(r){ return r.ok ? r.json() : {}; }).then(function(j){
+    Object.assign(NEWS_DATA, unpackNews(j || {})); NEWS_READY = true;
     var ns = document.getElementById('dp-news-sym'), sc = document.getElementById('dp-news-scroll');
     if (ns && sc && ns.textContent && ns.textContent !== '—') sc.innerHTML = buildNewsHTML(ns.textContent);
     var sh = document.getElementById('news-sheet-scroll'); if (_newsOpen && _newsSym && sh) sh.innerHTML = buildNewsHTML(_newsSym);
@@ -1990,11 +1999,10 @@ buildSidebar(); buildMobileSheet(); updateFundLink(); run();   // updateFundLink
 <script>
 (function(){
   try {
-    var key = 'hnimanshu_welcome_seen_10m';
-    var now = Date.now();
-    var tenMin = 10 * 60 * 1000;
-    var lastSeen = parseInt(localStorage.getItem(key) || 0, 10);
-    if(!lastSeen || (now - lastSeen) > tenMin){
+    /* once a day: shown on the first visit of each calendar day (India time), until "I Understand" is pressed */
+    var key = 'hnimanshu_welcome_day';
+    var today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);   // IST date, whatever the phone's zone
+    if(localStorage.getItem(key) !== today){
       var el = document.getElementById('wm-overlay');
       el.style.display = 'flex';
     }
@@ -2009,7 +2017,7 @@ buildSidebar(); buildMobileSheet(); updateFundLink(); run();   // updateFundLink
       var el = document.getElementById('wm-overlay');
       el.style.opacity = '0'; el.style.transition = 'opacity 0.25s ease';
       setTimeout(function(){ el.style.display = 'none'; el.style.opacity = ''; }, 260);
-      try { localStorage.setItem(key, Date.now()); } catch(e){}
+      try { localStorage.setItem(key, today); } catch(e){}
     });
   } catch(e){}
 })();

@@ -486,6 +486,55 @@ def _extract_source(url: str) -> str:
         return ""
 
 
+NEWS_PREFIX = "https://news.google.com/rss/articles/"
+NEWS_SUFFIX = "?oc=5&hl=en-US&gl=US&ceid=US:en"
+NEWS_DAYS_KEEP, NEWS_PER_STOCK = 7, 10
+
+
+def write_news_json(path: Path, out: Path) -> int:
+    """multi_stock_news.csv → public/news.json, compact and shared by both pages:
+      {"p": link prefix, "q": link suffix,
+       "a": [[yymmddHHMM, headline, source, link-id], …]   each article once, even if several stocks carry it
+       "s": {SYMBOL: [article index, …]}}                   newest first, at most 10 per stock, last 7 days
+    The Google News link is stored without its fixed start / end (the page adds them back): ~20% of the link.
+    Repeat stories are removed with news_dedup.py (same figures, same wording)."""
+    if not path.exists():
+        print(f"  [NEWS]  {path.name} not found — no news")
+        out.write_text('{"p":"","q":"","a":[],"s":{}}', encoding="utf-8")
+        return 0
+    from news_dedup import dedup_frame, source_of
+    df = pd.read_csv(path, encoding="utf-8-sig", low_memory=False)
+    df.columns = [c.strip() for c in df.columns]
+    df = df.dropna(subset=["stockname", "news"])
+    df["dt"] = pd.to_datetime(df["datetime"].astype(str).str.replace(" IST", "", regex=False), errors="coerce")
+    cutoff = pd.Timestamp(datetime.now(zoneinfo.ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)) - pd.Timedelta(days=NEWS_DAYS_KEEP)
+    df = df[df["dt"] >= cutoff].sort_values("dt", ascending=False)
+    df["stockname"] = df["stockname"].astype(str).str.strip().str.upper()
+    df = df.drop_duplicates(subset=["stockname", "link"]).drop_duplicates(subset=["stockname", "news"])
+    df = dedup_frame(df)
+    arts, index, per = [], {}, {}
+    for r in df.itertuples():
+        lst = per.setdefault(r.stockname, [])
+        if len(lst) >= NEWS_PER_STOCK:
+            continue
+        link = str(r.link) if isinstance(r.link, str) else ""
+        head, src = source_of(r.news)
+        key = link or head
+        if key not in index:                                  # same article for several stocks → stored once
+            lid = link[len(NEWS_PREFIX):] if link.startswith(NEWS_PREFIX) else "!" + link
+            if lid[:1] != "!" and lid.endswith(NEWS_SUFFIX):
+                lid = lid[: -len(NEWS_SUFFIX)]
+            elif lid[:1] != "!":
+                lid = "!" + link
+            index[key] = len(arts)
+            arts.append([r.dt.strftime("%y%m%d%H%M"), head, src, lid])
+        lst.append(index[key])
+    txt = json.dumps({"p": NEWS_PREFIX, "q": NEWS_SUFFIX, "a": arts, "s": per}, ensure_ascii=False, separators=(",", ":"))
+    out.write_text(txt, encoding="utf-8")
+    print(f"  [NEWS]  {len(df)} stories after repeats removed → {len(arts)} articles for {len(per)} stocks, news.json {len(txt) / 1e6:.2f} MB")
+    return sum(len(v) for v in per.values())
+
+
 def load_news(path: Path) -> dict:
     """
     Load multi_stock_news.csv and return a dict:
@@ -747,12 +796,11 @@ def build(deploy=False):
         data_mc250 = []
 
     print("\nLoading News...\n")
-    news_map = load_news(NEWS_CSV)
-    # News is no longer baked into the page (it was ~70% of index.html): it goes to public/screener_news.json and
-    # the page fetches it the first time someone opens a stock's news, so the home page loads fast even on 2G.
+    # News is not baked into the page (it was ~70% of index.html): ONE compact public/news.json, shared by the
+    # screener and the Fundamentals Portfolio, fetched the first time news is needed.
     news_js  = build_news_js({})
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    (OUTPUT.parent / "screener_news.json").write_text(json.dumps(news_map, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    n_news = write_news_json(NEWS_CSV, OUTPUT.parent / "news.json")
 
     # ── Build DATASETS JS ──
     # Only NIFTY 500 (the list the page opens on) is inside index.html; Smallcap / Microcap are their own files,
@@ -794,7 +842,7 @@ def build(deploy=False):
 
     total = len(data_n500 or []) + len(data_sc250) + len(data_mc250)
     print(f"\n✅ Build Complete  —  {total} total stocks, "
-          f"{sum(len(v) for v in news_map.values())} news items")
+          f"{n_news} news items")
     print(f"   Output: {OUTPUT}")
     print(f"           {OUTPUT_FUND}")
 
