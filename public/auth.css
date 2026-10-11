@@ -25,7 +25,7 @@ html.auth-ok .au-wait{display:none}
 
 /* popup */
 .au-back{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;padding:16px;
-  background:rgba(0,0,0,.55);backdrop-filter:blur(2px)}
+  background:rgba(0,0,0,.62)}                       /* no blur: blurring the big page behind made every scroll sluggish */
 .au-back.open{display:flex}
 .au-box{width:min(380px,100%);background:var(--au-bg);color:var(--au-ink);border:1px solid var(--au-line);border-radius:14px;
   padding:20px 22px 18px;box-shadow:0 18px 50px rgba(0,0,0,.5);font-family:var(--au-sans);position:relative}
@@ -107,6 +107,24 @@ html.auth-ok .au-wait{display:none}
 .au-tbl tbody tr:hover td:first-child{box-shadow:inset 2px 0 0 var(--au-acc)}
 .au-tbl tbody tr td{color:var(--au-ink)}
 .au-up{color:var(--good, #3fae6a)} .au-dn{color:var(--bad, #e06666)}
-.au-pfv .au-box{width:min(920px,100%)}
+/* admin: one user's portfolio. The box never grows past the screen; its body is the ONE scroll area,
+   so every row is reachable and the page underneath stays still */
+.au-pfv{z-index:310;align-items:center}
+.au-pfv .au-box{width:min(960px,100%);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);padding:16px 16px 12px}
+.au-pfv .au-title{padding-right:36px;flex:none}
+.au-pfbody{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;margin:8px -4px 0;padding:0 4px 4px}
+.au-pfv .au-tbl{overflow-x:auto;overflow-y:hidden;max-height:none}   /* wide tables slide sideways; no scroll box inside the scroll box */
+.au-pfv .au-tbl th{position:static}
+.au-pfv .au-tbl tbody tr:hover td{background:transparent}           /* no hover repaint on hundreds of rows */
+.au-pfv .au-tbl tbody tr:hover td:first-child{box-shadow:none}
+.au-pfv .au-tbl td.r,.au-pfv .au-tbl th.r{text-align:right}
 .au-pfv .pf-sum{margin-bottom:12px}
-.au-pfv{z-index:310}
+.au-pfh{display:flex;align-items:baseline;gap:8px;font:600 12px var(--au-mono);color:var(--au-mute);margin:14px 0 6px}
+.au-pfh small{font-weight:500;color:var(--au-faint)}
+.au-pfwarn{font-size:12px;color:var(--au-bad);margin:0 0 10px}
+html.au-lock,html.au-lock body{overflow:hidden}                     /* page behind a popup doesn't scroll */
+@media (max-width:700px){
+  .au-pfv{align-items:stretch;padding:8px}
+  .au-pfv .au-box{max-height:none;height:100%;border-radius:12px}    /* phone: the whole screen, one scroll */
+  .au-pfv .au-tbl td,.au-pfv .au-tbl th{padding:6px 8px}
+}

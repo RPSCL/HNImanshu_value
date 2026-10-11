@@ -44,7 +44,10 @@ const ADMIN_EMAIL = "admin@" + USER_DOMAIN;       // username "admin" (created b
 const USERS = "hni_users";                        // Firestore collection: one doc per account
 const ADMINS = "hni_admins";
 const PORTFOLIO = "hni_portfolio";                // Firestore: one doc per user with their holdings
-const MARKET = ["hni_market", "ltp"];             // live LTP for held stocks, written by portfolio_ltp.py                      // Firestore: one doc per extra admin (made from the Users list)
+const MARKET = ["hni_market", "ltp"];             // live LTP for held stocks, written by portfolio_ltp.py
+// "⟳ Live prices" button: address of the Cloudflare Worker (ltp_worker.js) that starts ltp.yml on GitHub.
+// Empty = no button. The GitHub token lives in the Worker, never here.
+const LTP_HOOK = "";                              // e.g. "https://hni-ltp.<your-name>.workers.dev/run"
 const HOME = "./";                                // the screener
 const GATED = document.documentElement.dataset.auth === "required";
 
@@ -180,6 +183,8 @@ async function record(u) {
 }
 
 // ---------- admin: list of users ----------
+// while any popup is open the page behind doesn't scroll (phones otherwise scroll the big page underneath)
+const syncLock = () => document.documentElement.classList.toggle("au-lock", !!document.querySelector(".au-back.open"));
 const fmt = (t) => (t && t.toDate ? t.toDate().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "–");
 async function openUsers() {
   let back = $(".au-users");
@@ -192,14 +197,14 @@ async function openUsers() {
       <input class="au-q" placeholder="Search username or email" spellcheck="false">
       <div class="au-tbl"></div></div>`;
     document.body.appendChild(back);
-    const close = () => back.classList.remove("open");
+    const close = () => { back.classList.remove("open"); syncLock(); };
     $(".au-x", back).addEventListener("click", close);
     back.addEventListener("click", (e) => { if (e.target === back) close(); });
     back.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") close(); });
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && back.classList.contains("open")) close(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && back.classList.contains("open") && !$(".au-pfv.open")) close(); });
     $(".au-q", back).addEventListener("input", (e) => paint(back, e.target.value));
   }
-  back.classList.add("open");
+  back.classList.add("open"); syncLock();
   $(".au-tbl", back).innerHTML = '<p class="au-sub">Loading…</p>';
   try {
     await needFS();
@@ -243,16 +248,19 @@ function viewPortfolio(r, mkt) {
   let o = $(".au-pfv");
   if (!o) {
     o = document.createElement("div"); o.className = "au-back au-pfv";
+    // the box is capped at the screen height; everything inside scrolls in ONE place (.au-pfbody)
     o.innerHTML = `<div class="au-box au-wide" role="dialog" aria-modal="true"><button class="au-x" type="button" aria-label="Close">×</button><h2 class="au-title"></h2><div class="au-pfbody"></div></div>`;
     document.body.appendChild(o);
-    const close = () => o.classList.remove("open");
+    const close = () => { o.classList.remove("open"); $(".au-pfbody", o).innerHTML = ""; syncLock(); };   // emptied: nothing heavy left in the page
     $(".au-x", o).addEventListener("click", close);
     o.addEventListener("click", (e) => { if (e.target === o) close(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && o.classList.contains("open")) { e.stopImmediatePropagation(); close(); } }, true);
   }
   $(".au-title", o).textContent = (r.username || r.email || "User") + " · portfolio";
-  $(".au-pfbody", o).innerHTML = window.hniPf.html(r.pfData, mkt);
-  o.classList.add("open");
+  const body = $(".au-pfbody", o);
+  body.innerHTML = '<p class="au-sub">Loading…</p>';
+  o.classList.add("open"); syncLock();
+  requestAnimationFrame(() => { body.innerHTML = window.hniPf.html(r.pfData, mkt); body.scrollTop = 0; });   // popup shows first, then the tables
 }
 // make / unmake an admin: Firestore hni_admins/{uid} (Users list, rules) + RTDB hni/admins/{uid} (online counter rules)
 async function setAdmin(back, uid) {
@@ -358,6 +366,12 @@ const ready = new Promise((resolve) => {
       load: async () => { await needFS(); const d = await getDoc(doc(db, PORTFOLIO, u.uid)); return d.exists() ? d.data() : {}; },             // {txns, rates} (or old {items})
       save: async (data) => { await needFS(); return setDoc(doc(db, PORTFOLIO, u.uid), { txns: data.txns || [], rates: data.rates || {}, updated: serverTimestamp() }); },
       market: async () => { await needFS(); const d = await getDoc(doc(db, ...MARKET)); return d.exists() ? d.data() : null; },
+      canRefresh: () => !!LTP_HOOK && ADMIN,                // admins only (the Worker checks again on its side)
+      // start the LTP workflow → {ok} | {error, running}
+      refresh: async () => {
+        const r = await fetch(LTP_HOOK, { method: "POST", headers: { Authorization: "Bearer " + await u.getIdToken() } });
+        return r.json().catch(() => ({ error: "HTTP " + r.status }));
+      },
     };
     window.dispatchEvent(new Event("hni-ready"));
     ADMIN = isMainAdmin(u);                                   // known at once; extra admins are checked once the page has settled
@@ -365,7 +379,7 @@ const ready = new Promise((resolve) => {
     idle(async () => {
       record(u);
       const a = await checkAdmin(u);
-      if (a && !ADMIN) { ADMIN = true; const old = $(".au-user"); if (old) old.remove(); if (GATED) showUser(u); }   // menu gains "Users"
+      if (a && !ADMIN) { ADMIN = true; const old = $(".au-user"); if (old) old.remove(); if (GATED) showUser(u); window.dispatchEvent(new Event("hni-admin")); }   // menu gains "Users"
       if (ADMIN) showAdminDot();
     }, 1500);
   });
