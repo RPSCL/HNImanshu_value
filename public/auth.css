@@ -1,7 +1,8 @@
 /* auth.css — HNImanshu login / register popup + the Fundamentals login gate.
    Shared by the screener (index.html) and the Fundamentals page; picks up whichever page's theme colours exist,
    so it follows day / night on both. */
-:root{
+/* theme colours are read on <body> (where both pages set body.day / body.night), so day mode really is light */
+body{
   --au-bg: var(--panel, var(--bg2, #141416));
   --au-field: var(--bg, #0e0e0f);
   --au-ink: var(--ink, var(--text, #f0ece4));
@@ -87,7 +88,7 @@ html.auth-ok .au-wait{display:none}
 .au-tbl{overflow:auto;border:1px solid var(--au-line);border-radius:8px}
 .au-tbl table{width:100%;border-collapse:collapse;font:12.5px var(--au-sans)}
 .au-tbl th{position:sticky;top:0;background:var(--au-field);color:var(--au-faint);font:600 11px var(--au-mono);text-align:left;padding:8px 10px;border-bottom:1px solid var(--au-line)}
-.au-tbl td{text-align:left;font:12.5px var(--au-sans);padding:7px 10px;border-bottom:1px solid var(--au-line);color:var(--au-ink);white-space:nowrap}
+.au-tbl td{background:transparent;text-align:left;font:12.5px var(--au-sans);padding:7px 10px;border-bottom:1px solid var(--au-line);color:var(--au-ink);white-space:nowrap}
 .au-tbl tr:last-child td{border-bottom:0}
 .au-user .au-adm{color:var(--au-acc)}
 
@@ -101,3 +102,7 @@ html.auth-ok .au-wait{display:none}
 .au-mk:hover{border-color:var(--au-acc);color:var(--au-ink)}
 .au-mk.on{border-color:var(--au-acc);color:var(--au-acc)}
 .au-tag{font:600 11px var(--au-mono);color:var(--au-faint)}
+/* Users list rows: hover = faint tint of the text colour, text stays readable in day and night */
+.au-tbl tbody tr:hover td{background:color-mix(in srgb, var(--au-ink) 8%, transparent);color:var(--au-ink)}
+.au-tbl tbody tr:hover td:first-child{box-shadow:inset 2px 0 0 var(--au-acc)}
+.au-tbl tbody tr td{color:var(--au-ink)}

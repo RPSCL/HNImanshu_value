@@ -44,7 +44,8 @@ const USER_DOMAIN = "users.hnimanshu.app";        // username → hidden email f
 const SESSION_DAYS = 7;                           // log out a week after the last sign-in
 const ADMIN_EMAIL = "admin@" + USER_DOMAIN;       // username "admin" (created by you in the Firebase console)
 const USERS = "hni_users";                        // Firestore collection: one doc per account
-const ADMINS = "hni_admins";                      // Firestore: one doc per extra admin (made from the Users list)
+const ADMINS = "hni_admins";
+const PORTFOLIO = "hni_portfolio";                // Firestore: one doc per user with their holdings                      // Firestore: one doc per extra admin (made from the Users list)
 const HOME = "./";                                // the screener
 const GATED = document.documentElement.dataset.auth === "required";
 
@@ -308,6 +309,13 @@ const ready = new Promise((resolve) => {
     }
     if (GATED) document.documentElement.classList.add("auth-ok");   // show the page at once; admin check follows
     if (!u) return;
+    // Portfolio tab: the page saves / loads the user's holdings through this (Firestore hni_portfolio/{uid}, owner only)
+    const pref = doc(db, PORTFOLIO, u.uid);
+    window.hniStore = {
+      load: async () => { const d = await getDoc(pref); return d.exists() && Array.isArray(d.data().items) ? d.data().items : []; },
+      save: (items) => setDoc(pref, { items, updated: serverTimestamp() }),
+    };
+    window.dispatchEvent(new Event("hni-ready"));
     record(u);
     ADMIN = await checkAdmin(u);
     if (GATED) showUser(u);
