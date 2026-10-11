@@ -16,14 +16,13 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
-  getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  updateProfile, GoogleAuthProvider, signInWithPopup, signOut,
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signOut,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  getFirestore, doc, setDoc, getDoc, getDocs, collection, serverTimestamp,
+  getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
-  getDatabase, ref, set, onValue, onDisconnect, increment,
+  getDatabase, ref, set, remove, onValue, onDisconnect, increment,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
 
 // Firebase project "hnimanshu", web app "valueapp" (Project settings → Your apps). These values are public by design;
@@ -45,6 +44,7 @@ const USER_DOMAIN = "users.hnimanshu.app";        // username → hidden email f
 const SESSION_DAYS = 7;                           // log out a week after the last sign-in
 const ADMIN_EMAIL = "admin@" + USER_DOMAIN;       // username "admin" (created by you in the Firebase console)
 const USERS = "hni_users";                        // Firestore collection: one doc per account
+const ADMINS = "hni_admins";                      // Firestore: one doc per extra admin (made from the Users list)
 const HOME = "./";                                // the screener
 const GATED = document.documentElement.dataset.auth === "required";
 
@@ -59,7 +59,17 @@ const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const toEmail = (u) => `${u.trim().toLowerCase()}@${USER_DOMAIN}`;
 const nameOf = (u) => u.displayName || (u.email || "").replace("@" + USER_DOMAIN, "") || "user";
-const isAdmin = (u) => !!u && u.email === ADMIN_EMAIL;
+const isMainAdmin = (u) => !!u && u.email === ADMIN_EMAIL;   // the "admin" username: always admin, can't be removed
+let ADMIN = false;                                           // set once per page from hni_admins (see checkAdmin)
+async function checkAdmin(u) {
+  if (!u) return false;
+  if (isMainAdmin(u)) return true;
+  try { return (await getDoc(doc(db, ADMINS, u.uid))).exists(); } catch (e) { return false; }
+}
+const initials = (n) => {                                    // "Himanshu Shekhar" → HS, "admin" → AD
+  const w = String(n || "?").trim().split(/[\s._-]+/).filter(Boolean);
+  return (w.length > 1 ? w[0][0] + w[w.length - 1][0] : (w[0] || "?").slice(0, 2)).toUpperCase();
+};
 const providerOf = (u) => (u.providerData && u.providerData[0] && u.providerData[0].providerId) === "google.com" ? "google" : "username";
 const expired = (u) => {
   const t = Date.parse(u.metadata && u.metadata.lastSignInTime);
@@ -67,7 +77,7 @@ const expired = (u) => {
 };
 
 // ---------- popup ----------
-let box = null, mode = "login", nextUrl = null;
+let box = null, nextUrl = null;
 function buildPopup() {
   if (box) return box;
   box = document.createElement("div");
@@ -76,43 +86,27 @@ function buildPopup() {
     <div class="au-box" role="dialog" aria-modal="true" aria-labelledby="auTitle">
       <button class="au-x" type="button" aria-label="Close">×</button>
       <h2 class="au-title" id="auTitle">Fundamentals</h2>
-      <p class="au-sub">Free account. Log in or register to open the Fundamentals page.</p>
-      <div class="au-tabs" role="tablist">
-        <button type="button" class="au-tab on" data-m="login">Login</button>
-        <button type="button" class="au-tab" data-m="register">Register</button>
-      </div>
-      <form class="au-form" novalidate>
-        <label class="au-fld"><span>Username</span>
-          <input name="u" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20" required></label>
-        <div class="au-hint" data-reg hidden>3–20 characters: letters, numbers, dot or underscore.</div>
-        <label class="au-fld"><span>Password</span>
-          <span class="au-pw"><input name="p" type="password" autocomplete="current-password" required>
-          <button type="button" class="au-eye" aria-label="Show password">SHOW</button></span></label>
-        <label class="au-fld" data-reg hidden><span>Confirm password</span>
-          <input name="p2" type="password" autocomplete="new-password"></label>
-        <div class="au-err" aria-live="polite"></div>
-        <button class="au-btn" type="submit">Login</button>
-      </form>
-      <div class="au-or">or</div>
+      <p class="au-sub">Free. Continue with Google, or log in with your username.</p>
       <button class="au-google" type="button">
         <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
         Continue with Google</button>
+      <div class="au-or">or</div>
+      <form class="au-form" novalidate>
+        <label class="au-fld"><span>Username</span>
+          <input name="u" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20" required></label>
+        <label class="au-fld"><span>Password</span>
+          <span class="au-pw"><input name="p" type="password" autocomplete="current-password" required>
+          <button type="button" class="au-eye" aria-label="Show password">SHOW</button></span></label>
+        <div class="au-err" aria-live="polite"></div>
+        <button class="au-btn" type="submit">Login</button>
+      </form>
       <p class="au-foot">You stay signed in for 7 days on this device.</p>
     </div>`;
   document.body.appendChild(box);
   const f = $("form", box), err = $(".au-err", box), btn = $(".au-btn", box);
-  const setMode = (m) => {
-    mode = m;
-    box.querySelectorAll(".au-tab").forEach((t) => t.classList.toggle("on", t.dataset.m === m));
-    box.querySelectorAll("[data-reg]").forEach((el) => (el.hidden = m !== "register"));
-    f.p.autocomplete = m === "register" ? "new-password" : "current-password";
-    btn.textContent = m === "register" ? "Create account" : "Login";
-    err.textContent = "";
-  };
-  box.querySelectorAll(".au-tab").forEach((t) => t.addEventListener("click", () => { setMode(t.dataset.m); f.u.focus(); }));
   $(".au-eye", box).addEventListener("click", (e) => {
     const show = f.p.type === "password";
-    f.p.type = f.p2.type = show ? "text" : "password";
+    f.p.type = show ? "text" : "password";
     e.currentTarget.textContent = show ? "HIDE" : "SHOW";
   });
   $(".au-x", box).addEventListener("click", closePopup);
@@ -122,20 +116,10 @@ function buildPopup() {
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
     const u = f.u.value.trim().toLowerCase(), p = f.p.value;
-    if (!/^[a-z0-9._]{3,20}$/.test(u)) return (err.textContent = "Username: 3–20 letters, numbers, dot or underscore.");
-    if (p.length < 8) return (err.textContent = "Password must be at least 8 characters.");
-    if (mode === "register" && p !== f.p2.value) return (err.textContent = "The two passwords don't match.");
-    if (mode === "register" && /^(admin|root|support|hnimanshu)/.test(u)) return (err.textContent = "That username is taken. Try another.");
+    if (!/^[a-z0-9._]{3,20}$/.test(u) || !p) return (err.textContent = "Wrong username or password.");
     btn.disabled = true; err.textContent = "";
-    try {
-      if (mode === "register") {
-        const cred = await createUserWithEmailAndPassword(auth, toEmail(u), p);
-        await updateProfile(cred.user, { displayName: u });
-      } else {
-        await signInWithEmailAndPassword(auth, toEmail(u), p);
-      }
-      done();
-    } catch (ex) { err.textContent = message(ex); }
+    try { await signInWithEmailAndPassword(auth, toEmail(u), p); done(); }
+    catch (ex) { err.textContent = message(ex); }
     finally { btn.disabled = false; }
   });
   $(".au-google", box).addEventListener("click", async () => {
@@ -143,15 +127,15 @@ function buildPopup() {
     try { await signInWithPopup(auth, google); done(); }
     catch (ex) { err.textContent = message(ex); }
   });
-  box._setMode = setMode;
+  box._reset = () => { err.textContent = ""; f.reset(); };
   return box;
 }
 function openPopup(next) {
   nextUrl = next || null;
   buildPopup();
-  box._setMode("login");
+  box._reset();
   box.classList.add("open");
-  setTimeout(() => $("input[name=u]", box).focus(), 30);
+  setTimeout(() => $(".au-google", box).focus(), 30);
 }
 function closePopup() { if (box) box.classList.remove("open"); }
 function done() {
@@ -204,13 +188,15 @@ async function openUsers() {
     $(".au-x", back).addEventListener("click", close);
     back.addEventListener("click", (e) => { if (e.target === back) close(); });
     back.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") close(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && back.classList.contains("open")) close(); });
     $(".au-q", back).addEventListener("input", (e) => paint(back, e.target.value));
   }
   back.classList.add("open");
   $(".au-tbl", back).innerHTML = '<p class="au-sub">Loading…</p>';
   try {
     const snap = await getDocs(collection(db, USERS));
-    back._rows = snap.docs.map((d) => d.data()).sort((a, b) => ((b.lastLogin && b.lastLogin.seconds) || 0) - ((a.lastLogin && a.lastLogin.seconds) || 0));
+    const adm = new Set((await getDocs(collection(db, ADMINS))).docs.map((d) => d.id));
+    back._rows = snap.docs.map((d) => Object.assign({ uid: d.id, admin: adm.has(d.id) }, d.data())).sort((a, b) => ((b.lastLogin && b.lastLogin.seconds) || 0) - ((a.lastLogin && a.lastLogin.seconds) || 0));
     paint(back, "");
   } catch (e) {
     $(".au-tbl", back).innerHTML = `<p class="au-err">Couldn't load users (${esc(e.code || e)}). Check the Firestore rules.</p>`;
@@ -220,9 +206,26 @@ function paint(back, q) {
   q = q.trim().toLowerCase();
   const rows = (back._rows || []).filter((r) => !q || (r.username + " " + (r.email || "")).toLowerCase().includes(q));
   $(".au-count", back).textContent = `· ${rows.length}`;
-  $(".au-tbl", back).innerHTML = `<table><thead><tr><th>Username</th><th>Email</th><th>Via</th><th>Joined</th><th>Last login</th></tr></thead><tbody>${
-    rows.map((r) => `<tr><td>${esc(r.username || "")}</td><td>${r.provider === "google" ? esc(r.email || "") : "–"}</td><td>${esc(r.provider || "")}</td><td>${fmt(r.created)}</td><td>${fmt(r.lastLogin)}</td></tr>`).join("")
+  $(".au-tbl", back).innerHTML = `<table><thead><tr><th>Username</th><th>Email</th><th>Via</th><th>Joined</th><th>Last login</th><th>Admin</th></tr></thead><tbody>${
+    rows.map((r) => `<tr><td>${esc(r.username || "")}</td><td>${r.provider === "google" ? esc(r.email || "") : "–"}</td><td>${esc(r.provider || "")}</td><td>${fmt(r.created)}</td><td>${fmt(r.lastLogin)}</td><td>${
+      r.email === ADMIN_EMAIL ? '<span class="au-tag">main</span>'
+        : `<button type="button" class="au-mk${r.admin ? " on" : ""}" data-uid="${esc(r.uid)}">${r.admin ? "Admin ✓" : "Make admin"}</button>`}</td></tr>`).join("")
   }</tbody></table>`;
+  back.querySelectorAll(".au-mk").forEach((b) => b.addEventListener("click", () => setAdmin(back, b.dataset.uid)));
+}
+// make / unmake an admin: Firestore hni_admins/{uid} (Users list, rules) + RTDB hni/admins/{uid} (online counter rules)
+async function setAdmin(back, uid) {
+  const r = (back._rows || []).find((x) => x.uid === uid);
+  if (!r) return;
+  const make = !r.admin;
+  if (!confirm((make ? "Make " : "Remove admin from ") + (r.username || r.email || uid) + (make ? " an admin? They will see every user and the online counter." : "?"))) return;
+  try {
+    if (make) await setDoc(doc(db, ADMINS, uid), { by: current ? current.uid : null, at: serverTimestamp() });
+    else await deleteDoc(doc(db, ADMINS, uid));
+    if (rtdb) await (make ? set(ref(rtdb, "hni/admins/" + uid), true) : remove(ref(rtdb, "hni/admins/" + uid))).catch(() => {});
+    r.admin = make;
+    paint(back, $(".au-q", back).value);
+  } catch (e) { alert("Couldn't change admin (" + (e.code || e) + "). Check the Firestore rules."); }
 }
 
 // ---------- signed-in chip (Fundamentals header) ----------
@@ -232,12 +235,15 @@ function showUser(u) {
   const n = nameOf(u);
   const el = document.createElement("span");
   el.className = "au-user";
-  el.title = "Signed in as " + n;
-  el.innerHTML = `<b>${esc(n.charAt(0).toUpperCase())}</b><span class="au-name">${esc(n)}</span>`
-    + (isAdmin(u) ? `<button type="button" class="au-adm">Users</button>` : "")
-    + `<button type="button" class="au-out">Logout</button>`;
+  el.innerHTML = `<button type="button" class="au-av" aria-haspopup="menu" title="Signed in as ${esc(n)}">${esc(initials(n))}</button>
+    <span class="au-menu" role="menu"><span class="au-who"><b>${esc(n)}</b>${u.email && !u.email.endsWith("@" + USER_DOMAIN) ? `<i>${esc(u.email)}</i>` : ""}</span>
+    ${ADMIN ? '<button type="button" class="au-adm" role="menuitem">Users</button>' : ""}
+    <button type="button" class="au-out" role="menuitem">Logout</button></span>`;
+  $(".au-av", el).addEventListener("click", (e) => { e.stopPropagation(); el.classList.toggle("open"); });
+  document.addEventListener("click", (e) => { if (!el.contains(e.target)) el.classList.remove("open"); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") el.classList.remove("open"); });
   $(".au-out", el).addEventListener("click", async () => { await signOut(auth); location.href = HOME; });
-  if (isAdmin(u)) $(".au-adm", el).addEventListener("click", openUsers);
+  if (ADMIN) $(".au-adm", el).addEventListener("click", () => { el.classList.remove("open"); openUsers(); });
   host.insertBefore(el, host.querySelector("#theme-toggle"));
 }
 
@@ -296,12 +302,16 @@ const ready = new Promise((resolve) => {
     if (u && expired(u)) { await signOut(auth); u = null; }   // 7-day session limit
     current = u;
     resolve();
-    if (u) record(u);
-    if (isAdmin(u)) showAdminDot();
-    if (GATED) {
-      if (u) { document.documentElement.classList.add("auth-ok"); showUser(u); }
-      else location.replace(HOME + "?login=" + encodeURIComponent(location.pathname.replace(/^\//, "") + location.hash));
+    if (GATED && !u) {                                        // no login: back to the screener with the popup open
+      location.replace(HOME + "?login=" + encodeURIComponent(location.pathname.replace(/^\//, "") + location.hash));
+      return;
     }
+    if (GATED) document.documentElement.classList.add("auth-ok");   // show the page at once; admin check follows
+    if (!u) return;
+    record(u);
+    ADMIN = await checkAdmin(u);
+    if (GATED) showUser(u);
+    if (ADMIN) showAdminDot();
   });
 });
 
