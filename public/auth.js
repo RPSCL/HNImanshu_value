@@ -312,8 +312,8 @@ const ready = new Promise((resolve) => {
     // Portfolio tab: the page saves / loads the user's holdings through this (Firestore hni_portfolio/{uid}, owner only)
     const pref = doc(db, PORTFOLIO, u.uid);
     window.hniStore = {
-      load: async () => { const d = await getDoc(pref); return d.exists() && Array.isArray(d.data().items) ? d.data().items : []; },
-      save: (items) => setDoc(pref, { items, updated: serverTimestamp() }),
+      load: async () => { const d = await getDoc(pref); return d.exists() ? d.data() : {}; },             // {txns, rates} (or old {items})
+      save: (data) => setDoc(pref, { txns: data.txns || [], rates: data.rates || {}, updated: serverTimestamp() }),
     };
     window.dispatchEvent(new Event("hni-ready"));
     record(u);
