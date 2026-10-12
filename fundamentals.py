@@ -59,6 +59,9 @@ BACK_DAYS = 365           # the "1Y back" snapshot date = download date minus th
 # every back period on the site's "Back" dropdown: key (prices.csv column suffix) -> (label, days)
 PERIODS = {"3M": ("3M", 91), "6M": ("6M", 182), "9M": ("9M", 273), "1Y": ("1Y", 365),
            "1_25Y": ("1.25Y", 456), "1_5Y": ("1.5Y", 548)}
+TODAY_SAME = True         # True: today is rebuilt with the SAME formulas as every Historical date (3M … 1.5Y back), priced
+                          #   with Angel's close, so today vs back is like for like everywhere (tables, checklist, history line).
+                          # False: today shows Screener's own ratios (PE, ROE, ROCE, yields), as on screener.in.
 DEFAULT_BACK = "1Y"       # embedded in the page; the others load on demand (fundamentals_back_<key>.json)
 # Trend score (improving fundamentals) - separate from Value score and Magic Formula
 TREND_QTRS = 6            # quarterly checks look at the last 6 quarter-ends
@@ -1618,7 +1621,7 @@ let industries = {};
 function setMode() {
   BACK = !!(GF.back && D.then && D.then.stocks && (D.then.key || '1Y') === GF.backP);   // the chosen period once its data is in
   const bp = $('#backPer'); if (bp) bp.classList.toggle('on', BACK);
-  SAME = BACK;                                                    // today = Screener's own figures; past dates = rebuilt from raw rows
+  SAME = BACK || !!D.sameToday;                                   // past dates are always rebuilt from raw rows; today too when sameToday
   S = BACK ? D.then.stocks : D.stocks;
   NOPRICE = BACK && !D.then.hasPrice;
   industries = {};
@@ -3609,7 +3612,10 @@ function methodView() {
     <div class="card"><b>Historical</b><span>Switch it on and pick a date (3M to 1.5Y) to see the page as it looked then, and how each stock did since.</span></div>
   </div>
   <p><b>Where the numbers come from:</b> Screener.in data for ${D.lists.map(esc).join(', ')} (downloaded ${esc(D.asOf)}), ${N.length} stocks, consolidated accounts where published.
-  Prices for past dates come from Angel One daily closes, adjusted for splits and bonuses. Everything refreshes in the weekly run.</p>
+  Prices for past dates come from Angel One daily closes, adjusted for splits and bonuses. Everything refreshes in the weekly run.
+  ${D.sameToday ? `<br><b>One method for every date:</b> today's PE, ROE, ROCE, yields and trend are rebuilt from the published quarterly and annual results
+  with exactly the formulas used for 3M … 1.5Y back (priced with Angel's latest close), so a change between dates is the business or the price, never the method.
+  They can differ a little from the ratios shown on Screener.in, which uses its own conventions.` : ''}</p>
   <p><b>Header switches:</b> <b>List</b> picks the index, <b>PSU</b> / <b>Semi PSU</b> hide government companies (struck through = hidden). They apply to every tab; industry averages always use all stocks so they stay fair.</p>
 
   <h2>Price and valuation</h2>
@@ -3777,7 +3783,8 @@ function route() {
 function nowInfo() {                                     // (i) popover for the current view
   const T = D.then || {};
   return `<b>As on ${esc(D.asOf)}</b>Fundamentals from Screener, downloaded ${esc(D.asOf)}. `
-    + "Ratios are Screener's own (PE, ROE, ROCE, yields). "
+    + (D.sameToday ? "Ratios rebuilt from the quarterly and annual results with the same formulas as every Historical date, so today vs back is like for like. "
+                   : "Ratios are Screener's own (PE, ROE, ROCE, yields). ")
     + (T.hasPrice ? `Prices: Angel close ${esc(T.priceDate || '–')}.` : 'Prices: CMP from the CSV.')
     + ' <a href="#/method">Methodology</a>';
 }
@@ -4008,8 +4015,10 @@ def render_html(now, backs, asof, web=False, smnow=None, embed_all=False):
     if web:                                       # website: the 1Y snapshot loads on demand (Industries 1Y columns, Historical)
         then = {k: v for k, v in then.items() if k != "stocks"}
         then["lazy"] = True
+    same = bool(TODAY_SAME and smnow)
     payload = {
-        "stocks": slim(now),
+        "stocks": slim(smnow if same else now),           # today: same-method engine (TODAY_SAME) or Screener's own figures
+        "sameToday": same,
         "lists": lists,
         "asOf": asof.strftime("%d %b %Y"),
         "asOfIso": asof.strftime("%Y-%m-%d"),
