@@ -1191,10 +1191,9 @@ body.pf-mode #saveHtml,body.pf-mode #nav,body.pf-mode #meta{display:none!importa
 /* any popup open: the page behind is blurred ONCE as a still picture (cheap), and doesn't scroll.
    (A live backdrop blur re-draws the whole page on every scroll / hover inside the popup: that was the lag.) */
 html.pop-open,html.pop-open body{overflow:hidden}
-@media (hover:hover) and (pointer:fine){                                   /* computers: blur the page behind */
-  html.pop-open body > :not(.wip-back):not(.au-back):not(.toast){filter:blur(4px)}
-}
-@media not ((hover:hover) and (pointer:fine)){.wip-back{background:rgba(0,0,0,.66)}}   /* phones: a deeper dim instead (blur made scrolling lag) */
+.wip-back{background:rgba(8,8,10,.72)}            /* deep dim instead of blur: any blur re-draws the page on every scroll and hover */
+.wip-box{contain:layout paint;overscroll-behavior:contain}
+.vh-tip{contain:layout paint}
 .wip-back.open{display:flex}
 .wip-box{position:relative;width:min(420px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:20px 22px;box-shadow:0 18px 50px rgba(0,0,0,.35);box-sizing:border-box}
 .wip-box h3{margin:0 0 8px;font:700 15px var(--mono);color:var(--brass)}
@@ -1204,15 +1203,19 @@ html.pop-open,html.pop-open body{overflow:hidden}
 /* stock overlay (tap a symbol) */
 .wip-box.no-box{width:min(560px,100%)}
 /* stock sheet: soft dim, fades in; on phones it slides up from the bottom */
-.wip-back.sheet{background:rgba(0,0,0,.32)}
+.wip-back.sheet{background:rgba(8,8,10,.6)}
 /* status history sparkline (top-right of the stock popup) + its checklist tooltip */
 .vh{position:absolute;top:14px;right:50px;width:176px;text-align:right;z-index:2}
 .vh svg{display:block;overflow:visible;margin-left:auto}
 .vh .hit{cursor:pointer}
-.vh-cap{display:block;font:500 9.5px var(--mono);color:var(--faint);margin-top:2px}
+.vh-g{stroke:var(--line);stroke-width:1;stroke-dasharray:2 3}
+.vh-px{fill:none;stroke:var(--brass);stroke-width:1.1;opacity:.75;stroke-linejoin:round}
+.vh-pxk{color:var(--brass)}
+.vh-pxv{margin-left:auto;font:600 12px var(--mono);color:var(--brass)}
+.vh-cap{display:block;font:500 9.5px var(--mono);color:var(--faint);margin-top:2px;white-space:nowrap}
 .vh-load{border:1px solid var(--line);background:transparent;color:var(--faint);font:600 10.5px var(--mono);padding:4px 8px;border-radius:6px;cursor:pointer}
 .vh-tip{position:fixed;width:300px;max-height:min(60vh,420px);overflow:auto;text-align:left;background:var(--panel2,var(--panel));border:1px solid var(--line);
-  border-radius:10px;padding:8px 12px 10px;box-shadow:0 14px 34px rgba(0,0,0,.4);z-index:5}
+  border-radius:10px;padding:8px 12px 10px;box-shadow:0 6px 16px rgba(0,0,0,.35);z-index:5}
 .vh-tip .vd-c{font-size:12px;padding:2px 0}
 .vh-tip .vd-c small{font-size:10.5px}
 .vh-h{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12.5px;padding-bottom:6px;margin-bottom:4px;border-bottom:1px solid var(--line)}
@@ -3293,18 +3296,24 @@ function vdSpark(host, sym, PS) {
   const pxNow = pfLtp(sym) != null ? pfLtp(sym) : s && s.cmp;
   if (now && pxNow) pts.push({d: 'Today', px: pxNow, v: now});
   if (pts.length < 2) { host.innerHTML = ''; return; }
+  /* main line = checklist score % (0–100, fixed scale; faint guides at 50 and 75 = the Watch / Buy lines), coloured by status;
+     thin yellow line = price on its own scale, just to see how the price moved alongside */
   const W = 176, H = 50, pad = 5, lo = Math.min(...pts.map(p => p.px)), hi = Math.max(...pts.map(p => p.px));
-  const X = i => pad + i * (W - 2 * pad) / (pts.length - 1), Y = v => hi === lo ? H / 2 : H - pad - (v - lo) / (hi - lo) * (H - 2 * pad);
-  const segs = pts.slice(1).map((p, i) => `<line x1="${X(i)}" y1="${Y(pts[i].px)}" x2="${X(i + 1)}" y2="${Y(p.px)}" stroke="${VD_COL[p.v.st]}" stroke-width="2.2" stroke-linecap="round"/>`).join('');
-  const dots = pts.map((p, i) => `<circle cx="${X(i)}" cy="${Y(p.px)}" r="${i === pts.length - 1 ? 3.4 : 2.4}" fill="${VD_COL[p.v.st]}"/><circle class="hit" data-i="${i}" cx="${X(i)}" cy="${Y(p.px)}" r="11" fill="transparent"/>`).join('');
-  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" preserveAspectRatio="none" role="img" aria-label="Price and status over the last ${pts.length} dates">${segs}${dots}</svg>
-    <div class="vh-cap">${esc(pts[0].d)} → today</div><div class="vh-tip" hidden></div>`;
+  const X = i => pad + i * (W - 2 * pad) / (pts.length - 1);
+  const YS = v => H - pad - v / 100 * (H - 2 * pad), YP = v => hi === lo ? H / 2 : H - pad - (v - lo) / (hi - lo) * (H - 2 * pad);
+  const guide = v => `<line x1="0" x2="${W}" y1="${YS(v)}" y2="${YS(v)}" class="vh-g"/>`;
+  const price = `<polyline points="${pts.map((p, i) => X(i) + ',' + YP(p.px)).join(' ')}" class="vh-px"/>`;
+  const segs = pts.slice(1).map((p, i) => `<line x1="${X(i)}" y1="${YS(pts[i].v.pct)}" x2="${X(i + 1)}" y2="${YS(p.v.pct)}" stroke="${VD_COL[p.v.st]}" stroke-width="2.2" stroke-linecap="round"/>`).join('');
+  const dots = pts.map((p, i) => `<circle cx="${X(i)}" cy="${YS(p.v.pct)}" r="${i === pts.length - 1 ? 3.4 : 2.4}" fill="${VD_COL[p.v.st]}"/>`).join('');
+  const hits = pts.map((p, i) => `<rect class="hit" data-i="${i}" x="${X(i) - (W - 2 * pad) / (pts.length - 1) / 2}" y="0" width="${(W - 2 * pad) / (pts.length - 1)}" height="${H}" fill="transparent"/>`).join('');
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" preserveAspectRatio="none" role="img" aria-label="Checklist score and price over the last ${pts.length} dates">${guide(50)}${guide(75)}${price}${segs}${dots}${hits}</svg>
+    <div class="vh-cap">score % · <span class="vh-pxk">price</span> · from ${esc(pts[0].d)}</div><div class="vh-tip" hidden></div>`;
   const tip = $('.vh-tip', host), svg = $('svg', host);
   const cache = [];
   const show = i => {
     const p = pts[i], v = p.v;
     if (tip._i === i && !tip.hidden) return; tip._i = i;
-    tip.innerHTML = cache[i] = cache[i] || `<div class="vh-h"><b>${esc(p.d)}</b> ₹${fmt(p.px, 0)} ${vdChip(v)} <small>${v.pass}/${v.n} · ${fmt(v.pct, 0)}%</small></div>`
+    tip.innerHTML = cache[i] = cache[i] || `<div class="vh-h"><b>${esc(p.d)}</b> ${vdChip(v)} <b>${fmt(v.pct, 0)}%</b> <small>${v.pass}/${v.n} checks</small><span class="vh-pxv">₹${fmt(p.px, p.px < 100 ? 2 : 0)}</span></div>`
       + v.checks.filter(c => c.pass != null).map(c => `<div class="vd-c ${c.pass ? 'ok' : 'no'}"><i>${c.pass ? '✓' : '✗'}</i><span>${c.label}${c.why ? `<small>${esc(c.why)}</small>` : ''}</span></div>`).join('');
     tip.hidden = false;                                    // fixed to the screen, so the popup's edge never cuts it off
     const r = svg.getBoundingClientRect(), tw = Math.min(300, innerWidth - 24), cx = r.left + X(i) * r.width / W;
@@ -3312,10 +3321,8 @@ function vdSpark(host, sym, PS) {
     tip.style.left = Math.max(12, Math.min(cx - tw / 2, innerWidth - tw - 12)) + 'px';
     tip.style.top = Math.min(r.bottom + 6, innerHeight - Math.min(tip.offsetHeight, innerHeight * .6) - 12) + 'px';
   };
-  svg.querySelectorAll('.hit').forEach(c => {
-    c.addEventListener('mouseenter', () => show(+c.dataset.i));
-    c.addEventListener('click', e => { e.stopPropagation(); show(+c.dataset.i); });
-  });
+  svg.addEventListener('mouseover', e => { const c = e.target.closest('.hit'); if (c) show(+c.dataset.i); });
+  svg.addEventListener('click', e => { const c = e.target.closest('.hit'); if (c) { e.stopPropagation(); show(+c.dataset.i); } });
   svg.addEventListener('mouseleave', () => { tip.hidden = true; });
   host.closest('.wip-box').addEventListener('click', e => { if (!e.target.closest('.hit')) tip.hidden = true; });
 }
