@@ -1184,9 +1184,14 @@ body.pf-mode #saveHtml,body.pf-mode #nav,body.pf-mode #meta{display:none!importa
 .seg button{border:0;background:transparent;color:var(--mute);font:600 12.5px var(--mono);padding:8px 0;border-radius:6px;cursor:pointer}
 .seg button.on[data-t=buy],.seg button.on[data-t=in]{background:var(--good);color:var(--bg)}
 .seg button.on[data-t=sell],.seg button.on[data-t=out]{background:var(--bad);color:var(--bg)}
-.wip-back{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.42);
-  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}               /* every popup blurs the page behind it */
-html:has(.wip-back.open),html:has(.au-back.open){overflow:hidden}           /* ... and the page behind stays still */
+.wip-back{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.42)}
+/* any popup open: the page behind is blurred ONCE as a still picture (cheap), and doesn't scroll.
+   (A live backdrop blur re-draws the whole page on every scroll / hover inside the popup: that was the lag.) */
+html.pop-open,html.pop-open body{overflow:hidden}
+@media (hover:hover) and (pointer:fine){                                   /* computers: blur the page behind */
+  html.pop-open body > :not(.wip-back):not(.au-back):not(.toast){filter:blur(4px)}
+}
+@media not ((hover:hover) and (pointer:fine)){.wip-back{background:rgba(0,0,0,.66)}}   /* phones: a deeper dim instead (blur made scrolling lag) */
 .wip-back.open{display:flex}
 .wip-box{position:relative;width:min(420px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:20px 22px;box-shadow:0 18px 50px rgba(0,0,0,.35);box-sizing:border-box}
 .wip-box h3{margin:0 0 8px;font:700 15px var(--mono);color:var(--brass)}
@@ -1196,7 +1201,7 @@ html:has(.wip-back.open),html:has(.au-back.open){overflow:hidden}           /* .
 /* stock overlay (tap a symbol) */
 .wip-box.no-box{width:min(560px,100%)}
 /* stock sheet: soft dim, fades in; on phones it slides up from the bottom */
-.wip-back.sheet{background:rgba(0,0,0,.32);animation:noFade .18s ease-out}
+.wip-back.sheet{background:rgba(0,0,0,.32)}
 /* status history sparkline (top-right of the stock popup) + its checklist tooltip */
 .vh{position:absolute;top:14px;right:50px;width:176px;text-align:right;z-index:2}
 .vh svg{display:block;overflow:visible;margin-left:auto}
@@ -1217,7 +1222,7 @@ html:has(.wip-back.open),html:has(.au-back.open){overflow:hidden}           /* .
   .wip-box.no-box h3{padding-right:150px;min-height:34px}
   .wip-box.no-box .no-name{padding-right:0}
 }
-.wip-back.sheet .wip-box{animation:noRise .2s ease-out}
+.wip-back.sheet .wip-box{animation:noRise .16s ease-out}
 @keyframes noFade{from{opacity:0}} @keyframes noRise{from{transform:translateY(14px);opacity:.6}}
 .no-g{font:600 9.5px var(--mono);color:var(--brass);text-transform:uppercase;letter-spacing:.7px;margin:4px 0 6px;padding-top:8px;border-top:1px solid var(--line)}
 .no-kv small{font:500 10.5px var(--mono);color:var(--faint);margin-left:4px}
@@ -3260,21 +3265,28 @@ function vdSnap(j) {                                      // scores + industries
   ({S, industries, NOPRICE, HAS_MOM} = keep); computeScores.S = keep.cS; computeScores.key = keep.cK;
   return snap;
 }
-function vdHistLoad() {
-  return VH.p = VH.p || Promise.all(VH_KEYS.map(k => BACK_CACHE[k] ? Promise.resolve(BACK_CACHE[k])
-      : fetch('fundamentals_back_' + k + '.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(j => { if (j && j.stocks) BACK_CACHE[k] = j; return j; }).catch(() => null)))
-    .then(list => {
-      const by = {};
-      list.forEach((j, i) => { if (j && j.stocks && j.hasPrice) by[VH_KEYS[i]] = vdSnap(Object.assign({key: VH_KEYS[i]}, j)); });
-      Object.values(by).forEach(sn => { sn.prev = by[VH_PREV[sn.key]] || null; });
-      return VH.snaps = VH_KEYS.map(k => by[k]).filter(Boolean);
-    });
+const nextFrame = () => new Promise(r => (window.requestIdleCallback || setTimeout)(() => r(), {timeout: 120}));
+function vdHistLoad() {                                   // one file at a time, a pause between each: the page never freezes
+  return VH.p = VH.p || (async () => {
+    const by = {};
+    for (const k of VH_KEYS) {
+      let j = BACK_CACHE[k];
+      if (!j) { try { const r = await fetch('fundamentals_back_' + k + '.json'); j = r.ok ? await r.json() : null; } catch (e) { j = null; }
+                if (j && j.stocks) BACK_CACHE[k] = j; }
+      await nextFrame();
+      if (j && j.stocks && j.hasPrice) by[k] = vdSnap(Object.assign({key: k}, j));
+    }
+    Object.values(by).forEach(sn => { sn.prev = by[VH_PREV[sn.key]] || null; });
+    return VH.snaps = VH_KEYS.map(k => by[k]).filter(Boolean);
+  })();
 }
+const VH_PTS = new Map();                                 // stock → its past points, worked out once
 const VD_COL = {buy: 'var(--good)', hold: 'var(--good)', watch: '#e8952e', sell: 'var(--bad)', avoid: 'var(--bad)', na: 'var(--faint)'};
 /* the sparkline; hovering (or tapping) a point shows that date's checklist */
 function vdSpark(host, sym, PS) {
   const now = verdict(sym, PS), s = TODAY.get(sym);
-  const pts = VH.snaps.map(sn => { const v = verdict(sym, null, sn), x = sn.by.get(sym); return v && x && x.cmp ? {d: sn.date, px: x.cmp, v} : null; }).filter(Boolean);
+  if (!VH_PTS.has(sym)) VH_PTS.set(sym, VH.snaps.map(sn => { const v = verdict(sym, null, sn), x = sn.by.get(sym); return v && x && x.cmp ? {d: sn.date, px: x.cmp, v} : null; }).filter(Boolean));
+  const pts = VH_PTS.get(sym).slice();
   const pxNow = pfLtp(sym) != null ? pfLtp(sym) : s && s.cmp;
   if (now && pxNow) pts.push({d: 'Today', px: pxNow, v: now});
   if (pts.length < 2) { host.innerHTML = ''; return; }
@@ -3285,9 +3297,11 @@ function vdSpark(host, sym, PS) {
   host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" preserveAspectRatio="none" role="img" aria-label="Price and status over the last ${pts.length} dates">${segs}${dots}</svg>
     <div class="vh-cap">${esc(pts[0].d)} → today</div><div class="vh-tip" hidden></div>`;
   const tip = $('.vh-tip', host), svg = $('svg', host);
+  const cache = [];
   const show = i => {
     const p = pts[i], v = p.v;
-    tip.innerHTML = `<div class="vh-h"><b>${esc(p.d)}</b> ₹${fmt(p.px, 0)} ${vdChip(v)} <small>${v.pass}/${v.n} · ${fmt(v.pct, 0)}%</small></div>`
+    if (tip._i === i && !tip.hidden) return; tip._i = i;
+    tip.innerHTML = cache[i] = cache[i] || `<div class="vh-h"><b>${esc(p.d)}</b> ₹${fmt(p.px, 0)} ${vdChip(v)} <small>${v.pass}/${v.n} · ${fmt(v.pct, 0)}%</small></div>`
       + v.checks.filter(c => c.pass != null).map(c => `<div class="vd-c ${c.pass ? 'ok' : 'no'}"><i>${c.pass ? '✓' : '✗'}</i><span>${c.label}${c.why ? `<small>${esc(c.why)}</small>` : ''}</span></div>`).join('');
     tip.hidden = false;                                    // fixed to the screen, so the popup's edge never cuts it off
     const r = svg.getBoundingClientRect(), tw = Math.min(300, innerWidth - 24), cx = r.left + X(i) * r.width / W;
@@ -3347,9 +3361,9 @@ function newsOverlay(sym) {
   if (ensureThen1.p) ensureThen1.p.then(() => { if (w.isConnected) paintVd(); });
   const vh = $('.vh', w), slow = (() => { const c = navigator.connection; return !!(c && (c.saveData || /2g/.test(c.effectiveType || ''))); })();
   const drawVh = () => { vh.innerHTML = '<span class="vh-cap">loading history…</span>'; vdHistLoad().then(() => { if (w.isConnected) vdSpark(vh, sym, PS); }); };
-  if (VH.snaps) vdSpark(vh, sym, PS);
+  if (VH.snaps) requestAnimationFrame(() => { if (w.isConnected) vdSpark(vh, sym, PS); });
   else if (slow) { vh.innerHTML = '<button type="button" class="vh-load">Show status history</button>'; $('.vh-load', vh).addEventListener('click', drawVh); }   // 2G / data saver: only on request
-  else if (TODAY.get(sym)) drawVh();
+  else if (TODAY.get(sym)) setTimeout(drawVh, 60);
   loadNewsMap().then(N => {
     if (!w.isConnected) return;
     const items = (N[sym] || []);
@@ -3364,7 +3378,9 @@ function modal(title, html, opt = {}) {
   const w = document.createElement('div'); w.className = 'wip-back open' + (opt.sheet ? ' sheet' : '');   // sheet: slides up softly on phones
   w.innerHTML = `<div class="wip-box${opt.ov ? ' ov' : ''}${opt.cls ? ' ' + opt.cls : ''}" role="dialog" aria-modal="true"><button type="button" class="wip-x" aria-label="Close">×</button><h3>${title}</h3>${html}</div>`;
   document.body.appendChild(w);
-  const close = () => { w.remove(); document.removeEventListener('keydown', onKey, true); };
+  document.documentElement.classList.add('pop-open');
+  const close = () => { w.remove(); document.removeEventListener('keydown', onKey, true);
+    if (!document.querySelector('.wip-back') && !document.querySelector('.au-back.open')) document.documentElement.classList.remove('pop-open'); };
   const onKey = e => { if (e.key === 'Escape') { e.stopImmediatePropagation(); close(); } };
   document.addEventListener('keydown', onKey, true);
   $('.wip-x', w).addEventListener('click', close);
