@@ -1112,6 +1112,11 @@ body.day .toggle-thumb{transform:translateX(16px)}
 .pf-t.in,.pf-t.out{color:var(--brass);border-color:var(--brass)}
 /* header: Portfolio bag, just left of the user's initials */
 .btn.hbag{gap:6px;border-color:var(--line);color:var(--ink)}
+/* Portfolio page: only ‹ Value, Weekly, Portfolio, avatar and day/night stay in the header */
+#pfBackV{display:none}
+body.pf-mode #pfBackV{display:inline-flex}
+body.pf-mode #backBtn,body.pf-mode .global > .gsep,body.pf-mode #uniChip,body.pf-mode .global > .chip.strike,body.pf-mode #histGrp,
+body.pf-mode #saveHtml,body.pf-mode #nav,body.pf-mode #meta{display:none!important}
 .btn.hbag:hover,.btn.hbag.on{border-color:var(--brass);color:var(--brass);background:var(--brassbg)}
 @media (max-width:700px){.btn.hbag{position:absolute;top:13px;right:calc(var(--au-right,104px) + 40px);width:32px;height:32px;padding:0;justify-content:center;border-radius:50%}}
 .ind{vertical-align:middle}
@@ -1179,7 +1184,9 @@ body.day .toggle-thumb{transform:translateX(16px)}
 .seg button{border:0;background:transparent;color:var(--mute);font:600 12.5px var(--mono);padding:8px 0;border-radius:6px;cursor:pointer}
 .seg button.on[data-t=buy],.seg button.on[data-t=in]{background:var(--good);color:var(--bg)}
 .seg button.on[data-t=sell],.seg button.on[data-t=out]{background:var(--bad);color:var(--bg)}
-.wip-back{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5)}
+.wip-back{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.42);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}               /* every popup blurs the page behind it */
+html:has(.wip-back.open),html:has(.au-back.open){overflow:hidden}           /* ... and the page behind stays still */
 .wip-back.open{display:flex}
 .wip-box{position:relative;width:min(420px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:20px 22px;box-shadow:0 18px 50px rgba(0,0,0,.35);box-sizing:border-box}
 .wip-box h3{margin:0 0 8px;font:700 15px var(--mono);color:var(--brass)}
@@ -1190,6 +1197,26 @@ body.day .toggle-thumb{transform:translateX(16px)}
 .wip-box.no-box{width:min(560px,100%)}
 /* stock sheet: soft dim, fades in; on phones it slides up from the bottom */
 .wip-back.sheet{background:rgba(0,0,0,.32);animation:noFade .18s ease-out}
+/* status history sparkline (top-right of the stock popup) + its checklist tooltip */
+.vh{position:absolute;top:14px;right:50px;width:176px;text-align:right;z-index:2}
+.vh svg{display:block;overflow:visible;margin-left:auto}
+.vh .hit{cursor:pointer}
+.vh-cap{display:block;font:500 9.5px var(--mono);color:var(--faint);margin-top:2px}
+.vh-load{border:1px solid var(--line);background:transparent;color:var(--faint);font:600 10.5px var(--mono);padding:4px 8px;border-radius:6px;cursor:pointer}
+.vh-tip{position:fixed;width:300px;max-height:min(60vh,420px);overflow:auto;text-align:left;background:var(--panel2,var(--panel));border:1px solid var(--line);
+  border-radius:10px;padding:8px 12px 10px;box-shadow:0 14px 34px rgba(0,0,0,.4);z-index:5}
+.vh-tip .vd-c{font-size:12px;padding:2px 0}
+.vh-tip .vd-c small{font-size:10.5px}
+.vh-h{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12.5px;padding-bottom:6px;margin-bottom:4px;border-bottom:1px solid var(--line)}
+.vh-h small{font:500 10.5px var(--mono);color:var(--faint)}
+.wip-box.no-box h3,.wip-box.no-box .no-name{padding-right:200px}
+@media (max-width:700px){
+  .vh{top:14px;right:46px;width:140px}                          /* phone: beside the symbol, clear of the name line */
+  .vh svg{width:140px;height:34px}
+  .vh-cap{display:none}
+  .wip-box.no-box h3{padding-right:150px;min-height:34px}
+  .wip-box.no-box .no-name{padding-right:0}
+}
 .wip-back.sheet .wip-box{animation:noRise .2s ease-out}
 @keyframes noFade{from{opacity:0}} @keyframes noRise{from{transform:translateY(14px);opacity:.6}}
 .no-g{font:600 9.5px var(--mono);color:var(--brass);text-transform:uppercase;letter-spacing:.7px;margin:4px 0 6px;padding-top:8px;border-top:1px solid var(--line)}
@@ -1518,6 +1545,7 @@ __AUTH_BODY__<script>
     <div class="sub" id="meta"></div>
   </div>
   <div class="global">
+    <a class="btn back" id="pfBackV" href="#/value"><svg class="arr" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Value</a>
     <a class="btn back" id="backBtn" href="./"><svg class="arr" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg><span class="lg">Back to </span>Screener</a>
     <span class="gsep" aria-hidden="true"></span>
     <label class="chip" id="uniChip">List <select id="uniSel"></select></label>
@@ -2020,6 +2048,11 @@ const assetCols = () => [C.pta].concat(has('pfa') ? [C.pfa] : [], has('invp') ? 
 
 /* ---------- views ---------- */
 const view = $('#view');
+/* the Portfolio button is a switch: on the Portfolio page it goes back to Value screen */
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('#pfBag');
+  if (b && (location.hash || '') === '#/portfolio') { e.preventDefault(); location.hash = '#/value'; }
+});
 function setNav(t){ document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.dataset.t===t)); }
 function pePicker() {
   const d = document.createElement('div'); d.className='bar';
@@ -3164,24 +3197,28 @@ function pfBuyStat(h, k) {
   PF.txns.forEach(x => { if (ids.has(x.id) && x.t === 'buy' && x[k] != null) { q += x.qty; t += x.qty * x[k]; } });
   return q ? t / q : null;
 }
-function verdict(sym, P) {
-  const s = TODAY.get(sym);
+/* snap (optional) = a past date from vdHistLoad(): judged with that date's numbers and price; the portfolio
+   checks (position size, stop-loss, NSE list) are left out there because they are about today */
+function verdict(sym, P, snap) {
+  const s = snap ? snap.by.get(sym) : TODAY.get(sym);
   if (!s) return null;                                     // not in the three lists: no fundamentals to judge
-  const h = P ? P.open.find(r => r.sym === sym) : null, held = !!h;
-  const px = pfLtp(sym) != null ? pfLtp(sym) : s.cmp, ipe = s.ind && industries[s.ind] ? indPE(s.ind) : null;
-  const t1 = THEN_BY.get(sym), buyPe = pfBuyStat(h, 'pe'), buySc = pfBuyStat(h, 'sc');
+  const IND = snap ? snap.inds : industries;
+  const h = !snap && P ? P.open.find(r => r.sym === sym) : null, held = !!h;
+  const px = snap ? s.cmp : pfLtp(sym) != null ? pfLtp(sym) : s.cmp;
+  const ipe = s.ind && IND[s.ind] ? IND[s.ind].pe[method] : null;
+  const t1 = snap ? (snap.prev ? snap.prev.by.get(sym) : null) : THEN_BY.get(sym), buyPe = pfBuyStat(h, 'pe'), buySc = pfBuyStat(h, 'sc');
   const peRef = buyPe || (t1 && t1.pe > 0 ? t1.pe : null), flags = trapReasons(s), q = qual(s), proD = trD(s, 'proD');
   const L = VD_LIM, f1 = v => fmt(v, 1), f0 = v => fmt(v, 0);
   const expensive = (s.graham && px > s.graham) || (s.pe > 0 && ipe && s.pe > L.peVsInd * ipe) || (s.pe > 0 && peRef && s.pe > L.peVsBuy * peRef);
   const worse = flags.length > 0 || (s.tr && s.tr.pass / s.tr.of <= L.maxTrend) || (!s.fin && s.de > L.maxDe) || (q != null && q < L.minQ);
-  const peers = s.ind && industries[s.ind] ? industries[s.ind].stocks.filter(x => x.score != null && x.sym !== sym) : [];
+  const peers = s.ind && IND[s.ind] ? IND[s.ind].stocks.filter(x => x.score != null && x.sym !== sym) : [];
   const best = peers.reduce((b, x) => !b || x.score > b.score ? x : b, null);
   const C = [], add = (g, label, pass, why) => C.push({g, label, pass, why});
   // 1. valuation
   add('Valuation', 'Price at or below the Graham number', s.graham ? px <= s.graham : null,
       s.graham ? `₹${fmt(px, 0)} vs Graham ₹${fmt(s.graham, 0)}` : 'no Graham number (loss or negative book)');
   add('Valuation', `PE under ${L.peVsBuy}× ${buyPe ? 'the PE you bought at' : 'its PE a year ago'}`, s.pe > 0 && peRef ? s.pe <= L.peVsBuy * peRef : null,
-      s.pe > 0 && peRef ? `PE ${f1(s.pe)} vs ${f1(peRef)} ${buyPe ? 'at buy' : '1Y ago'}` : THEN_BY.size ? 'no PE then or now' : 'loading 1Y data…');
+      s.pe > 0 && peRef ? `PE ${f1(s.pe)} vs ${f1(peRef)} ${buyPe ? 'at buy' : '1Y ago'}` : snap || THEN_BY.size ? 'no PE a year before' : 'loading 1Y data…');
   add('Valuation', `PE under ${L.peVsInd}× its industry`, s.pe > 0 && ipe ? s.pe <= L.peVsInd * ipe : null, s.pe > 0 && ipe ? `PE ${f1(s.pe)} vs industry ${f1(ipe)}` : 'no PE');
   add('Valuation', `Value score ${L.minScore} or more`, s.score != null ? s.score >= L.minScore : null,
       s.score != null ? `score ${f0(s.score)}${buySc != null ? ` (was ${f0(buySc)} at buy)` : ''}` : '');
@@ -3204,9 +3241,66 @@ function verdict(sym, P) {
   add('Portfolio', `No stop-loss (down ${-L.stopLoss}%+ and the business got worse)`, held && h.priced ? !(h.pnlPct <= L.stopLoss && worse) : null,
       held && h.priced ? `${pctTxt(h.pnlPct, 1)} from your average${worse ? ', business signs weak' : ''}` : '');
   add('Portfolio', "Still on NSE's list", held && PF.mkt && PF.mkt.notListed ? !PF.mkt.notListed.includes(sym) : null, '');
+  if (snap) C.splice(0, C.length, ...C.filter(c => c.g !== 'Portfolio' || /better stock/.test(c.label)));   // past dates: only checks that mean something then
   const used = C.filter(c => c.pass != null), pass = used.filter(c => c.pass).length, pct = used.length ? pass / used.length * 100 : null;
   const st = pct == null ? 'na' : pct >= 75 ? (held ? 'hold' : 'buy') : pct >= 50 ? 'watch' : (held ? 'sell' : 'avoid');
   return {checks: C, pass, n: used.length, pct, st, held, label: {buy: 'Buy', hold: 'Hold', watch: 'Watch', sell: 'Sell', avoid: 'Avoid', na: '–'}[st]};
+}
+/* ---------- status history: price at each saved date (1.5Y … 3M back) and today, coloured by that date's status ----------
+   Uses the same Historical files as the Historical switch (loaded once, then from the phone's cache). */
+const VH_KEYS = ['1_5Y', '1_25Y', '1Y', '9M', '6M', '3M'], VH_PREV = {'3M': '1_25Y', '6M': '1_5Y'};   // a date's "PE a year before"
+const VH = {snaps: null, p: null};
+function vdSnap(j) {                                      // scores + industries for one past date, without touching the page
+  const keep = {S, industries, NOPRICE, HAS_MOM, cS: computeScores.S, cK: computeScores.key};
+  S = j.stocks; NOPRICE = !j.hasPrice; industries = {};
+  S.forEach(x => (industries[x.ind] = industries[x.ind] || {name: x.ind, stocks: []}).stocks.push(x));
+  Object.values(industries).forEach(buildIndustry);
+  computeScores.S = null; computeScores();
+  const snap = {key: j.key, date: j.date, by: new Map(S.map(x => [x.sym, x])), inds: industries};
+  ({S, industries, NOPRICE, HAS_MOM} = keep); computeScores.S = keep.cS; computeScores.key = keep.cK;
+  return snap;
+}
+function vdHistLoad() {
+  return VH.p = VH.p || Promise.all(VH_KEYS.map(k => BACK_CACHE[k] ? Promise.resolve(BACK_CACHE[k])
+      : fetch('fundamentals_back_' + k + '.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).then(j => { if (j && j.stocks) BACK_CACHE[k] = j; return j; }).catch(() => null)))
+    .then(list => {
+      const by = {};
+      list.forEach((j, i) => { if (j && j.stocks && j.hasPrice) by[VH_KEYS[i]] = vdSnap(Object.assign({key: VH_KEYS[i]}, j)); });
+      Object.values(by).forEach(sn => { sn.prev = by[VH_PREV[sn.key]] || null; });
+      return VH.snaps = VH_KEYS.map(k => by[k]).filter(Boolean);
+    });
+}
+const VD_COL = {buy: 'var(--good)', hold: 'var(--good)', watch: '#e8952e', sell: 'var(--bad)', avoid: 'var(--bad)', na: 'var(--faint)'};
+/* the sparkline; hovering (or tapping) a point shows that date's checklist */
+function vdSpark(host, sym, PS) {
+  const now = verdict(sym, PS), s = TODAY.get(sym);
+  const pts = VH.snaps.map(sn => { const v = verdict(sym, null, sn), x = sn.by.get(sym); return v && x && x.cmp ? {d: sn.date, px: x.cmp, v} : null; }).filter(Boolean);
+  const pxNow = pfLtp(sym) != null ? pfLtp(sym) : s && s.cmp;
+  if (now && pxNow) pts.push({d: 'Today', px: pxNow, v: now});
+  if (pts.length < 2) { host.innerHTML = ''; return; }
+  const W = 176, H = 50, pad = 5, lo = Math.min(...pts.map(p => p.px)), hi = Math.max(...pts.map(p => p.px));
+  const X = i => pad + i * (W - 2 * pad) / (pts.length - 1), Y = v => hi === lo ? H / 2 : H - pad - (v - lo) / (hi - lo) * (H - 2 * pad);
+  const segs = pts.slice(1).map((p, i) => `<line x1="${X(i)}" y1="${Y(pts[i].px)}" x2="${X(i + 1)}" y2="${Y(p.px)}" stroke="${VD_COL[p.v.st]}" stroke-width="2.2" stroke-linecap="round"/>`).join('');
+  const dots = pts.map((p, i) => `<circle cx="${X(i)}" cy="${Y(p.px)}" r="${i === pts.length - 1 ? 3.4 : 2.4}" fill="${VD_COL[p.v.st]}"/><circle class="hit" data-i="${i}" cx="${X(i)}" cy="${Y(p.px)}" r="11" fill="transparent"/>`).join('');
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" preserveAspectRatio="none" role="img" aria-label="Price and status over the last ${pts.length} dates">${segs}${dots}</svg>
+    <div class="vh-cap">${esc(pts[0].d)} → today</div><div class="vh-tip" hidden></div>`;
+  const tip = $('.vh-tip', host), svg = $('svg', host);
+  const show = i => {
+    const p = pts[i], v = p.v;
+    tip.innerHTML = `<div class="vh-h"><b>${esc(p.d)}</b> ₹${fmt(p.px, 0)} ${vdChip(v)} <small>${v.pass}/${v.n} · ${fmt(v.pct, 0)}%</small></div>`
+      + v.checks.filter(c => c.pass != null).map(c => `<div class="vd-c ${c.pass ? 'ok' : 'no'}"><i>${c.pass ? '✓' : '✗'}</i><span>${c.label}${c.why ? `<small>${esc(c.why)}</small>` : ''}</span></div>`).join('');
+    tip.hidden = false;                                    // fixed to the screen, so the popup's edge never cuts it off
+    const r = svg.getBoundingClientRect(), tw = Math.min(300, innerWidth - 24), cx = r.left + X(i) * r.width / W;
+    tip.style.width = tw + 'px';
+    tip.style.left = Math.max(12, Math.min(cx - tw / 2, innerWidth - tw - 12)) + 'px';
+    tip.style.top = Math.min(r.bottom + 6, innerHeight - Math.min(tip.offsetHeight, innerHeight * .6) - 12) + 'px';
+  };
+  svg.querySelectorAll('.hit').forEach(c => {
+    c.addEventListener('mouseenter', () => show(+c.dataset.i));
+    c.addEventListener('click', e => { e.stopPropagation(); show(+c.dataset.i); });
+  });
+  svg.addEventListener('mouseleave', () => { tip.hidden = true; });
+  host.closest('.wip-box').addEventListener('click', e => { if (!e.target.closest('.hit')) tip.hidden = true; });
 }
 const vdChip = (v, big) => !v ? '' : `<span class="vd vd-${v.st}${big ? ' big' : ''}" title="${v.pass} of ${v.n} checks pass">${v.label}${big ? ` <small>${v.pass}/${v.n} · ${fmt(v.pct, 0)}%</small>` : ''}</span>`;
 function vdList(v) {
@@ -3232,7 +3326,7 @@ function newsOverlay(sym) {
   if (!THEN_BY.size) ensureThen1();                       // "PE a year ago" test needs the 1Y snapshot
   const ret = i => s.mom && ok(s.mom[i]) ? pctTxt(s.mom[i], 1) : null, tr = trapReasons(s);
   const grp = (t, body) => body.replace(/\s/g, '') ? `<div class="no-g">${t}</div><div class="no-kv">${body}</div>` : '';
-  const w = modal(esc(sym), `<p class="no-name">${esc(s.name || '')}${s.ind ? ` · <span>${esc(s.ind)}</span>` : ''}</p>
+  const w = modal(esc(sym), `<div class="vh"></div><p class="no-name">${esc(s.name || '')}${s.ind ? ` · <span>${esc(s.ind)}</span>` : ''}</p>
     <div class="vd-box"></div>
     ${h ? grp('Your holding', `${k('Qty', fmt(h.qty, 0))}${k('Avg ₹', fmt(h.avg, 2))}${k('LTP ₹', h.ltp == null ? null : fmt(h.ltp, 2))}
       ${k('P&amp;L', h.priced ? plain(h.pnl, 0) + ' <small>' + pctTxt(h.pnlPct, 1) + '</small>' : null)}${k('Day', h.day == null ? null : plain(h.day, 0) + ' <small>' + pctTxt(h.dayPct) + '</small>')}`)
@@ -3251,6 +3345,11 @@ function newsOverlay(sym) {
   vbox.addEventListener('click', e => { if (e.target.closest('.vd-btn')) { vbox.classList.toggle('open'); paintVd(); } });
   paintVd();
   if (ensureThen1.p) ensureThen1.p.then(() => { if (w.isConnected) paintVd(); });
+  const vh = $('.vh', w), slow = (() => { const c = navigator.connection; return !!(c && (c.saveData || /2g/.test(c.effectiveType || ''))); })();
+  const drawVh = () => { vh.innerHTML = '<span class="vh-cap">loading history…</span>'; vdHistLoad().then(() => { if (w.isConnected) vdSpark(vh, sym, PS); }); };
+  if (VH.snaps) vdSpark(vh, sym, PS);
+  else if (slow) { vh.innerHTML = '<button type="button" class="vh-load">Show status history</button>'; $('.vh-load', vh).addEventListener('click', drawVh); }   // 2G / data saver: only on request
+  else if (TODAY.get(sym)) drawVh();
   loadNewsMap().then(N => {
     if (!w.isConnected) return;
     const items = (N[sym] || []);
@@ -3656,6 +3755,7 @@ function route() {
   else homeView();
   meta();
   $('#pfBag').classList.toggle('on', h === '#/portfolio');            // header bag lights up on the Portfolio page
+  document.body.classList.toggle('pf-mode', h === '#/portfolio');     // Portfolio: a quiet header (‹ Value, Weekly, Portfolio, avatar, day/night)
   window.scrollTo(0,0);
 }
 function nowInfo() {                                     // (i) popover for the current view
