@@ -3584,16 +3584,21 @@ window.addEventListener('hashchange', route);
 route();
 </script>
 <script>
-/* offline cache (sw.js): repeat visits open at once, even with no signal; a quiet bar offers new data when it arrives */
+/* offline cache (sw.js): pages open at once from the phone's cache while sw.js quietly downloads the fresh copy.
+   No notice: when the page itself changed, it swaps to the fresh one silently the next time the tab goes to the
+   background (switching apps / tabs), so you come back to new data at the same tab. Never while a popup or a
+   half-typed box is open. Data files (.json: news, lists) need nothing: the fresh copy is already in the cache. */
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  let stale = false;
   navigator.serviceWorker.addEventListener('message', e => {
-    if (!e.data || e.data.type !== 'hni-updated' || document.getElementById('hniUpd')) return;
-    const b = document.createElement('div'); b.id = 'hniUpd';
-    b.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:500;display:flex;gap:12px;align-items:center;padding:9px 10px 9px 16px;border-radius:10px;background:#d4b47a;color:#0e0e0f;font:600 13px system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.35)';
-    b.innerHTML = 'New data available<button type="button" style="border:0;border-radius:7px;padding:6px 12px;background:#0e0e0f;color:#d4b47a;font:inherit;cursor:pointer">Reload</button>';
-    b.querySelector('button').onclick = () => location.reload();
-    document.body.appendChild(b);
+    if (e.data && e.data.type === 'hni-updated' && !/\.json(\?|$)/.test(e.data.url || '')) stale = true;
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!stale || document.visibilityState !== 'hidden') return;
+    const a = document.activeElement;
+    const busy = document.querySelector('.au-back.open, .wip-back') || (a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.value);
+    if (!busy) location.reload();
   });
 }
 </script>
