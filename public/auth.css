@@ -25,9 +25,9 @@ html.auth-ok .au-wait{display:none}
 
 /* popup */
 .au-back{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;padding:16px;
-  background:rgba(0,0,0,.5)}
+  background:rgba(8,8,10,.72)}
 /* popup open: the page behind is blurred once as a still picture (a live backdrop blur lagged on every scroll) */
-@media (hover:hover) and (pointer:fine){html.au-lock body > :not(.au-back):not(.wip-back){filter:blur(4px)}}   /* computers only; phones get a plain dim */
+/* no blur behind popups: it re-draws the whole page on every scroll; the dim alone keeps it smooth */
 .au-back.open{display:flex}
 .au-box{width:min(380px,100%);background:var(--au-bg);color:var(--au-ink);border:1px solid var(--au-line);border-radius:14px;
   padding:20px 22px 18px;box-shadow:0 18px 50px rgba(0,0,0,.5);font-family:var(--au-sans);position:relative}
