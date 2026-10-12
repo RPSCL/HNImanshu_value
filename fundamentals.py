@@ -1119,13 +1119,11 @@ body.day .toggle-thumb{transform:translateX(16px)}
 .btn.hweek{gap:6px;color:var(--ink)}
 .btn.hweek:hover{border-color:#29a9eb;background:rgba(41,169,235,.12)}
 @media (max-width:700px){.btn.hweek{padding:0 9px}}
-/* Pay in / Pay out: soft green / red glow on hover; always on phones */
-.pf-acts [data-open=in]:hover{border-color:var(--good);box-shadow:0 6px 16px -6px var(--good)}
-.pf-acts [data-open=out]:hover{border-color:var(--bad);box-shadow:0 6px 16px -6px var(--bad)}
-@media (max-width:700px){
-  .pf-acts [data-open=in]{border-color:var(--good);box-shadow:0 5px 14px -7px var(--good)}
-  .pf-acts [data-open=out]{border-color:var(--bad);box-shadow:0 5px 14px -7px var(--bad)}
-}
+/* icon-only buttons (charges, refresh); refresh spins while live prices are being fetched */
+.pf-acts .btn.ico{width:38px;padding:0;justify-content:center}
+.pf-acts .btn.ico svg{display:block}
+.pf-acts .btn.spin svg{animation:pfSpin 1s linear infinite}
+@keyframes pfSpin{to{transform:rotate(360deg)}}
 /* Day gain tile */
 /* news panel */
 .pf-news .pf-h{margin-bottom:6px}
@@ -1197,6 +1195,23 @@ body.day .toggle-thumb{transform:translateX(16px)}
 .no-g{font:600 9.5px var(--mono);color:var(--brass);text-transform:uppercase;letter-spacing:.7px;margin:4px 0 6px;padding-top:8px;border-top:1px solid var(--line)}
 .no-kv small{font:500 10.5px var(--mono);color:var(--faint);margin-left:4px}
 .no-flags{margin:-2px 0 12px!important;font-size:12px!important;color:var(--faint)!important}
+/* Buy / Hold / Watch / Sell chip + checklist */
+.vd{display:inline-block;font:700 10px/1 var(--mono);letter-spacing:.5px;text-transform:uppercase;padding:3px 6px;border-radius:5px;border:1px solid currentColor;vertical-align:2px;white-space:nowrap}
+.vd-buy,.vd-hold{color:var(--good)} .vd-watch{color:var(--brass)} .vd-sell,.vd-avoid{color:var(--bad)} .vd-na{color:var(--faint)}
+.vd.big{font-size:12.5px;padding:5px 9px}
+.vd.big small{font:600 11px var(--mono);text-transform:none;letter-spacing:0;opacity:.85;margin-left:6px}
+.vd-box{margin:0 0 12px}
+.vd-btn{display:flex;align-items:center;gap:10px;border:0;background:transparent;padding:0;cursor:pointer;color:var(--ink);font:inherit}
+.vd-why{font-size:12px;color:var(--faint);text-decoration:underline;text-underline-offset:3px}
+.vd-list{display:none;margin-top:10px;border:1px solid var(--line);border-radius:10px;padding:4px 12px 8px}
+.vd-box.open .vd-list{display:block}
+.vd-g{font:600 9.5px var(--mono);color:var(--brass);text-transform:uppercase;letter-spacing:.7px;margin:10px 0 4px}
+.vd-c{display:flex;gap:9px;align-items:flex-start;padding:4px 0;font-size:13px;color:var(--ink);line-height:1.35}
+.vd-c i{font-style:normal;font-weight:700;width:14px;flex:none;text-align:center}
+.vd-c.ok i{color:var(--good)} .vd-c.no i{color:var(--bad)} .vd-c.na{color:var(--faint)} .vd-c.na i{color:var(--faint)}
+.vd-c small{display:block;font:500 11px var(--mono);color:var(--faint);margin-top:1px}
+.vd-note{margin:10px 0 0!important;font-size:11px!important;color:var(--faint)!important;line-height:1.45}
+.pf-zh .b .vd{margin-left:6px;font-size:9.5px}
 .no-name{margin:-4px 0 10px!important;color:var(--mute);font-size:13px}
 .no-name span{color:var(--faint)}
 .no-kv{display:flex;flex-wrap:wrap;gap:6px 18px;margin-bottom:12px}
@@ -1217,7 +1232,7 @@ body.day .toggle-thumb{transform:translateX(16px)}
 @media (max-width:1100px){.pf-grid{grid-template-columns:1fr}.pf-right .wrap{max-height:340px}}
 @media (max-width:700px){
   .pf-top{gap:6px}
-  .pf-acts{width:100%;display:grid;grid-template-columns:1.4fr 1fr 1fr auto;gap:6px}
+  .pf-acts{width:100%;display:grid;grid-template-columns:1.25fr 1fr auto auto;gap:6px}   /* one row: Buy / Sell, Pay in / out, ₹, ⟳ */
   .pf-acts .btn{justify-content:center;padding:0 8px}
   .pf-tg{width:100%;justify-content:center}
   .pf-sum{display:grid;grid-template-columns:1fr 1fr;overflow:visible}
@@ -1280,8 +1295,6 @@ body.day .toggle-thumb{transform:translateX(16px)}
   .wip-back.sheet .wip-box::before{content:"";display:block;width:38px;height:4px;border-radius:2px;background:var(--line);margin:-8px auto 10px}
   .wip-back.sheet .no-list{max-height:none;overflow:visible}            /* one scroll: the sheet itself */
   @keyframes noUp{from{transform:translateY(40%)}}
-  .pf-acts [data-open=in]{box-shadow:none;border-color:color-mix(in srgb, var(--good) 45%, var(--line))}   /* faint, not glowing */
-  .pf-acts [data-open=out]{box-shadow:none;border-color:color-mix(in srgb, var(--bad) 45%, var(--line))}
 }
 
 /* phone: floating Filters button, bottom-right. 50% normally, 5% while scrolling or holding a finger down > 1 s */
@@ -2044,7 +2057,7 @@ function ensureThen1() {
   const key = D.then.key || '1Y';
   ensureThen1.p = fetch('fundamentals_back_' + key + '.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : Promise.reject(r.status))
     .then(j => { THEN1 = j; THEN_BY = new Map(j.stocks.map(s => [s.sym, s])); BACK_CACHE[key] = j;
-                 const h = location.hash || '#/'; if (!BACK && (h === '#/' || h.startsWith('#/industry/'))) route(); })
+                 const h = location.hash || '#/'; if (!BACK && (h === '#/' || h === '#/portfolio' || h.startsWith('#/industry/'))) route(); })
     .catch(() => { ensureThen1.p = null; });
 }
 /* same stocks, 1 year ago vs now: medians over stocks that have the value at BOTH dates (listed < 1Y = ignored) */
@@ -2778,11 +2791,10 @@ const pfCanRefresh = () => !!(WEB && window.hniStore && window.hniStore.canRefre
 let PF_POLL = null;
 async function pfRefresh(btn) {
   if (PF_POLL) return;
-  btn.disabled = true; btn.textContent = '⟳ Starting…';
+  btn.disabled = true; btn.classList.add('spin');
   let r; try { r = await window.hniStore.refresh(); } catch (e) { r = {error: 'no connection'}; }
-  if (r.error && !r.running) { btn.disabled = false; btn.textContent = '⟳ Live prices'; return toast('Live prices: ' + r.error); }
-  toast(r.running ? 'Already running · prices update in a minute or two' : 'Started · new prices in about 2 minutes');
-  btn.textContent = '⟳ Fetching…';
+  if (r.error && !r.running) { btn.disabled = false; btn.classList.remove('spin'); return toast('Live prices: ' + r.error); }
+  toast('Live prices in about a minute');
   const was = PF.mkt && PF.mkt.asOf, t0 = Date.now();
   PF_POLL = setInterval(async () => {
     let m = null; try { m = await window.hniStore.market(); } catch (e) {}
@@ -2864,6 +2876,7 @@ const PFC = {
   val: {k:'val', label:'Value ₹', v:r => r.value, f:r => r.priced ? fmt(r.value, 0) : `<span class="na" title="No price: valued at cost">${fmt(r.value, 0)}</span>`},
   pnl: {k:'pnl', label:'P&L', tip:'Unrealised profit / loss, ₹ and %', v:r => r.priced ? r.pnlPct : null, x:r => r.priced ? fmt(r.pnl, 0) : '', f:pnlCell},
   wt: {k:'wt', label:'Wt %', tip:'Share of the holdings value', v:r => r.wt, f:r => fmt(r.wt, 1)},
+  vd: {k:'vd', label:'Status', tip:'Hold / Watch / Sell from the checklist: tap the stock name to see it', v:r => r.vd ? r.vd.pct : null, x:r => r.vd ? r.vd.label : '', f:r => r.vd ? vdChip(r.vd) : NA},
   score: Object.assign(pfKnown(C.score), {label:'Score'}), mom: Object.assign(pfKnown(C.mom), {label:'Mom.'}), trend: pfKnown(C.trend), flags: pfKnown(C.flags),
   ind: pfKnown(C.ind), name: pfKnown(Object.assign({}, C.name, {f: s => `<span class="co">${esc(s.name)}</span>`})),
   msym: Object.assign({}, C.sym, {f: r => pfSymCell(r) + `<div class="pf-co">${fmt(r.qty, 0)} @ ${fmt(r.avg, 2)}</div>`}),
@@ -3002,21 +3015,14 @@ function portfolioView() {
   const {hold, cost, unreal, worth, deposits, gain, gainPct} = P;
   PF_LAST = R;
   const tile = (k, v, sub, cls = '') => `<div class="pf-k ${cls}"><span>${k}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  if (!THEN_BY.size) ensureThen1();                       // the checklist compares PE with a year ago
   if (isPhone()) return pfPhone(P);                       // phone: Zerodha-style cards, nothing scrolls sideways
-  view.insertAdjacentHTML('beforeend', `<div class="pf-top">
-      <div class="pf-acts">
-        <button type="button" class="btn primary" data-open="trade">+ Buy / Sell</button>
-        <button type="button" class="btn" data-open="in">Pay in</button>
-        <button type="button" class="btn" data-open="out">Pay out</button>
-        <button type="button" class="btn ghost" data-open="rates" title="Brokerage and tax rates used to work out charges" aria-label="Charges settings">⚙<span class="lg"> Charges</span></button>
-        ${pfCanRefresh() ? `<button type="button" class="btn ghost" data-open="ltp" title="Fetch live prices from Angel now (admins)"${PF_POLL ? ' disabled' : ''}>${PF_POLL ? '⟳ Fetching…' : '⟳ Live prices'}</button>` : ''}
-      </div>
-    </div>${PF.err ? `<p class="pf-err">${esc(PF.err)}</p>` : ''}
+  view.insertAdjacentHTML('beforeend', `${pfActsHtml()}${PF.err ? `<p class="pf-err">${esc(PF.err)}</p>` : ''}
     ${pfNotListed(open)}
     ${R.bad ? `<p class="pf-err">A sale of ${esc(R.bad.sym)} on ${esc(R.bad.date || 'an undated day')} is larger than the shares held then. Check the dates in Transactions.</p>` : ''}
     <div class="pf-sum">
       ${tile('Net gain', arr(gain) + rs(gain, true), gainPct == null ? '' : pctTxt(gainPct, 1) + ' on money put in', 'gain')}
-      ${tile('Day gain', plain(P.day), P.day == null ? 'live prices not on yet' : `${pctTxt(P.dayPct)} · LTP ${esc((P.asOf || '').slice(11))}`)}
+      ${tile('Day gain', plain(P.day), P.day == null ? 'live prices not on yet' : pctTxt(P.dayPct))}
       ${tile('Net worth', rs(worth), 'holdings + cash')}
       ${tile('Cash', `<span class="${R.cash < 0 ? 'dn' : ''}">${rs(R.cash)}</span>`, R.cash < 0 && !R.payIn ? 'add a Pay in' : 'free to invest')}
       ${tile('Holdings', rs(hold), `${open.length} open · cost ${rs(cost)}`)}
@@ -3027,7 +3033,8 @@ function portfolioView() {
     <div class="pf-grid"><div class="pf-left"></div><div class="pf-right"></div></div>`);
   const L = $('.pf-left'), RT = $('.pf-right'), phone = isPhone();
   const hCols = phone ? [PFC.edit, PFC.msym, PFC.val, PFC.pnl]          // phone: qty sits under the symbol, so nothing scrolls sideways
-                      : [PFC.edit, PFC.sym, PFC.qty, PFC.avg, PFC.cmp, ...(P.day != null ? [PFC.day] : []), PFC.val, PFC.pnl, PFC.wt, PFC.score, PFC.mom, PFC.trend, PFC.flags];
+                      : [PFC.edit, PFC.sym, PFC.vd, PFC.qty, PFC.avg, PFC.cmp, ...(P.day != null ? [PFC.day] : []), PFC.val, PFC.pnl, PFC.wt, PFC.score, PFC.mom, PFC.trend, PFC.flags];
+  open.forEach(r => { r.vd = verdict(r.sym, P); });
   pfPanel(L, 'Holdings', open.length, makeTable('pf', hCols, open, {sortKey:'val', sortDir:-1, search:!phone || open.length > 6, noIndex:true, csv:() => 'Portfolio_holdings'}));
   if (!open.length) L.querySelector('tbody').innerHTML = `<tr><td class="l na" colspan="13">No open holdings. Start with <b>Pay in</b> (your opening cash), then <b>+ Buy / Sell</b> — or tap the bag next to any industry name on the other tabs.</td></tr>`;
   pfNewsPanel(RT, open.map(r => r.sym));
@@ -3046,18 +3053,20 @@ function portfolioView() {
 /* the action buttons and "Delete all" (desktop and phone) */
 function pfWireTop() {
   view.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => {
-    const k = b.dataset.open; k === 'trade' ? pfTradeForm({}) : k === 'rates' ? pfRatesForm() : k === 'ltp' ? pfRefresh(b) : pfCashForm({t: k});
+    const k = b.dataset.open; k === 'trade' ? pfTradeForm({}) : k === 'rates' ? pfRatesForm() : k === 'ltp' ? pfRefresh(b) : pfCashForm({t: 'in'});   // cash: Pay in / Pay out picked inside
   }));
   const wipe = $('#pfWipe');
   if (wipe) wipe.addEventListener('click', () => typeConfirm('Delete all', `Every holding, closed position, pay in / out and trade (${PF.txns.length} entries) is deleted. Your charge rates stay.`,
     async () => { PF.txns = []; await pfSave(); route(); }));
 }
+/* icons: ₹ on a tax document (charges & taxes), circular arrow (refresh live prices) */
+const IC_TAX = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2.8h8.5L19 7.3v13.9H6z"/><path d="M14.3 2.8v4.6H19"/><path d="M9.3 10.6h6M9.3 13h6M12.6 10.6c1.9 0 1.9 4.8 0 4.8H9.6l4.6 3.9"/></svg>';
+const IC_REF = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.35-5.65"/><path d="M20 4v4.6h-4.6"/></svg>';
 const pfActsHtml = () => `<div class="pf-top"><div class="pf-acts">
     <button type="button" class="btn primary" data-open="trade">+ Buy / Sell</button>
-    <button type="button" class="btn" data-open="in">Pay in</button>
-    <button type="button" class="btn" data-open="out">Pay out</button>
-    <button type="button" class="btn ghost" data-open="rates" title="Brokerage and tax rates used to work out charges" aria-label="Charges settings">⚙<span class="lg"> Charges</span></button>
-    ${pfCanRefresh() ? `<button type="button" class="btn ghost" data-open="ltp" title="Fetch live prices from Angel now (admins)"${PF_POLL ? ' disabled' : ''}>${PF_POLL ? '⟳ Fetching…' : '⟳ Live prices'}</button>` : ''}
+    <button type="button" class="btn" data-open="cash">Pay in / out</button>
+    <button type="button" class="btn ghost ico" data-open="rates" title="Charges &amp; taxes on each trade" aria-label="Charges and taxes">${IC_TAX}</button>
+    ${pfCanRefresh() ? `<button type="button" class="btn ghost ico${PF_POLL ? ' spin' : ''}" data-open="ltp" title="Refresh live prices (Angel)" aria-label="Refresh live prices"${PF_POLL ? ' disabled' : ''}>${IC_REF}</button>` : ''}
   </div></div>`;
 /* phone portfolio, laid out like Zerodha's Holdings: one summary card, then a card per stock.
    Tapping a stock opens a soft sheet with its value / momentum details, your holding and its news. */
@@ -3072,7 +3081,7 @@ function pfPhone(P) {
     <section class="pf-zc">
       <div class="pf-zr"><div><span>Invested</span><b>${f2(inv)}</b></div><div class="r"><span>Current</span><b>${f2(cur)}</b></div></div>
       <div class="pf-zl"><span>P&amp;L</span><b>${plain(pnl, 2)}<small>${inv ? pctTxt(pnl / inv * 100) : ''}</small></b></div>
-      <div class="pf-zl"><span>Day's P&amp;L</span><b>${P.day == null ? '<small>live prices not on yet</small>' : `${plain(P.day, 2)}<small>${pctTxt(P.dayPct)} · ${esc((P.asOf || '').slice(11))}</small>`}</b></div>
+      <div class="pf-zl"><span>Day's P&amp;L</span><b>${P.day == null ? '<small>live prices not on yet</small>' : `${plain(P.day, 2)}<small>${pctTxt(P.dayPct)}</small>`}</b></div>
       <details class="pf-cash"${cashOpen ? ' open' : ''}>
         <summary><span>Cash <b>${rs(R.cash)}</b></span><span>Net gain <b>${arr(P.gain)}${rs(P.gain, true)}</b></span></summary>
         <div class="pf-cg">
@@ -3095,7 +3104,7 @@ function pfPhone(P) {
     const c = r.priced ? (r.pnl >= 0 ? 'up' : 'dn') : '';
     return `<div class="pf-zh" data-news="${esc(r.sym)}" role="button" tabindex="0">
       <div class="a"><span>Qty. ${fmt(r.qty, 0)} <i>•</i> Avg. ${f2(r.avg)}</span><span class="${c}">${r.priced ? pctTxt(r.pnlPct) : ''}</span></div>
-      <div class="b"><b>${esc(r.sym)}${nl.has(r.sym) ? ' <em class="dn">⚠</em>' : ''}</b><b class="${c}">${r.priced ? (r.pnl > 0 ? '+' : r.pnl < 0 ? '−' : '') + f2(Math.abs(r.pnl)) : '–'}</b></div>
+      <div class="b"><b>${esc(r.sym)}${nl.has(r.sym) ? ' <em class="dn">⚠</em>' : ''} ${vdChip(verdict(r.sym, P))}</b><b class="${c}">${r.priced ? (r.pnl > 0 ? '+' : r.pnl < 0 ? '−' : '') + f2(Math.abs(r.pnl)) : '–'}</b></div>
       <div class="a"><span>Invested ${f2(r.qty * r.avg)}</span><span>LTP ${r.ltp == null ? '–' : f2(r.ltp)}${r.dayPct != null ? ` <em class="${r.day >= 0 ? 'up' : 'dn'}">(${pctTxt(r.dayPct)})</em>` : ''}</span></div>
     </div>`; }).join('')
     : '<p class="na pf-zempty">No open holdings. Start with <b>Pay in</b>, then <b>+ Buy / Sell</b>, or tap the bag next to any industry name on the other tabs.</p>';
@@ -3143,6 +3152,70 @@ document.addEventListener('click', e => {
       async () => { PF.txns = PF.txns.filter(t => !ids.has(t.id)); await pfSave(); route(); });
   }
 });
+/* ---------- Buy / Hold / Sell: a checklist of plain yes / no tests per stock ----------
+   Share of tests passed → ≥ 75% Buy (Hold if you own it) · 50–75% Watch · < 50% Sell if you own it (Avoid if not).
+   A test with no data for that stock (or one only for stocks you own) is skipped, not counted either way. */
+const VD_LIM = {grahamOver: 1, peVsBuy: 1.5, peVsInd: 1.5, minScore: 40, hot: 95, minMom: 30, min3m: -15, maxTrend: .25,
+                maxDe: 1, minQ: 12, minProD: -2, maxWt: 20, betterBy: 20, stopLoss: -20};
+/* qty-weighted PE / score saved with the buys of the shares you still hold (saved from now on, for every new buy) */
+function pfBuyStat(h, k) {
+  if (!h || !PF.txns) return null;
+  const ids = new Set(h.ids || []); let q = 0, t = 0;
+  PF.txns.forEach(x => { if (ids.has(x.id) && x.t === 'buy' && x[k] != null) { q += x.qty; t += x.qty * x[k]; } });
+  return q ? t / q : null;
+}
+function verdict(sym, P) {
+  const s = TODAY.get(sym);
+  if (!s) return null;                                     // not in the three lists: no fundamentals to judge
+  const h = P ? P.open.find(r => r.sym === sym) : null, held = !!h;
+  const px = pfLtp(sym) != null ? pfLtp(sym) : s.cmp, ipe = s.ind && industries[s.ind] ? indPE(s.ind) : null;
+  const t1 = THEN_BY.get(sym), buyPe = pfBuyStat(h, 'pe'), buySc = pfBuyStat(h, 'sc');
+  const peRef = buyPe || (t1 && t1.pe > 0 ? t1.pe : null), flags = trapReasons(s), q = qual(s), proD = trD(s, 'proD');
+  const L = VD_LIM, f1 = v => fmt(v, 1), f0 = v => fmt(v, 0);
+  const expensive = (s.graham && px > s.graham) || (s.pe > 0 && ipe && s.pe > L.peVsInd * ipe) || (s.pe > 0 && peRef && s.pe > L.peVsBuy * peRef);
+  const worse = flags.length > 0 || (s.tr && s.tr.pass / s.tr.of <= L.maxTrend) || (!s.fin && s.de > L.maxDe) || (q != null && q < L.minQ);
+  const peers = s.ind && industries[s.ind] ? industries[s.ind].stocks.filter(x => x.score != null && x.sym !== sym) : [];
+  const best = peers.reduce((b, x) => !b || x.score > b.score ? x : b, null);
+  const C = [], add = (g, label, pass, why) => C.push({g, label, pass, why});
+  // 1. valuation
+  add('Valuation', 'Price at or below the Graham number', s.graham ? px <= s.graham : null,
+      s.graham ? `₹${fmt(px, 0)} vs Graham ₹${fmt(s.graham, 0)}` : 'no Graham number (loss or negative book)');
+  add('Valuation', `PE under ${L.peVsBuy}× ${buyPe ? 'the PE you bought at' : 'its PE a year ago'}`, s.pe > 0 && peRef ? s.pe <= L.peVsBuy * peRef : null,
+      s.pe > 0 && peRef ? `PE ${f1(s.pe)} vs ${f1(peRef)} ${buyPe ? 'at buy' : '1Y ago'}` : THEN_BY.size ? 'no PE then or now' : 'loading 1Y data…');
+  add('Valuation', `PE under ${L.peVsInd}× its industry`, s.pe > 0 && ipe ? s.pe <= L.peVsInd * ipe : null, s.pe > 0 && ipe ? `PE ${f1(s.pe)} vs industry ${f1(ipe)}` : 'no PE');
+  add('Valuation', `Value score ${L.minScore} or more`, s.score != null ? s.score >= L.minScore : null,
+      s.score != null ? `score ${f0(s.score)}${buySc != null ? ` (was ${f0(buySc)} at buy)` : ''}` : '');
+  // 2. momentum
+  add('Momentum', `Not overheated (momentum under ${L.hot}, or ${L.hot}+ but still cheap)`, s.momS != null ? s.momS < L.hot || !expensive : null,
+      s.momS != null ? `momentum ${f0(s.momS)}${s.momS >= L.hot ? (expensive ? ' and expensive: sell into strength' : ': strong, consider trimming') : ''}` : '');
+  const r3 = s.mom && ok(s.mom[0]) ? s.mom[0] : null;
+  add('Momentum', `Momentum holding up (${L.minMom}+, 3M return above ${L.min3m}%)`, s.momS != null ? s.momS >= L.minMom && !(r3 != null && r3 < L.min3m) : null,
+      s.momS != null ? `momentum ${f0(s.momS)}${r3 != null ? ` · 3M ${pctTxt(r3, 1)}` : ''}` : '');
+  // 3. business
+  add('Business', 'No value-trap flags', flags.length === 0, flags.length ? flags.join(' · ') : 'clean');
+  add('Business', 'Fundamentals trend above 1/4', s.tr ? s.tr.pass / s.tr.of > L.maxTrend : null, s.tr ? `${s.tr.pass}/${s.tr.of} improving` : '');
+  add('Business', `Debt ÷ equity ${L.maxDe} or less`, s.fin || s.de == null ? null : s.de <= L.maxDe, s.fin ? 'not used for financials' : s.de != null ? `D/E ${fmt(s.de, 2)}` : '');
+  add('Business', `${s.fin ? 'ROE' : 'ROCE'} ${L.minQ}% or more`, q != null ? q >= L.minQ : null, q != null ? `${s.fin ? 'ROE' : 'ROCE'} ${f1(q)}%` : '');
+  add('Business', `Promoter holding steady (not down over ${-L.minProD} pp in a year)`, proD != null ? proD >= L.minProD : null, proD != null ? `${proD > 0 ? '+' : ''}${fmt(proD, 2)} pp` : '');
+  // 4. portfolio
+  add('Portfolio', `Position under ${L.maxWt}% of your holdings`, held && h.wt != null ? h.wt <= L.maxWt : null, held ? `${f1(h.wt)}% of holdings` : '');
+  add('Portfolio', `No clearly better stock in ${esc(s.ind || 'its industry')}`, best && s.score != null ? best.score - s.score < L.betterBy : null,
+      best && s.score != null ? (best.score - s.score >= L.betterBy ? `${best.sym} scores ${f0(best.score)} vs ${f0(s.score)}` : `best peer ${best.sym} ${f0(best.score)}`) : '');
+  add('Portfolio', `No stop-loss (down ${-L.stopLoss}%+ and the business got worse)`, held && h.priced ? !(h.pnlPct <= L.stopLoss && worse) : null,
+      held && h.priced ? `${pctTxt(h.pnlPct, 1)} from your average${worse ? ', business signs weak' : ''}` : '');
+  add('Portfolio', "Still on NSE's list", held && PF.mkt && PF.mkt.notListed ? !PF.mkt.notListed.includes(sym) : null, '');
+  const used = C.filter(c => c.pass != null), pass = used.filter(c => c.pass).length, pct = used.length ? pass / used.length * 100 : null;
+  const st = pct == null ? 'na' : pct >= 75 ? (held ? 'hold' : 'buy') : pct >= 50 ? 'watch' : (held ? 'sell' : 'avoid');
+  return {checks: C, pass, n: used.length, pct, st, held, label: {buy: 'Buy', hold: 'Hold', watch: 'Watch', sell: 'Sell', avoid: 'Avoid', na: '–'}[st]};
+}
+const vdChip = (v, big) => !v ? '' : `<span class="vd vd-${v.st}${big ? ' big' : ''}" title="${v.pass} of ${v.n} checks pass">${v.label}${big ? ` <small>${v.pass}/${v.n} · ${fmt(v.pct, 0)}%</small>` : ''}</span>`;
+function vdList(v) {
+  if (!v) return '';
+  let g0 = '';
+  return v.checks.map(c => (c.g !== g0 ? `<div class="vd-g">${g0 = c.g}</div>` : '')
+    + `<div class="vd-c ${c.pass == null ? 'na' : c.pass ? 'ok' : 'no'}"><i>${c.pass == null ? '–' : c.pass ? '✓' : '✗'}</i><span>${c.label}${c.why ? `<small>${esc(c.why)}</small>` : ''}</span></div>`).join('')
+    + `<p class="vd-note">≥ 75% pass → ${v.held ? 'Hold' : 'Buy'} · 50–75% → Watch · under 50% → ${v.held ? 'Sell' : 'Avoid'}. “–” = no data or not applicable, not counted.</p>`;
+}
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('pf-zh')) newsOverlay(e.target.dataset.news); });
 /* stock name (any table, news panel) → light overlay: its last-7-days news, key numbers, Buy / Sell, Screener.in link */
 document.addEventListener('click', e => {
@@ -3154,10 +3227,13 @@ document.addEventListener('click', e => {
 function newsOverlay(sym) {
   const s = TODAY.get(sym) || {sym, name: sym};
   const k = (l, v) => v == null || v === '' ? '' : `<div><span>${l}</span><b>${v}</b></div>`;
-  const h = PF.txns && PF_HELD.has(sym) ? pfSummary(PF.txns).open.find(r => r.sym === sym) : null;   // your holding, if any
+  const PS = PF.txns ? pfSummary(PF.txns) : null;
+  const h = PS && PF_HELD.has(sym) ? PS.open.find(r => r.sym === sym) : null;   // your holding, if any
+  if (!THEN_BY.size) ensureThen1();                       // "PE a year ago" test needs the 1Y snapshot
   const ret = i => s.mom && ok(s.mom[i]) ? pctTxt(s.mom[i], 1) : null, tr = trapReasons(s);
   const grp = (t, body) => body.replace(/\s/g, '') ? `<div class="no-g">${t}</div><div class="no-kv">${body}</div>` : '';
   const w = modal(esc(sym), `<p class="no-name">${esc(s.name || '')}${s.ind ? ` · <span>${esc(s.ind)}</span>` : ''}</p>
+    <div class="vd-box"></div>
     ${h ? grp('Your holding', `${k('Qty', fmt(h.qty, 0))}${k('Avg ₹', fmt(h.avg, 2))}${k('LTP ₹', h.ltp == null ? null : fmt(h.ltp, 2))}
       ${k('P&amp;L', h.priced ? plain(h.pnl, 0) + ' <small>' + pctTxt(h.pnlPct, 1) + '</small>' : null)}${k('Day', h.day == null ? null : plain(h.day, 0) + ' <small>' + pctTxt(h.dayPct) + '</small>')}`)
       : grp('Price', k('LTP ₹', pfLtp(sym) != null ? fmt(pfLtp(sym), 2) : null))}
@@ -3169,6 +3245,12 @@ function newsOverlay(sym) {
     <div class="no-acts"><button type="button" class="btn primary" data-nb>Buy / Sell</button>${s.url ? `<a class="btn" href="${esc(s.url)}" target="_blank" rel="noopener">Open on Screener.in ↗</a>` : ''}</div>
     <div class="no-h">News · last 7 days</div><div class="no-list"><p class="na">Loading…</p></div>`, {noFocus: true, cls: 'no-box', sheet: true});
   $('[data-nb]', w).addEventListener('click', async () => { w._close(); await pfLoad(); pfTradeForm({sym}); });
+  const vbox = $('.vd-box', w);
+  const paintVd = () => { const v = verdict(sym, PS), open = vbox.classList.contains('open');
+    vbox.innerHTML = v ? `<button type="button" class="vd-btn" aria-expanded="${open}">${vdChip(v, true)}<span class="vd-why">${open ? 'Hide' : 'Why?'} checklist</span></button><div class="vd-list">${vdList(v)}</div>` : ''; };
+  vbox.addEventListener('click', e => { if (e.target.closest('.vd-btn')) { vbox.classList.toggle('open'); paintVd(); } });
+  paintVd();
+  if (ensureThen1.p) ensureThen1.p.then(() => { if (w.isConnected) paintVd(); });
   loadNewsMap().then(N => {
     if (!w.isConnected) return;
     const items = (N[sym] || []);
@@ -3307,6 +3389,10 @@ function pfTradeForm(x) {
     if (t === 'sell' && qty > held() + 1e-9) return err(`You hold ${fmt(held(), 0)} ${sym}; you can't sell ${fmt(qty, 0)}.`);
     if (!edit && PF.txns.length >= 3000) return err('Transaction limit reached (3000).');
     const rec = {id: x.id || pfId(), t, sym, qty, px, ch: f.ch.value === '' ? pfCharges(t, qty, px) : +f.ch.value, date: f.date.value || ''};
+    if (t === 'buy') {                                     // PE and value score on the day you bought (kept when you edit the trade later)
+      const s0 = TODAY.get(sym), pe = x.pe != null ? x.pe : s0 && s0.pe > 0 ? +(+s0.pe).toFixed(2) : null, sc = x.sc != null ? x.sc : s0 && s0.score != null ? Math.round(s0.score) : null;
+      if (pe != null) rec.pe = pe; if (sc != null) rec.sc = sc;
+    }
     if (!TODAY.has(sym) && f.nm.value.trim()) rec.name = f.nm.value.trim().slice(0, 80);
     const next = edit ? PF.txns.map(o => o === x ? rec : o) : PF.txns.concat(rec);
     const bad = pfReplay(next).bad;                         // a sale can't exceed what was held on its date, now or after this change
@@ -3553,6 +3639,9 @@ function backInfo() {                                    // small popover behind
     + (bt ? `<span class="bt">This tab: <b>${bt.lvl}</b>. ${bt.why} <a href="#/method">Details</a></span>` : '');
 }
 function route() {
+  const h0 = location.hash || '#/';
+  if (h0 === '#/portfolio' && GF.back) { PF_RESUME = GF.backP; return setHistorical(false, null, true); }   // Portfolio: today only
+  if (h0 !== '#/portfolio' && PF_RESUME && !GF.back) { const k = PF_RESUME; PF_RESUME = null; return setHistorical(true, k, true); }   // back on
   setMode();
   C.score.label = NOPRICE ? 'Quality score (then)' : 'Value score';
   C.roce.label = C.q.label = SAME && S.some(s => s.roceSrc === 'ta') ? 'ROCE % (proxy)' : 'ROCE %';   // EBIT ÷ total assets until Borrowings are scraped
@@ -3601,9 +3690,14 @@ bsel.value = '1Y';
 const backLabel = k => ((D.backs || []).find(b => b.key === k) || {label:k}).label;
 bchip.title = 'Show the companies as they stood on a past date (same-method engine) and how each did since'
   + ((D.backs || []).length ? ': ' + D.backs.map(b => b.label + ' = ' + b.date).join(', ') : '');
-function setHistorical(on, key) {
+/* Historical is remembered for this browser session (closing the tab forgets it). Portfolio is about today, so
+   opening it switches Historical off for the moment and leaving it puts it back. temp = that automatic switch. */
+const HS_KEY = 'hni_hist';
+let PF_RESUME = null;
+function setHistorical(on, key, temp) {
   key = key || GF.backP;
   GF.back = !!on; GF.backP = key; hist.checked = GF.back; bsel.value = key; if (bsel._paint) bsel._paint();
+  if (!temp) { PF_RESUME = null; try { sessionStorage.setItem(HS_KEY, JSON.stringify({on: GF.back, key})); } catch (e) {} }
   if (!GF.back) { route(); return; }
   if (BACK_CACHE[key]) { D.then = BACK_CACHE[key]; route(); return; }
   bchip.classList.add('loading');
@@ -3724,7 +3818,10 @@ if (WEB) {                                                  // website: back but
 }
 $('#weeklyBtn').addEventListener('click', () => modal('Weekly updates', `<p>Work in progress. Soon you'll get your portfolio summary every week on Telegram.</p>`));
 window.addEventListener('hashchange', route);
-route();
+(() => {                                                  // this session's last Historical setting
+  let hs = null; try { hs = JSON.parse(sessionStorage.getItem(HS_KEY) || 'null'); } catch (e) {}
+  if (hs && (hs.on || (hs.key && hs.key !== GF.backP))) setHistorical(hs.on, hs.key, true); else route();
+})();
 </script>
 <script>
 /* offline cache (sw.js): pages open at once from the phone's cache while sw.js quietly downloads the fresh copy.
