@@ -192,10 +192,6 @@ jobs:
           git config --global user.name  "github-actions"
           git config --global user.email "actions@github.com"
 
-          git stash   || true
-          git pull origin main --rebase || true
-          git stash pop || true
-
           # public/ = index.html + fundamentals.html (folder path never fails if a file is missing)
           git add \
             nifty500_valuation.csv \
@@ -208,8 +204,27 @@ jobs:
           # dated CSVs now live inside old_csv.zip → remove any loose ones from git
           git add -u -- '*.csv' || true
 
-          git diff --cached --quiet || git commit -m "Auto update (${{ steps.mode.outputs.mode }}) [skip ci]"
-          git push origin main || true
+          git diff --cached --quiet && { echo "Nothing new to commit"; exit 0; }
+          git commit -m "Auto update (${{ steps.mode.outputs.mode }}) [skip ci]"
+
+          # Commit FIRST, then rebase onto whatever was pushed meanwhile (e.g. files you uploaded during the run).
+          # -X theirs = in a clash, this run's freshly built files win. A rebase either finishes cleanly or is
+          # aborted: it can never leave "<<<<<<<" conflict markers in the files (the old stash / pop could, and did).
+          for i in 1 2 3; do
+            if git pull --rebase -X theirs origin main && git push origin main; then echo "Pushed"; exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((i * 5))
+          done
+          echo "::warning::Could not push this run's data (main kept changing). The site still deploys from this run."
+
+      # Safety net: never publish a page with merge leftovers in it
+      - name: Check public/ for conflict markers
+        if: steps.mode.outputs.mode != 'prices'
+        run: |
+          if grep -rlE '^(<<<<<<<|=======|>>>>>>>)( |$)' public/ ; then
+            echo "::error::Conflict markers found in the files above, not deploying"; exit 1
+          fi
+          echo "public/ is clean"
 
       # ───────────────────────────────────────────
       # 5. FIREBASE DEPLOY (all modes, always silent)
