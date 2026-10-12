@@ -1079,11 +1079,9 @@ body.day .toggle-thumb{transform:translateX(16px)}
 .pf-k small{font-size:11px;color:var(--faint);white-space:nowrap}
 /* Net gain: green tint + soft glow when up, red when down */
 .pf-k.gain{border-radius:9px 0 0 9px}
-.pf-k.gain.pos{background:var(--goodbg);box-shadow:inset 0 0 0 1px var(--good),0 0 16px -6px var(--good)}
-.pf-k.gain.neg{background:var(--badbg);box-shadow:inset 0 0 0 1px var(--bad),0 0 16px -6px var(--bad)}
-.pf-k.gain b{font-size:16.5px}
-.pf-k.gain.pos b,.pf-k.gain.pos small{color:var(--good)}
-.pf-k.gain.neg b,.pf-k.gain.neg small{color:var(--bad)}
+.pf-k.gain b{font-size:16.5px}                   /* Net gain: no tint, plain text; only the ▲ / ▼ is coloured */
+.pf-ar{font-style:normal;font-size:.68em;margin-right:5px;vertical-align:1px}
+.pf-ar.up{color:var(--good)} .pf-ar.dn{color:var(--bad)}
 .pf-grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(0,1fr);gap:16px;align-items:start}
 .pf-left,.pf-right{display:flex;flex-direction:column;gap:14px;min-width:0}
 .pf-panel .tbar{margin-bottom:6px;gap:10px}
@@ -1129,7 +1127,6 @@ body.day .toggle-thumb{transform:translateX(16px)}
   .pf-acts [data-open=out]{border-color:var(--bad);box-shadow:0 5px 14px -7px var(--bad)}
 }
 /* Day gain tile */
-.pf-k.day.pos b{color:var(--good)} .pf-k.day.neg b{color:var(--bad)}
 /* news panel */
 .pf-news .pf-h{margin-bottom:6px}
 .pf-nl{max-height:max(160px,calc(32vh - 60px));overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
@@ -1193,6 +1190,13 @@ body.day .toggle-thumb{transform:translateX(16px)}
 .wip-x:hover{color:var(--ink);background:var(--hover)}
 /* stock overlay (tap a symbol) */
 .wip-box.no-box{width:min(560px,100%)}
+/* stock sheet: soft dim, fades in; on phones it slides up from the bottom */
+.wip-back.sheet{background:rgba(0,0,0,.32);animation:noFade .18s ease-out}
+.wip-back.sheet .wip-box{animation:noRise .2s ease-out}
+@keyframes noFade{from{opacity:0}} @keyframes noRise{from{transform:translateY(14px);opacity:.6}}
+.no-g{font:600 9.5px var(--mono);color:var(--brass);text-transform:uppercase;letter-spacing:.7px;margin:4px 0 6px;padding-top:8px;border-top:1px solid var(--line)}
+.no-kv small{font:500 10.5px var(--mono);color:var(--faint);margin-left:4px}
+.no-flags{margin:-2px 0 12px!important;font-size:12px!important;color:var(--faint)!important}
 .no-name{margin:-4px 0 10px!important;color:var(--mute);font-size:13px}
 .no-name span{color:var(--faint)}
 .no-kv{display:flex;flex-wrap:wrap;gap:6px 18px;margin-bottom:12px}
@@ -1223,6 +1227,61 @@ body.day .toggle-thumb{transform:translateX(16px)}
   .pf-left .wrap{max-height:60vh}.pf-right .wrap{max-height:45vh}
   .pf-co{max-width:130px}
   .wip-back{align-items:flex-start;padding-top:40px}
+}
+
+/* phone portfolio (pfPhone): Zerodha-style summary card + one card per stock; nothing wider than the screen */
+.pf-zc{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:14px 16px 4px;margin:0 0 14px}
+.pf-zr{display:flex;justify-content:space-between;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.pf-zr div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.pf-zr .r{text-align:right}
+.pf-zr span,.pf-zl > span{font-size:12.5px;color:var(--faint)}
+.pf-zr b{font:600 19px var(--mono);color:var(--ink)}
+.pf-zl{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:10px 0 2px}
+.pf-zl b{font:600 15px var(--mono);color:var(--ink);text-align:right}
+.pf-zl small{font:500 11px var(--mono);color:var(--faint);margin-left:7px}
+.pf-cash{margin:10px -16px 0;border-top:1px solid var(--line);background:color-mix(in srgb, var(--good) 5%, transparent);border-radius:0 0 11px 11px}
+.pf-cash summary{list-style:none;display:flex;justify-content:space-between;gap:10px;padding:9px 16px;cursor:pointer;font-size:12px;color:var(--faint)}
+.pf-cash summary::-webkit-details-marker{display:none}
+.pf-cash summary > span:first-child::before{content:"▸";display:inline-block;width:12px;transition:transform .15s}
+.pf-cash[open] summary > span:first-child::before{transform:rotate(90deg)}
+.pf-cash summary b{font:600 12px var(--mono);color:var(--mute);margin-left:4px}
+.pf-cg{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;padding:4px 16px 12px}
+.pf-cg div{display:flex;flex-direction:column;gap:1px;min-width:0}
+.pf-cg span{font:600 9.5px var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.6px}
+.pf-cg b{font:600 13.5px var(--mono);color:var(--ink)}
+.pf-cg small{font-size:10.5px;color:var(--faint)}
+.pf-zs{margin:0 0 16px}
+.pf-zs > .pf-h{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.pf-zs > .pf-h .pf-rm.all{margin:0 0 0 auto}
+.pf-zlist{border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden}
+.pf-zh,.pf-zt{padding:11px 14px;border-bottom:1px solid var(--line)}
+.pf-zh:last-child,.pf-zt:last-child{border-bottom:0}
+.pf-zh{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.pf-zh:active{background:var(--hover)}
+.pf-zh .a,.pf-zh .b,.pf-zt .a,.pf-zt .b{display:flex;justify-content:space-between;align-items:center;gap:10px;min-width:0}
+.pf-zh .a{font:500 12px var(--mono);color:var(--faint)}
+.pf-zh .a i{font-style:normal;opacity:.6;margin:0 3px}
+.pf-zh .a em{font-style:normal}
+.pf-zh .b{margin:5px 0;font-size:15.5px}
+.pf-zh .b b{font:600 15px var(--sans);color:var(--ink)}
+.pf-zh .b b:last-child{font-family:var(--mono)}
+.pf-zh .up,.pf-zh .up b{color:var(--good)} .pf-zh .dn,.pf-zh .dn b{color:var(--bad)}
+.pf-zh .b b.up{color:var(--good)} .pf-zh .b b.dn{color:var(--bad)}
+.pf-zh em.dn{font-style:normal;font-size:12px}
+.pf-zt .a{font:500 12px var(--mono);color:var(--faint)}
+.pf-zt .b{margin-top:5px;font-size:13.5px;color:var(--mute)}
+.pf-zt .b b{color:var(--ink)}
+.pf-zt .b small{color:var(--faint)}
+.pf-zt .pf-acts2,.pf-zt .pf-rm,.pf-zt .pf-lock{flex:none}
+.pf-zempty{padding:14px;margin:0;font-size:13px}
+@media (max-width:700px){
+  .wip-back.sheet{align-items:flex-end;padding:0}
+  .wip-back.sheet .wip-box{width:100%;max-height:88vh;border-radius:16px 16px 0 0;border-bottom:0;padding:18px 16px 22px;animation:noUp .24s cubic-bezier(.2,.8,.2,1)}
+  .wip-back.sheet .wip-box::before{content:"";display:block;width:38px;height:4px;border-radius:2px;background:var(--line);margin:-8px auto 10px}
+  .wip-back.sheet .no-list{max-height:none;overflow:visible}            /* one scroll: the sheet itself */
+  @keyframes noUp{from{transform:translateY(40%)}}
+  .pf-acts [data-open=in]{box-shadow:none;border-color:color-mix(in srgb, var(--good) 45%, var(--line))}   /* faint, not glowing */
+  .pf-acts [data-open=out]{box-shadow:none;border-color:color-mix(in srgb, var(--bad) 45%, var(--line))}
 }
 
 /* phone: floating Filters button, bottom-right. 50% normally, 5% while scrolling or holding a finger down > 1 s */
@@ -2788,6 +2847,10 @@ const TODAY = new Map(D.stocks.map(s => [s.sym, s]));
 const pfKnown = c => Object.assign({}, c, {v: r => r.known ? c.v(r) : null, f: r => r.known ? c.f(r) : NA});   // not in the lists → blank
 const rs = (v, plus) => (v < 0 ? '−' : plus && v > 0 ? '+' : '') + '₹' + fmt(Math.abs(v), 0);   // −₹6, not ₹-6
 const signed = (v, d = 0) => v == null ? NA : `<span class="${v >= 0 ? 'up' : 'dn'}">${v > 0 ? '+' : ''}${fmt(v, d)}</span>`;
+/* summary numbers: plain text colour, direction shown only by a small green ▲ or red ▼ */
+const arr = v => v == null || !v ? '' : `<i class="pf-ar ${v > 0 ? 'up' : 'dn'}">${v > 0 ? '▲' : '▼'}</i>`;
+const plain = (v, d = 0) => v == null ? '–' : `${arr(v)}${v > 0 ? '+' : v < 0 ? '−' : ''}${fmt(Math.abs(v), d)}`;
+const pctTxt = (v, d = 2) => v == null ? '' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${fmt(Math.abs(v), d)}%`;
 const pfSymCell = r => r.known ? symCell(r) : `<b>${esc(r.sym)}</b> <span class="na" title="Not in NIFTY 500 / Smallcap 500 / Microcap 250, so no price or scores (valued at cost)">not in list</span>`;
 const pnlCell = r => r.priced ? `${signed(r.pnl)} <small class="${r.pnl >= 0 ? 'up' : 'dn'}">${r.pnlPct > 0 ? '+' : ''}${fmt(r.pnlPct, 1)}%</small>` : NA;
 const PFC = {
@@ -2939,6 +3002,7 @@ function portfolioView() {
   const {hold, cost, unreal, worth, deposits, gain, gainPct} = P;
   PF_LAST = R;
   const tile = (k, v, sub, cls = '') => `<div class="pf-k ${cls}"><span>${k}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  if (isPhone()) return pfPhone(P);                       // phone: Zerodha-style cards, nothing scrolls sideways
   view.insertAdjacentHTML('beforeend', `<div class="pf-top">
       <div class="pf-acts">
         <button type="button" class="btn primary" data-open="trade">+ Buy / Sell</button>
@@ -2951,13 +3015,13 @@ function portfolioView() {
     ${pfNotListed(open)}
     ${R.bad ? `<p class="pf-err">A sale of ${esc(R.bad.sym)} on ${esc(R.bad.date || 'an undated day')} is larger than the shares held then. Check the dates in Transactions.</p>` : ''}
     <div class="pf-sum">
-      ${tile('Net gain', rs(gain, true), gainPct == null ? '' : (gainPct > 0 ? '+' : gainPct < 0 ? '−' : '') + fmt(Math.abs(gainPct), 1) + '% on money put in', 'gain ' + (gain >= 0 ? 'pos' : 'neg'))}
-      ${tile('Day gain', P.day == null ? '–' : signed(P.day), P.day == null ? 'live prices not on yet' : `${P.dayPct >= 0 ? '+' : '−'}${fmt(Math.abs(P.dayPct), 2)}% · LTP ${esc((P.asOf || '').slice(11))}`, P.day == null ? '' : 'day ' + (P.day >= 0 ? 'pos' : 'neg'))}
+      ${tile('Net gain', arr(gain) + rs(gain, true), gainPct == null ? '' : pctTxt(gainPct, 1) + ' on money put in', 'gain')}
+      ${tile('Day gain', plain(P.day), P.day == null ? 'live prices not on yet' : `${pctTxt(P.dayPct)} · LTP ${esc((P.asOf || '').slice(11))}`)}
       ${tile('Net worth', rs(worth), 'holdings + cash')}
       ${tile('Cash', `<span class="${R.cash < 0 ? 'dn' : ''}">${rs(R.cash)}</span>`, R.cash < 0 && !R.payIn ? 'add a Pay in' : 'free to invest')}
       ${tile('Holdings', rs(hold), `${open.length} open · cost ${rs(cost)}`)}
-      ${tile('Unrealised', signed(unreal), cost ? `${unreal >= 0 ? '+' : '−'}${fmt(Math.abs(unreal / cost * 100), 1)}% on cost` : 'open positions')}
-      ${tile('Realised', signed(R.realized - R.charges), `after ₹${fmt(R.charges, 0)} charges`)}
+      ${tile('Unrealised', plain(unreal), cost ? `${pctTxt(unreal / cost * 100, 1)} on cost` : 'open positions')}
+      ${tile('Realised', plain(R.realized - R.charges), `after ₹${fmt(R.charges, 0)} charges`)}
       ${tile('Money in', rs(deposits), `in ${rs(R.payIn)} · out ${rs(R.payOut)}`)}
     </div>
     <div class="pf-grid"><div class="pf-left"></div><div class="pf-right"></div></div>`);
@@ -2977,12 +3041,81 @@ function portfolioView() {
   const tb = RT.querySelectorAll('.tbar')[1];
   if (tb && ledRows.length) tb.querySelector('.pf-h').insertAdjacentHTML('afterend', '<button type="button" class="pf-rm all" id="pfWipe" title="Delete every entry in your portfolio">Delete all</button>');
   if (!ledRows.length) RT.querySelectorAll('tbody')[1].innerHTML = '<tr><td class="l na" colspan="5">Every Pay in, Pay out, Buy and Sell shows here, newest first. ✎ edits, × deletes.</td></tr>';
+  pfWireTop();
+}
+/* the action buttons and "Delete all" (desktop and phone) */
+function pfWireTop() {
   view.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => {
     const k = b.dataset.open; k === 'trade' ? pfTradeForm({}) : k === 'rates' ? pfRatesForm() : k === 'ltp' ? pfRefresh(b) : pfCashForm({t: k});
   }));
   const wipe = $('#pfWipe');
   if (wipe) wipe.addEventListener('click', () => typeConfirm('Delete all', `Every holding, closed position, pay in / out and trade (${PF.txns.length} entries) is deleted. Your charge rates stay.`,
     async () => { PF.txns = []; await pfSave(); route(); }));
+}
+const pfActsHtml = () => `<div class="pf-top"><div class="pf-acts">
+    <button type="button" class="btn primary" data-open="trade">+ Buy / Sell</button>
+    <button type="button" class="btn" data-open="in">Pay in</button>
+    <button type="button" class="btn" data-open="out">Pay out</button>
+    <button type="button" class="btn ghost" data-open="rates" title="Brokerage and tax rates used to work out charges" aria-label="Charges settings">⚙<span class="lg"> Charges</span></button>
+    ${pfCanRefresh() ? `<button type="button" class="btn ghost" data-open="ltp" title="Fetch live prices from Angel now (admins)"${PF_POLL ? ' disabled' : ''}>${PF_POLL ? '⟳ Fetching…' : '⟳ Live prices'}</button>` : ''}
+  </div></div>`;
+/* phone portfolio, laid out like Zerodha's Holdings: one summary card, then a card per stock.
+   Tapping a stock opens a soft sheet with its value / momentum details, your holding and its news. */
+function pfPhone(P) {
+  const R = P.R, open = P.open.slice().sort((a, b) => b.value - a.value), closed = P.closed;
+  const cur = P.hold, inv = P.cost, pnl = cur - inv, cashOpen = lsGet('pfcash') === '1';
+  const f2 = v => fmt(v, 2);
+  const kv = (k, v, sub) => `<div><span>${k}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  view.insertAdjacentHTML('beforeend', `${pfActsHtml()}${PF.err ? `<p class="pf-err">${esc(PF.err)}</p>` : ''}
+    ${pfNotListed(open)}
+    ${R.bad ? `<p class="pf-err">A sale of ${esc(R.bad.sym)} on ${esc(R.bad.date || 'an undated day')} is larger than the shares held then. Check the dates in Transactions.</p>` : ''}
+    <section class="pf-zc">
+      <div class="pf-zr"><div><span>Invested</span><b>${f2(inv)}</b></div><div class="r"><span>Current</span><b>${f2(cur)}</b></div></div>
+      <div class="pf-zl"><span>P&amp;L</span><b>${plain(pnl, 2)}<small>${inv ? pctTxt(pnl / inv * 100) : ''}</small></b></div>
+      <div class="pf-zl"><span>Day's P&amp;L</span><b>${P.day == null ? '<small>live prices not on yet</small>' : `${plain(P.day, 2)}<small>${pctTxt(P.dayPct)} · ${esc((P.asOf || '').slice(11))}</small>`}</b></div>
+      <details class="pf-cash"${cashOpen ? ' open' : ''}>
+        <summary><span>Cash <b>${rs(R.cash)}</b></span><span>Net gain <b>${arr(P.gain)}${rs(P.gain, true)}</b></span></summary>
+        <div class="pf-cg">
+          ${kv('Net worth', rs(P.worth), 'holdings + cash')}
+          ${kv('Net gain', arr(P.gain) + rs(P.gain, true), P.gainPct == null ? '' : pctTxt(P.gainPct, 1) + ' on money put in')}
+          ${kv('Cash', rs(R.cash), R.cash < 0 && !R.payIn ? 'add a Pay in' : 'free to invest')}
+          ${kv('Realised', plain(R.realized - R.charges), `after ₹${fmt(R.charges, 0)} charges`)}
+          ${kv('Money in', rs(P.deposits), `in ${rs(R.payIn)} · out ${rs(R.payOut)}`)}
+        </div>
+      </details>
+    </section>
+    <div class="pf-zp"></div>`);
+  $('.pf-cash').addEventListener('toggle', e => lsSet('pfcash', e.target.open ? '1' : '0'));   // remembered
+  const host = $('.pf-zp');
+  const sec = (title, n, extra = '') => { const p = document.createElement('section'); p.className = 'pf-panel pf-zs';
+    p.innerHTML = `<h3 class="pf-h">${title} <span>${n}</span>${extra}</h3><div class="pf-zlist"></div>`; host.appendChild(p); return $('.pf-zlist', p); };
+  const nl = new Set((PF.mkt && PF.mkt.notListed) || []);
+  // holdings: Qty · Avg / % ; SYMBOL / P&L ; Invested / LTP (day %)
+  sec('Holdings', open.length).innerHTML = open.length ? open.map(r => {
+    const c = r.priced ? (r.pnl >= 0 ? 'up' : 'dn') : '';
+    return `<div class="pf-zh" data-news="${esc(r.sym)}" role="button" tabindex="0">
+      <div class="a"><span>Qty. ${fmt(r.qty, 0)} <i>•</i> Avg. ${f2(r.avg)}</span><span class="${c}">${r.priced ? pctTxt(r.pnlPct) : ''}</span></div>
+      <div class="b"><b>${esc(r.sym)}${nl.has(r.sym) ? ' <em class="dn">⚠</em>' : ''}</b><b class="${c}">${r.priced ? (r.pnl > 0 ? '+' : r.pnl < 0 ? '−' : '') + f2(Math.abs(r.pnl)) : '–'}</b></div>
+      <div class="a"><span>Invested ${f2(r.qty * r.avg)}</span><span>LTP ${r.ltp == null ? '–' : f2(r.ltp)}${r.dayPct != null ? ` <em class="${r.day >= 0 ? 'up' : 'dn'}">(${pctTxt(r.dayPct)})</em>` : ''}</span></div>
+    </div>`; }).join('')
+    : '<p class="na pf-zempty">No open holdings. Start with <b>Pay in</b>, then <b>+ Buy / Sell</b>, or tap the bag next to any industry name on the other tabs.</p>';
+  pfNewsPanel(host, open.map(r => r.sym));
+  // closed: SYMBOL / net ; bought · sold · date / Remove
+  sec('Closed', closed.length).innerHTML = closed.length ? closed.slice().sort((a, b) => String(b.last || '').localeCompare(String(a.last || ''))).map(r => `<div class="pf-zt">
+      <div class="b"><b>${esc(r.sym)}</b><b>${signed(r.realized - r.charges)}</b></div>
+      <div class="a"><span>${fmt(r.sQty, 0)} sold · ${f2(r.bQty ? r.bAmt / r.bQty : null)} → ${f2(r.sQty ? r.sAmt / r.sQty : null)}${r.last ? ' · ' + esc(r.last) : ''}</span>
+        <button type="button" class="pf-rm" data-rm="${r.ci}">Remove</button></div></div>`).join('')
+    : '<p class="na pf-zempty">Stocks you sell fully move here; the money goes back to Cash.</p>';
+  // transactions: Type · date / cash effect ; detail / ✎ ×
+  const led = R.led.slice().reverse();
+  sec('Transactions', led.length, led.length ? '<button type="button" class="pf-rm all" id="pfWipe" title="Delete every entry in your portfolio">Delete all</button>' : '').innerHTML = led.length ? led.map(l => {
+    const x = l.x, amt = x.t === 'in' ? x.amt : x.t === 'out' ? -x.amt : x.t === 'buy' ? -(x.qty * x.px + (x.ch || 0)) : x.qty * x.px - (x.ch || 0);
+    const act = R.lock.has(x.id) ? '<span class="pf-lock" title="Part of a closed position: remove it from the Closed list instead">🔒</span>'
+      : `<span class="pf-acts2"><button type="button" class="pf-ico" data-edit="${esc(x.id)}" aria-label="Edit">✎</button><button type="button" class="pf-ico del" data-del="${esc(x.id)}" aria-label="Delete">×</button></span>`;
+    return `<div class="pf-zt"><div class="a"><span><span class="pf-t ${x.t}">${TX_LABEL[x.t]}</span> ${esc(x.date || '')}</span><span>${signed(amt)}</span></div>
+      <div class="b"><span>${x.sym ? `<b>${esc(x.sym)}</b> ${fmt(x.qty, 0)} @ ${f2(x.px)}` : 'Cash'}${x.ch ? ` <small>· ch ₹${f2(x.ch)}</small>` : ''}</span>${act}</div></div>`; }).join('')
+    : '<p class="na pf-zempty">Every Pay in, Pay out, Buy and Sell shows here, newest first.</p>';
+  pfWireTop();
 }
 /* Portfolio row buttons (✎ holding, ✎ / × transaction, Remove closed): ONE click handler for the whole page, so
    rows re-drawn by the search box or added while scrolling work straight away */
@@ -3010,6 +3143,7 @@ document.addEventListener('click', e => {
       async () => { PF.txns = PF.txns.filter(t => !ids.has(t.id)); await pfSave(); route(); });
   }
 });
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('pf-zh')) newsOverlay(e.target.dataset.news); });
 /* stock name (any table, news panel) → light overlay: its last-7-days news, key numbers, Buy / Sell, Screener.in link */
 document.addEventListener('click', e => {
   const a = e.target.closest && e.target.closest('[data-news]');
@@ -3020,11 +3154,20 @@ document.addEventListener('click', e => {
 function newsOverlay(sym) {
   const s = TODAY.get(sym) || {sym, name: sym};
   const k = (l, v) => v == null || v === '' ? '' : `<div><span>${l}</span><b>${v}</b></div>`;
+  const h = PF.txns && PF_HELD.has(sym) ? pfSummary(PF.txns).open.find(r => r.sym === sym) : null;   // your holding, if any
+  const ret = i => s.mom && ok(s.mom[i]) ? pctTxt(s.mom[i], 1) : null, tr = trapReasons(s);
+  const grp = (t, body) => body.replace(/\s/g, '') ? `<div class="no-g">${t}</div><div class="no-kv">${body}</div>` : '';
   const w = modal(esc(sym), `<p class="no-name">${esc(s.name || '')}${s.ind ? ` · <span>${esc(s.ind)}</span>` : ''}</p>
-    <div class="no-kv">${k('LTP ₹', pfLtp(sym) != null ? fmt(pfLtp(sym), 2) : null)}${k('PE', s.pe != null ? fmt(s.pe) : null)}${k('PB', s.pb != null ? fmt(s.pb, 2) : null)}
-      ${k('Value score', s.score != null ? fmt(s.score, 0) : null)}${k('Momentum', s.momS != null ? fmt(s.momS, 0) : null)}${k('Held', PF_HELD.has(sym) ? 'yes' : null)}</div>
+    ${h ? grp('Your holding', `${k('Qty', fmt(h.qty, 0))}${k('Avg ₹', fmt(h.avg, 2))}${k('LTP ₹', h.ltp == null ? null : fmt(h.ltp, 2))}
+      ${k('P&amp;L', h.priced ? plain(h.pnl, 0) + ' <small>' + pctTxt(h.pnlPct, 1) + '</small>' : null)}${k('Day', h.day == null ? null : plain(h.day, 0) + ' <small>' + pctTxt(h.dayPct) + '</small>')}`)
+      : grp('Price', k('LTP ₹', pfLtp(sym) != null ? fmt(pfLtp(sym), 2) : null))}
+    ${grp('Value', `${k('Score', s.score != null ? fmt(s.score, 0) : null)}${k('PE', s.pe != null ? fmt(s.pe) : null)}${k('PB', s.pb != null ? fmt(s.pb, 2) : null)}
+      ${k('ROE %', s.roe != null ? fmt(s.roe) : null)}${k('Div yield %', s.dy != null ? fmt(s.dy, 2) : null)}${k('Mcap ₹ Cr', s.mcap != null ? fmt(s.mcap, 0) : null)}`)}
+    ${grp('Momentum', `${k('Momentum', s.momS != null ? fmt(s.momS, 0) + '<small>/100</small>' : null)}${k('3M', ret(0))}${k('6M', ret(1))}${k('12-1M', ret(2))}
+      ${k('Trend', s.tr ? s.tr.pass + '/' + s.tr.of : null)}`)}
+    ${s.score != null || tr.length ? `<p class="no-flags">${tr.length ? '⚠ ' + esc(tr.join(' · ')) : 'No value-trap flags'}</p>` : ''}
     <div class="no-acts"><button type="button" class="btn primary" data-nb>Buy / Sell</button>${s.url ? `<a class="btn" href="${esc(s.url)}" target="_blank" rel="noopener">Open on Screener.in ↗</a>` : ''}</div>
-    <div class="no-h">News · last 7 days</div><div class="no-list"><p class="na">Loading…</p></div>`, {noFocus: true, cls: 'no-box'});
+    <div class="no-h">News · last 7 days</div><div class="no-list"><p class="na">Loading…</p></div>`, {noFocus: true, cls: 'no-box', sheet: true});
   $('[data-nb]', w).addEventListener('click', async () => { w._close(); await pfLoad(); pfTradeForm({sym}); });
   loadNewsMap().then(N => {
     if (!w.isConnected) return;
@@ -3037,7 +3180,7 @@ function newsOverlay(sym) {
 /* small dialog: × , Esc or a click outside closes it; returns the box */
 function modal(title, html, opt = {}) {
   document.querySelectorAll('.wip-back').forEach(m => m.remove());
-  const w = document.createElement('div'); w.className = 'wip-back open';
+  const w = document.createElement('div'); w.className = 'wip-back open' + (opt.sheet ? ' sheet' : '');   // sheet: slides up softly on phones
   w.innerHTML = `<div class="wip-box${opt.ov ? ' ov' : ''}${opt.cls ? ' ' + opt.cls : ''}" role="dialog" aria-modal="true"><button type="button" class="wip-x" aria-label="Close">×</button><h3>${title}</h3>${html}</div>`;
   document.body.appendChild(w);
   const close = () => { w.remove(); document.removeEventListener('keydown', onKey, true); };
