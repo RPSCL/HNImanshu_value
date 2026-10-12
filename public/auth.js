@@ -47,7 +47,7 @@ const PORTFOLIO = "hni_portfolio";                // Firestore: one doc per user
 const MARKET = ["hni_market", "ltp"];             // live LTP for held stocks, written by portfolio_ltp.py
 // "⟳ Live prices" button: address of the Cloudflare Worker (ltp_worker.js) that starts ltp.yml on GitHub.
 // Empty = no button. The GitHub token lives in the Worker, never here.
-const LTP_HOOK = "";                              // e.g. "https://hni-ltp.<your-name>.workers.dev/run"
+const LTP_HOOK = "https://hni-ltp.himanshushekhar8.workers.dev/run";   // Cloudflare Worker (ltp_worker.js) that starts ltp.yml; no secret here, safe to be public
 const HOME = "./";                                // the screener
 const GATED = document.documentElement.dataset.auth === "required";
 
