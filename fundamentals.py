@@ -1192,8 +1192,7 @@ body.pf-mode #saveHtml,body.pf-mode #nav,body.pf-mode #meta{display:none!importa
    (A live backdrop blur re-draws the whole page on every scroll / hover inside the popup: that was the lag.) */
 html.pop-open,html.pop-open body{overflow:hidden}
 .wip-back{background:rgba(8,8,10,.72)}            /* deep dim instead of blur: any blur re-draws the page on every scroll and hover */
-.wip-box{contain:layout paint;overscroll-behavior:contain}
-.vh-tip{contain:layout paint}
+.wip-box{overscroll-behavior:contain;scrollbar-gutter:stable}   /* the scrollbar's space is always kept: × , chart and text never shift */
 .wip-back.open{display:flex}
 .wip-box{position:relative;width:min(420px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:20px 22px;box-shadow:0 18px 50px rgba(0,0,0,.35);box-sizing:border-box}
 .wip-box h3{margin:0 0 8px;font:700 15px var(--mono);color:var(--brass)}
@@ -1209,9 +1208,10 @@ html.pop-open,html.pop-open body{overflow:hidden}
 .vh svg{display:block;overflow:visible;margin-left:auto}
 .vh .hit{cursor:pointer}
 .vh-g{stroke:var(--line);stroke-width:1;stroke-dasharray:2 3}
-.vh-px{fill:none;stroke:var(--brass);stroke-width:1.1;opacity:.75;stroke-linejoin:round}
-.vh-pxk{color:var(--brass)}
-.vh-pxv{margin-left:auto;font:600 12px var(--mono);color:var(--brass)}
+body.night{--pxline:#ece6da} body.day{--pxline:#36332e}           /* price line: off-white at night, charcoal by day */
+.vh-px{fill:none;stroke:var(--pxline);stroke-width:1.2;stroke-linejoin:round;stroke-linecap:round}
+.vh-pxk{color:var(--pxline)}
+.vh-pxv{margin-left:auto;font:600 12px var(--mono);color:var(--pxline)}
 .vh-cap{display:block;font:500 9.5px var(--mono);color:var(--faint);margin-top:2px;white-space:nowrap}
 .vh-load{border:1px solid var(--line);background:transparent;color:var(--faint);font:600 10.5px var(--mono);padding:4px 8px;border-radius:6px;cursor:pointer}
 .vh-tip{position:fixed;width:300px;max-height:min(60vh,420px);overflow:auto;text-align:left;background:var(--panel2,var(--panel));border:1px solid var(--line);
