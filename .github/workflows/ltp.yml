@@ -1,39 +1,70 @@
+# ltp.yml — live LTP (+ previous close) for the stocks held in users' portfolios → Firestore hni_market/ltp
+#
+# Runs: every 30 min in market hours (Mon–Fri 09:00–15:30 IST), once after the close, by hand from the
+#       Actions tab, or from the website's "⟳ Live prices" button (through the Cloudflare Worker, ltp_worker.js).
+# Once a day: Angel's scrip master and NSE's master lists (EQUITY_L, SME_EQUITY_L, symbol changes) are
+#       downloaded on the first run of the Indian day and kept in .cache/ ; every later run that day restores
+#       them from the GitHub cache in a second instead of downloading again.
 name: Portfolio LTP
 
-# Live prices for the stocks people hold (portfolio_ltp.py → Firestore hni_market/ltp).
-# Every 30 min in market hours, Mon–Fri, plus one run after the close for the final prices.
-# No build, no deploy: the page reads the prices straight from Firestore.
 on:
   schedule:
-    - cron: "*/30 3-9 * * 1-5"    # 09:00–15:30 IST, every 30 min
-    - cron: "20 10 * * 1-5"       # 15:50 IST: closing prices
-  workflow_dispatch:
+    - cron: "*/30 3-9 * * 1-5"     # 03:00–09:30 UTC = 08:30–15:00 IST, every 30 min
+    - cron: "20 10 * * 1-5"        # 15:50 IST: closing prices
+  workflow_dispatch:               # Actions tab "Run workflow", and the website button (via the Worker)
 
 concurrency:
   group: portfolio-ltp
-  cancel-in-progress: true
+  cancel-in-progress: false        # a run in progress finishes; clicks while it runs queue at most one more
 
 jobs:
   ltp:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - name: Checkout (only the two scripts)
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            fetch_prices.py
+            portfolio_ltp.py
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Python 3.11 (pip downloads cached)
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - name: Install
+          cache: pip
+          cache-dependency-path: .github/workflows/ltp.yml
+
+      # IST date → cache key: the first run of each Indian day downloads, the rest restore
+      - name: Today (IST)
+        id: day
+        run: echo "d=$(TZ=Asia/Kolkata date +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Today's master lists (restore, or save after the first run)
+        uses: actions/cache@v4
+        with:
+          path: .cache
+          key: ltp-masters-${{ steps.day.outputs.d }}
+
+      - name: Install dependencies
         run: pip install firebase-admin smartapi-python pyotp logzero websocket-client requests pandas
+
       - name: Service account
-        run: echo '${{ secrets.GOOGLE_CREDENTIALS }}' > serviceAccount.json
-      - name: Fetch LTP for held stocks
         env:
-          GOOGLE_APPLICATION_CREDENTIALS: serviceAccount.json
-          ANGEL_API_KEY:     ${{ secrets.ANGEL_API_KEY }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: printf '%s' "$GOOGLE_CREDENTIALS" > "$RUNNER_TEMP/serviceAccount.json"
+
+      - name: Fetch LTP + check symbols with NSE
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/serviceAccount.json
+          ANGEL_API_KEY: ${{ secrets.ANGEL_API_KEY }}
           ANGEL_CLIENT_CODE: ${{ secrets.ANGEL_CLIENT_CODE }}
-          ANGEL_PIN:         ${{ secrets.ANGEL_PIN }}
+          ANGEL_PIN: ${{ secrets.ANGEL_PIN }}
           ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
         run: python -u portfolio_ltp.py
+
       - name: Clean up
         if: always()
-        run: rm -f serviceAccount.json
+        run: rm -f "$RUNNER_TEMP/serviceAccount.json"
