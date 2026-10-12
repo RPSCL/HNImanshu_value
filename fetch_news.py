@@ -2,21 +2,28 @@ import os
 import sys
 import time
 import random
+import re
+import threading
+import xml.etree.ElementTree as ET
+from urllib.parse import quote
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.utils import parsedate_to_datetime
 import requests
 from io import StringIO
 import pandas as pd
-from gnews import GNews
 from news_dedup import dedup_frame        # same story, different words ("₹59 crore" = "Rs 59 cr")
 
 IST          = timezone(timedelta(hours=5, minutes=30))
 NEWS_DAYS    = 7
-MAX_WORKERS  = 10   # reduced: GNews blocks aggressive parallel calls
-MAX_RETRIES  = 2
+MAX_WORKERS  = 8    # parallel RSS calls; with RATE below this is plenty
+RATE         = 6    # max Google News calls per second (all threads together); ~1,250 stocks ≈ 3–4 min
+MAX_RETRIES  = 3    # only on errors / "slow down" replies, never on a stock that simply has no news
 TASK_TIMEOUT = 20
 SAVE_EVERY   = 50
+MAX_RESULTS  = 15
+RSS_URL      = "https://news.google.com/rss/search?q={q}%20when%3A{d}d&hl=en-IN&gl=IN&ceid=IN:en"
+UA           = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
 INDEX_URLS = {
     "niftymicrocap250": "https://nsearchives.nseindia.com/content/indices/ind_niftymicrocap250_list.csv",
@@ -24,9 +31,60 @@ INDEX_URLS = {
     "niftysmallcap500": "https://www.niftyindices.com/IndexConstituent/ind_niftysmallcap500_list.csv",
 }
 
-# One GNews instance per thread (avoids shared state issues)
-def make_gnews():
-    return GNews(language="en", country="IN", period=f"{NEWS_DAYS}d", max_results=15)
+# Why this is fast now: the gnews library sent 1 search + 1 extra HEAD request PER ARTICLE (15 per stock, no
+# timeout) to "resolve" Google links, which no longer resolve anyway. So ~16 calls per stock → now exactly 1.
+# 16× fewer calls is also what keeps us clear of Google's rate limit.
+_local = threading.local()
+
+def session():
+    """one keep-alive connection per thread (no new TLS handshake for every stock)"""
+    if not hasattr(_local, "s"):
+        _local.s = requests.Session()
+        _local.s.headers.update({"User-Agent": UA, "Accept": "application/rss+xml, application/xml"})
+    return _local.s
+
+
+class Pace:
+    """Spaces calls 1/RATE s apart across all threads. On a 429 / 503 everyone pauses (30 s, then 60 s, …)."""
+    def __init__(self, rate):
+        self.gap, self.next, self.lock, self.hits = 1.0 / rate, 0.0, threading.Lock(), 0
+
+    def wait(self):
+        with self.lock:
+            now = time.monotonic()
+            t = max(self.next, now)
+            self.next = t + self.gap
+        time.sleep(max(0.0, t - now))
+
+    def slow_down(self):
+        with self.lock:
+            self.hits += 1
+            pause = min(30 * self.hits, 120)
+            self.next = max(self.next, time.monotonic() + pause)
+            self.gap *= 1.5                       # stay slower for the rest of the run
+        print(f"⏸ Google asked to slow down; pausing {pause}s, now {1 / self.gap:.1f} calls/s", flush=True)
+
+
+PACE = Pace(RATE)
+
+
+def google_news(query):
+    """[{title, published date, url}] from Google News RSS for one query; [] if there is no news."""
+    url = RSS_URL.format(q=quote(query), d=NEWS_DAYS)
+    for attempt in range(MAX_RETRIES):
+        PACE.wait()
+        try:
+            r = session().get(url, timeout=15)
+            if r.status_code in (429, 503):
+                PACE.slow_down()
+                continue
+            r.raise_for_status()
+            items = ET.fromstring(r.content).iter("item")
+            return [{"title": (i.findtext("title") or ""), "published date": i.findtext("pubDate") or "",
+                     "url": i.findtext("link") or ""} for i in list(items)[:MAX_RESULTS]]
+        except Exception:
+            time.sleep(1 + attempt * 2)
+    return []
 
 
 # ══════════════════════════════════════════════
@@ -75,24 +133,16 @@ def fetch_index_csvs():
 # ══════════════════════════════════════════════
 
 def fetch_stock(symbol, name):
-    gn        = make_gnews()
-    name_low  = name.lower()
+    # "Infosys Limited" → "infosys": headlines rarely say "Limited", so match on the name without it
+    core      = re.sub(r"\b(limited|ltd\.?|the)\b", " ", name.lower()).replace("&", " and ")
+    name_low  = " ".join(core.split())
     sym_low   = symbol.lower()
     first_two = " ".join(name_low.split()[:2])
 
     # Use ONE best query — company name is most precise
     query = name
 
-    articles = []
-    for attempt in range(MAX_RETRIES):
-        try:
-            tmp = gn.get_news(query)
-            if tmp and len(tmp) >= 1:
-                articles = tmp
-                break
-            time.sleep(0.5 * (attempt + 1))
-        except Exception:
-            time.sleep(0.5 * (attempt + 1))
+    articles = google_news(query)                          # one call; retries only on errors
 
     if not articles:
         return pd.DataFrame()
@@ -231,7 +281,7 @@ def main():
 
     stocks = fetch_index_csvs()
     total  = len(stocks)
-    print(f"\n📋 {total} stocks | workers={MAX_WORKERS}\n", flush=True)
+    print(f"\n📋 {total} stocks | workers={MAX_WORKERS} | ≤{RATE} calls/s\n", flush=True)
 
     accumulated = []
     done = found = 0
