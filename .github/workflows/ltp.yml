@@ -28,6 +28,7 @@ jobs:
           sparse-checkout: |
             fetch_prices.py
             portfolio_ltp.py
+            creds.py
             .github/workflows/ltp.yml
           sparse-checkout-cone-mode: false
 
