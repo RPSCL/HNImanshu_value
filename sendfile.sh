@@ -9,8 +9,8 @@ if [ -z "$1" ]; then
 fi
 
 # Read from environment variables
-API_TOKEN="5588744140:AAFMzYGBbQDzZ_hYDf9d1WSTHmC3I-Z3kZk"
-CHAT_ID="-1002683944312"
+API_TOKEN="558Zk"
+CHAT_ID="-10022"
 
 if [ -z "$API_TOKEN" ] || [ -z "$CHAT_ID" ]; then
     echo "Missing environment variables"
