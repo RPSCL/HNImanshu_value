@@ -1254,9 +1254,11 @@ body.night{--pxline:#ece6da} body.day{--pxline:#36332e}           /* price line:
 .vh-pxv{margin-left:auto;font:600 12px var(--mono);color:var(--pxline)}
 .vh-cap{display:block;font:500 9.5px var(--mono);color:var(--faint);margin-top:2px;white-space:nowrap}
 .vh-load{border:1px solid var(--line);background:transparent;color:var(--faint);font:600 10.5px var(--mono);padding:4px 8px;border-radius:6px;cursor:pointer}
-.vh-tip{position:fixed;width:300px;max-height:min(60vh,420px);overflow:auto;text-align:left;background:var(--panel2,var(--panel));border:1px solid var(--line);
+.vh-tip{position:fixed;width:300px;max-height:calc(100vh - 24px);overflow:auto;text-align:left;background:var(--panel2,var(--panel));border:1px solid var(--line);
   border-radius:10px;padding:8px 12px 10px;box-shadow:0 6px 16px rgba(0,0,0,.35);z-index:5}
-.vh-tip .vd-c{font-size:12px;padding:2px 0}
+.vh-tip .vd-c{font-size:12px;padding:2px 0;break-inside:avoid}
+.vh-tip.two{column-count:2;column-gap:18px}                       /* wide screens: whole checklist in two columns, no scrolling */
+.vh-tip.two .vh-h,.vh-tip.two .vd-gate{column-span:all}
 .vh-tip .vd-c small{font-size:10.5px}
 .vh-h{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12.5px;padding-bottom:6px;margin-bottom:4px;border-bottom:1px solid var(--line)}
 .vh-h small{font:500 10.5px var(--mono);color:var(--faint)}
@@ -3244,11 +3246,11 @@ document.addEventListener('click', e => {
    A test with no data for that stock (or one only for stocks you own) is skipped, not counted either way. */
 const VD_LIM = {grahamOver: 1, peVsBuy: 1.5, peVsInd: 1.5, minScore: 40, hot: 95, minMom: 30, min3m: -15, maxTrend: .25,
                 maxDe: 1, minQ: 12, minProD: -2, minPro3: -5, maxWt: 20, betterBy: 20, stopLoss: -20,
-                minEpsG: 10, minSalesG: 8, maxOtherInc: 30};
+                minEpsG: 10, minSalesG: 8, maxOtherInc: 30, buyAt: 75, watchAt: 65};
 /* How it works: two PROFIT GATES first, then weighted checks (growth and profit quality count double).
    Gate 1 (must): net profit positive in each of the latest 4 quarters, else Sell / Avoid whatever the rest says.
-   Gate 2: profit of the latest 4 quarters above the 4 before, else at best Watch.
-   Score = points passed ÷ points that could be judged: ≥ 75% Buy / Hold · 50–75% Watch · < 50% Sell / Avoid. */
+   Gate 2: the best of the latest 4 quarters not below the weakest of the 4 before (2 vs 2 with fewer quarters), else at best Watch.
+   Score = points passed ÷ points that could be judged: ≥ 75% Buy / Hold · 65–75% Watch · < 65% Sell / Avoid. */
 /* qty-weighted PE / score saved with the buys of the shares you still hold (saved from now on, for every new buy) */
 function pfBuyStat(h, k) {
   if (!h || !PF.txns) return null;
@@ -3274,12 +3276,14 @@ function verdict(sym, P, snap) {
   const best = peers.reduce((b, x) => !b || x.score > b.score ? x : b, null);
   const C = [], add = (g, label, pass, why, w = 1) => C.push({g, label, pass, why, w});
   // 0. profit gates (quarterly net profit, as known on that date)
-  const qp = s.qp || [], l4 = qp.slice(-4), p4 = qp.length >= 8 ? qp.slice(-8, -4) : null, sum = a => a.reduce((t, v) => t + v, 0);
+  const qp = s.qp || [], l4 = qp.slice(-4), sum = a => a.reduce((t, v) => t + v, 0);
+  // cap: the best of the latest quarters must not be below the weakest of the ones before (8 quarters: 4 vs 4, else 2 vs 2)
+  const [cN, cA, cB] = qp.length >= 8 ? [4, qp.slice(-4), qp.slice(-8, -4)] : qp.length >= 4 ? [2, qp.slice(-2), qp.slice(-4, -2)] : [0, null, null];
   const qfmt = a => a.map(v => fmt(v, 0)).join(' · ');
   add('Profit gate', 'Net profit positive in each of the latest 4 quarters', l4.length === 4 ? l4.every(v => v > 0) : null,
       l4.length === 4 ? `₹ Cr: ${qfmt(l4)}` : 'not enough quarterly results', 'gate');
-  add('Profit gate', 'Latest 4 quarters\' profit above the 4 before', p4 ? sum(l4) > sum(p4) : null,
-      p4 ? `₹${fmt(sum(l4), 0)} Cr vs ₹${fmt(sum(p4), 0)} Cr` : 'needs 8 quarters', 'cap');
+  add('Profit gate', `Best of the latest ${cN || 4} quarters not below the weakest of the ${cN || 4} before`, cA ? Math.max(...cA) >= Math.min(...cB) : null,
+      cA ? `best ₹${fmt(Math.max(...cA), 0)} Cr vs weakest ₹${fmt(Math.min(...cB), 0)} Cr` : 'needs 4 quarters', 'cap');
   // 1b. growth and profit quality (count double)
   add('Growth & quality', `Profit growth: 5-year EPS growth ${L.minEpsG}%+ a year`, s.cagr != null ? s.cagr >= L.minEpsG : (s.loss5 ? false : null),
       s.cagr != null ? `EPS CAGR ${f1(s.cagr)}%` : s.loss5 ? `${s.loss5} loss year(s): no growth figure` : '', 2);
@@ -3287,9 +3291,10 @@ function verdict(sym, P, snap) {
       s.sg5 != null ? `sales CAGR ${fmt(s.sg5, 2)}%` : '', 2);
   add('Growth & quality', 'Net profit in every year (last 10)', s.pyr ? s.pyr[0] === s.pyr[1] : null,
       s.pyr ? `profit in ${s.pyr[0]} of ${s.pyr[1]} years` : '', 2);
-  const oiPct = s.qoi != null ? s.qoi : s.oi;
+  const oiPct = s.fin ? null : s.qoi != null ? s.qoi : s.oi;   // banks / NBFCs: "other income" = fees, commissions, treasury: core business
   add('Growth & quality', `Profit not propped up by other income (under ${L.maxOtherInc}% of pre-tax profit)`, oiPct != null ? oiPct < L.maxOtherInc : null,
-      oiPct != null ? (oiPct >= 999 ? 'no pre-tax profit' : `other income ${f0(oiPct)}% of pre-tax profit${s.qoi != null ? ' (last 4 qtrs)' : ''}`) : '', 2);
+      s.fin ? 'not used for banks / NBFCs: fees and treasury income are their normal business'
+        : oiPct != null ? (oiPct >= 999 ? 'no pre-tax profit' : `other income ${f0(oiPct)}% of pre-tax profit${s.qoi != null ? ' (last 4 qtrs)' : ''}`) : '', 2);
   // 1. valuation
   add('Valuation', 'Price at or below the Graham number', s.graham ? px <= s.graham : null,
       s.graham ? `₹${fmt(px, 0)} vs Graham ₹${fmt(s.graham, 0)}` : 'no Graham number (loss or negative book)');
@@ -3322,10 +3327,10 @@ function verdict(sym, P, snap) {
   if (snap) C.splice(0, C.length, ...C.filter(c => c.g !== 'Portfolio' || /better stock/.test(c.label)));   // past dates: only checks that mean something then
   const pts = C.filter(c => c.pass != null && typeof c.w === 'number');            // gates don't score; they overrule
   const pass = pts.filter(c => c.pass).reduce((t, c) => t + c.w, 0), n = pts.reduce((t, c) => t + c.w, 0), pct = n ? pass / n * 100 : null;
-  let st = pct == null ? 'na' : pct >= 75 ? (held ? 'hold' : 'buy') : pct >= 50 ? 'watch' : (held ? 'sell' : 'avoid');
+  let st = pct == null ? 'na' : pct >= L.buyAt ? (held ? 'hold' : 'buy') : pct >= L.watchAt ? 'watch' : (held ? 'sell' : 'avoid');
   const gate = C.find(c => c.w === 'gate'), cap = C.find(c => c.w === 'cap'), why = [];
   if (gate.pass === false) { st = held ? 'sell' : 'avoid'; why.push('a loss in the latest 4 quarters'); }
-  else if (cap.pass === false && (st === 'buy' || st === 'hold')) { st = 'watch'; why.push('profit lower than the 4 quarters before'); }
+  else if (cap.pass === false && (st === 'buy' || st === 'hold')) { st = 'watch'; why.push('latest quarters all below the weakest of the quarters before'); }
   return {checks: C, pass, n, pct, st, held, gateWhy: why.join(''), label: {buy: 'Buy', hold: 'Hold', watch: 'Watch', sell: 'Sell', avoid: 'Avoid', na: '–'}[st]};
 }
 /* ---------- status history: price at each saved date (1.5Y … 3M back) and today, coloured by that date's status ----------
@@ -3377,7 +3382,7 @@ function vdSpark(host, sym, PS) {
   const segs = pts.slice(1).map((p, i) => `<line x1="${X(i)}" y1="${YS(pts[i].v.pct)}" x2="${X(i + 1)}" y2="${YS(p.v.pct)}" stroke="${VD_COL[p.v.st]}" stroke-width="2.2" stroke-linecap="round"/>`).join('');
   const dots = pts.map((p, i) => `<circle cx="${X(i)}" cy="${YS(p.v.pct)}" r="${i === pts.length - 1 ? 3.4 : 2.4}" fill="${VD_COL[p.v.st]}"/>`).join('');
   const hits = pts.map((p, i) => `<rect class="hit" data-i="${i}" x="${X(i) - (W - 2 * pad) / (pts.length - 1) / 2}" y="0" width="${(W - 2 * pad) / (pts.length - 1)}" height="${H}" fill="transparent"/>`).join('');
-  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" preserveAspectRatio="none" role="img" aria-label="Checklist score and price over the last ${pts.length} dates">${guide(50)}${guide(75)}${price}${segs}${dots}${hits}</svg>
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" preserveAspectRatio="none" role="img" aria-label="Checklist score and price over the last ${pts.length} dates">${guide(VD_LIM.watchAt)}${guide(VD_LIM.buyAt)}${price}${segs}${dots}${hits}</svg>
     <div class="vh-cap">score % · <span class="vh-pxk">price</span> · from ${esc(pts[0].d)}</div><div class="vh-tip" hidden></div>`;
   const tip = $('.vh-tip', host), svg = $('svg', host);
   const cache = [];
@@ -3388,15 +3393,24 @@ function vdSpark(host, sym, PS) {
       + (v.gateWhy ? `<p class="vd-gate">Capped: ${esc(v.gateWhy)}</p>` : '')
       + v.checks.filter(c => c.pass != null).map(c => `<div class="vd-c ${c.pass ? 'ok' : 'no'}"><i>${c.pass ? '✓' : '✗'}</i><span>${c.label} ${vdTag(c)}${c.why ? `<small>${esc(c.why)}</small>` : ''}</span></div>`).join('');
     tip.hidden = false;                                    // fixed to the screen, so the popup's edge never cuts it off
-    const r = svg.getBoundingClientRect(), tw = Math.min(300, innerWidth - 24), cx = r.left + X(i) * r.width / W;
+    const two = innerWidth >= 760;                          // room for two columns: everything shows without scrolling
+    tip.classList.toggle('two', two);
+    const r = svg.getBoundingClientRect(), tw = Math.min(two ? 620 : 320, innerWidth - 24), cx = r.left + X(i) * r.width / W;
     tip.style.width = tw + 'px';
     tip.style.left = Math.max(12, Math.min(cx - tw / 2, innerWidth - tw - 12)) + 'px';
-    tip.style.top = Math.min(r.bottom + 6, innerHeight - Math.min(tip.offsetHeight, innerHeight * .6) - 12) + 'px';
+    const top = r.bottom + 6;                               // always below the chart, so the other dates stay reachable
+    tip.style.top = top + 'px'; tip.style.maxHeight = (innerHeight - top - 12) + 'px';   // fits the screen; scrolls only on small phones
   };
   svg.addEventListener('mouseover', e => { const c = e.target.closest('.hit'); if (c) show(+c.dataset.i); });
   svg.addEventListener('click', e => { const c = e.target.closest('.hit'); if (c) { e.stopPropagation(); show(+c.dataset.i); } });
-  svg.addEventListener('mouseleave', () => { tip.hidden = true; });
-  host.closest('.wip-box').addEventListener('click', e => { if (!e.target.closest('.hit')) tip.hidden = true; });
+  // leaving the chart hides it after a moment, unless the mouse went into the tooltip itself
+  let hideT = null;
+  const later = () => { clearTimeout(hideT); hideT = setTimeout(() => { tip.hidden = true; tip._i = null; }, 220); };
+  svg.addEventListener('mouseleave', later);
+  svg.addEventListener('mouseenter', () => clearTimeout(hideT));
+  tip.addEventListener('mouseenter', () => clearTimeout(hideT));
+  tip.addEventListener('mouseleave', later);
+  host.closest('.wip-box').addEventListener('click', e => { if (!e.target.closest('.hit') && !e.target.closest('.vh-tip')) { tip.hidden = true; tip._i = null; } });
 }
 const vdChip = (v, big) => !v ? '' : `<span class="vd vd-${v.st}${big ? ' big' : ''}" title="${v.pass} of ${v.n} points${v.gateWhy ? ' · capped by ' + v.gateWhy : ''}">${v.label}${big ? ` <small>${v.pass}/${v.n} pts · ${fmt(v.pct, 0)}%</small>` : ''}</span>`;
 const vdTag = c => c.w === 'gate' ? '<em class="vd-w gate">must</em>' : c.w === 'cap' ? '<em class="vd-w gate">cap</em>' : c.w === 2 ? '<em class="vd-w">×2</em>' : '';
@@ -3406,8 +3420,8 @@ function vdList(v) {
   return v.checks.map(c => (c.g !== g0 ? `<div class="vd-g">${g0 = c.g}</div>` : '')
     + `<div class="vd-c ${c.pass == null ? 'na' : c.pass ? 'ok' : 'no'}"><i>${c.pass == null ? '–' : c.pass ? '✓' : '✗'}</i><span>${c.label} ${vdTag(c)}${c.why ? `<small>${esc(c.why)}</small>` : ''}</span></div>`).join('')
     + (v.gateWhy ? `<p class="vd-gate">Status capped: ${esc(v.gateWhy)}.</p>` : '')
-    + `<p class="vd-note"><b>must</b>: a loss in any of the latest 4 quarters → ${v.held ? 'Sell' : 'Avoid'} · <b>cap</b>: profit below the 4 quarters before → at best Watch ·
-       <b>×2</b> checks count double · ≥ 75% of points → ${v.held ? 'Hold' : 'Buy'} · 50–75% → Watch · under 50% → ${v.held ? 'Sell' : 'Avoid'} · “–” = no data, not counted.</p>`;
+    + `<p class="vd-note"><b>must</b>: a loss in any of the latest 4 quarters → ${v.held ? 'Sell' : 'Avoid'} · <b>cap</b>: latest quarters all below the weakest before → at best Watch ·
+       <b>×2</b> checks count double · ≥ ${VD_LIM.buyAt}% of points → ${v.held ? 'Hold' : 'Buy'} · ${VD_LIM.watchAt}–${VD_LIM.buyAt}% → Watch · under ${VD_LIM.watchAt}% → ${v.held ? 'Sell' : 'Avoid'} · “–” = no data, not counted.</p>`;
 }
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('pf-zh')) newsOverlay(e.target.dataset.news); });
 /* stock name (any table, news panel) → light overlay: its last-7-days news, key numbers, Buy / Sell, Screener.in link */
