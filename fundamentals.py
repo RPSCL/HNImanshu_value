@@ -1099,7 +1099,7 @@ body.day .toggle-thumb{transform:translateX(16px)}
   /* phone: Filters is a bottom sheet like the other menus: fixed to the bottom, page dimmed behind, scrolls inside */
   .fback{position:fixed;inset:0;z-index:300;background:rgba(8,8,10,.6)}   /* tap it to close */
   .fbox.dopen .fback{display:block}
-  .fdrop{position:fixed;left:0;right:0;bottom:0;top:auto!important;width:auto;z-index:301;max-height:88vh;padding:0 16px 22px;
+  .fdrop{position:fixed;left:0;right:0;bottom:0;top:auto!important;width:auto;z-index:301;max-height:50vh;max-height:50dvh;transition:max-height .22s ease;padding:0 16px 22px;
          border-radius:16px 16px 0 0;border-bottom:0;overscroll-behavior:contain;animation:fdUp .22s cubic-bezier(.2,.8,.2,1)}
   .fdrop::before{content:"";display:block;width:38px;height:4px;border-radius:2px;background:var(--line);margin:8px auto 2px}
   .fdrop .fdhead{top:0;padding-top:10px}
@@ -1426,9 +1426,10 @@ body.night{--pxline:#ece6da} body.day{--pxline:#36332e}           /* price line:
 .pf-zempty{padding:14px;margin:0;font-size:13px}
 @media (max-width:700px){
   .wip-back.sheet{align-items:flex-end;padding:0}
-  .wip-back.sheet .wip-box{width:100%;max-height:88vh;border-radius:16px 16px 0 0;border-bottom:0;padding:18px 16px 22px;animation:noUp .24s cubic-bezier(.2,.8,.2,1)}
+  .wip-back.sheet .wip-box{width:100%;max-height:50vh;max-height:50dvh;transition:max-height .22s ease;border-radius:16px 16px 0 0;border-bottom:0;padding:18px 16px 22px;animation:noUp .24s cubic-bezier(.2,.8,.2,1)}
   .wip-back.sheet .wip-box::before{content:"";display:block;width:38px;height:4px;border-radius:2px;background:var(--line);margin:-8px auto 10px}
   .wip-back.sheet .no-list{max-height:none;overflow:visible}            /* one scroll: the sheet itself */
+  .wip-back.sheet .wip-box.sh-full,.fdrop.sh-full{max-height:92vh;max-height:92dvh}   /* top bar dragged up: full height */
   @keyframes noUp{from{transform:translateY(40%)}}
 }
 
@@ -2378,7 +2379,7 @@ function filterBox(o, rerender) {
   if (o.extra) o.extra.build($('[data-panel="extra"]', f));
   const drop = $('.fdrop', f);
   const setOpen = v => {
-    if (v) closeDrops();
+    if (v) { closeDrops(); D0.full = false; drop.classList.remove('sh-full'); }   // opens at half height
     D0.open = v; f.classList.toggle('dopen', v); $('.fbtn', f).setAttribute('aria-expanded', v);
     if (v) placeDrop(f);
     document.body.classList.toggle('fmodal', v && isPhone());   // phone: floating window, page locked
@@ -2386,6 +2387,7 @@ function filterBox(o, rerender) {
   $('.fbtn', f).addEventListener('click', () => setOpen(!D0.open));
   $('[data-close]', f).addEventListener('click', () => setOpen(false));
   drop.addEventListener('scroll', () => { D0.top = drop.scrollTop; });
+  sheetDrag(drop, () => setOpen(false), D0);                         // phone: half height, drag up / pull down to close
   f.querySelectorAll('[data-panel]').forEach(p => p.classList.toggle('open', !!PANEL_OPEN[key + p.dataset.panel]));
   f.querySelectorAll('[data-tog]').forEach(b => {
     const name = b.dataset.tog; b.classList.toggle('open', !!PANEL_OPEN[key + name]);
@@ -3533,6 +3535,38 @@ function newsOverlay(sym) {
       : '<p class="na">No news in the last 7 days.</p>';
   });
 }
+/* phone bottom sheets (menus, stock overlay, Filters): open at half the screen and scroll inside.
+   Drag the top bar up = full height. Pull down (on the top bar, or anywhere once scrolled to the top) = close;
+   from full height a short pull goes back to half. st keeps "full" across re-renders (Filters). */
+function sheetDrag(box, close, st = {}) {
+  if (!isPhone()) return;
+  box.classList.toggle('sh-full', !!st.full);
+  let y0 = null, dy = 0, t0 = 0, bar = false;
+  const reset = () => { box.style.transition = ''; box.style.transform = ''; };
+  box.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { y0 = null; return; }
+    const t = e.touches[0];
+    bar = t.clientY - box.getBoundingClientRect().top < 40;
+    if (!bar && box.scrollTop > 0) { y0 = null; return; }        // inside the list, scrolled down: normal scrolling
+    y0 = t.clientY; dy = 0; t0 = Date.now();
+  }, {passive: true});
+  box.addEventListener('touchmove', e => {
+    if (y0 == null) return;
+    dy = e.touches[0].clientY - y0;
+    if (dy > 0) { if (e.cancelable) e.preventDefault(); box.style.transition = 'none'; box.style.transform = `translateY(${dy}px)`; }
+    else if (!bar) y0 = null;                                     // pushing up on the list = scroll it
+  }, {passive: false});
+  const end = () => {
+    if (y0 == null) return;
+    y0 = null; box.style.transition = 'transform .18s ease';
+    const fling = dy > 40 && Date.now() - t0 < 250;
+    if (st.full && dy > 60 && dy < 260 && !fling) { st.full = false; box.classList.remove('sh-full'); box.style.transform = ''; return; }
+    if (dy > 110 || fling) { box.style.transform = 'translateY(100%)'; setTimeout(() => { reset(); close(); }, 170); return; }
+    box.style.transform = '';
+    if (bar && dy < -30) { st.full = true; box.classList.add('sh-full'); }
+  };
+  box.addEventListener('touchend', end); box.addEventListener('touchcancel', end);
+}
 /* small dialog: × , Esc or a click outside closes it; returns the box */
 function modal(title, html, opt = {}) {
   document.querySelectorAll('.wip-back').forEach(m => m.remove());
@@ -3547,6 +3581,7 @@ function modal(title, html, opt = {}) {
   $('.wip-x', w).addEventListener('click', close);
   w.addEventListener('mousedown', e => { if (e.target === w) close(); });
   w._close = close;
+  if (opt.sheet) sheetDrag($('.wip-box', w), close);
   const first = w.querySelector(opt.noFocus ? '.wip-x' : 'input:not([type=hidden]), .wip-x'); if (first) setTimeout(() => first.focus({preventScroll: true}), 30);
   return w;
 }
@@ -3943,7 +3978,8 @@ function route() {
   else homeView();
   meta();
   $('#pfBag').classList.toggle('on', h === '#/portfolio');            // header bag lights up on the Portfolio page
-  document.body.classList.toggle('pf-mode', h === '#/portfolio');     // Portfolio: a quiet header (‹ Value, Weekly, Portfolio, avatar, day/night)
+  document.body.classList.toggle('pf-mode', h === '#/portfolio');
+  if (h !== '#/portfolio' && !HDR_OK) requestAnimationFrame(lockHeader);   // header back from Portfolio: measure it now     // Portfolio: a quiet header (‹ Value, Weekly, Portfolio, avatar, day/night)
   window.scrollTo(0,0);
 }
 function nowInfo() {                                     // (i) popover for the current view
@@ -4064,10 +4100,13 @@ function lockChipWidth(chip, sel) {                        // widest option deci
   sel.selectedIndex = keep; sel._paint();
   if (w) chip.style.width = Math.ceil(w) + 'px';
 }
+var HDR_OK = false;                                       // header chips measured while visible?
 function lockHeader() {
-  lockChipWidth($('#uniChip'), $('#uniSel')); lockChipWidth($('#backPer'), $('#backSel'));
   const h = $('#backChip');                                // Historical: same width on and off
-  if (h) { h.style.width = ''; h.style.width = Math.ceil(h.offsetWidth) + 'px'; }
+  if (!h || !h.offsetWidth) { HDR_OK = false; return; }   // hidden (Portfolio's quiet header): a 0 width here shrank it to a dot
+  lockChipWidth($('#uniChip'), $('#uniSel')); lockChipWidth($('#backPer'), $('#backSel'));
+  h.style.width = ''; h.style.width = Math.ceil(h.offsetWidth) + 'px';
+  HDR_OK = true;
 }
 /* Historical + date: far right of the tabs row on wide screens, back in the header (after a break) on phones */
 const HG = $('#histGrp'), NAVR = $('#nav'), HSEP = $('#histSep'), MQ = matchMedia('(max-width:700px)');
