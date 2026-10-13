@@ -1,12 +1,8 @@
-// admin_ext.js — the admin tools. NOT part of the website files and NOT for the public GitHub repo.
-//
-// It is stored in Firestore (hni_ext/ui, field "code") by push_ext.py, and the Firestore rules let only admins read
-// that document. auth.js reads it after login; for admins it loads this code, for everyone else the read is refused.
-// So a guest's page source has no Users list, no "Make admin", no portfolio viewer and no Worker address.
-//
-// What it adds:  menu → "Users" (everyone who logged in; on Fundamentals with portfolio worth / day and a View button;
-//                Make admin / Remove admin), menu → "Refresh live prices", the "⟳" button on Portfolio,
-//                and the "N online (total)" readout in the bottom-left corner.
+// admin_ext.js — readable source of the admin tools. Keep it on your PC, NOT in the public repo.
+// It is minified + scrambled into auth.js (PACK) by pack.py, so the website never shows it as plain text.
+// Runs for every signed-in user, but does nothing unless the user is an admin.
+// Adds: menu → Users (Make admin, portfolio worth / day, View portfolio), menu → Refresh live prices,
+//       the ⟳ button on Portfolio, and the "N online" readout.
 // ctx from auth.js: {app, auth, user, gated, addItem(label, fn), syncLock(), esc, $}
 
 import { getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, collection, serverTimestamp }
@@ -67,6 +63,10 @@ const inr = (v, sign) => v == null ? "–" : (v < 0 ? "−" : sign && v > 0 ? "+
 export default async function init(ctx) {
   X = ctx;
   db = getFirestore(ctx.app);
+  // admin? the main "admin" account, or a user an admin has added (hni_admins/{uid}; a user may read only their own)
+  let ok = ctx.user.email === MAIN_ADMIN;
+  if (!ok) { try { ok = (await getDoc(doc(db, ADMINS, ctx.user.uid))).exists(); } catch (e) {} }
+  if (!ok) return;
   if ((ctx.app.options || {}).databaseURL) {
     try { R = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js"); rtdb = R.getDatabase(ctx.app); } catch (e) {}
   }
