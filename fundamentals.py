@@ -114,9 +114,10 @@ ANNUAL_FIELDS = ["B_BS_TOTAL_BORROWINGS_CR", "B_BS_SHARE_CAPITAL_CR",           
                  "A_PL_EPS_BASIC", "A_PL_PAT_CR", "A_PL_PBT_CR", "A_PL_INTEREST_CR", "A_PL_OTHER_INCOME_CR",
                  "A_PL_DIVIDEND_CR", "A_PL_OPM_PCT", "A_PL_EBITDA_CR", "C_CF_OPERATING_CR", "C_CF_INVESTING_CR",
                  "B_BS_RESERVES_CR", "B_BS_TOTAL_ASSETS_CR",
-                 "B_BS_NET_BLOCK_CR", "B_BS_CWIP_CR", "B_BS_INVESTMENTS_CR"]          # asset backing (fixed assets / investments once scraped)
+                 "B_BS_NET_BLOCK_CR", "B_BS_CWIP_CR", "B_BS_INVESTMENTS_CR",          # asset backing (fixed assets / investments once scraped)
+                 "A_PL_REVENUE_CR"]                                                    # 5-year sales growth (Buy / Hold / Sell checklist)
 ANNUAL_RE = re.compile(r"^(%s)_(%s)(\d{4})$" % ("|".join(ANNUAL_FIELDS), MONTHS))
-QTR_RE = re.compile(r"^(Q_EPS_GENERIC|Q_PL_PAT_CR|Q_PL_REVENUE_CR|Q_PL_EBITDA_CR|Q_PL_GNPA_PCT|Q_PL_NNPA_PCT)_Q(%s)(\d{4})$" % MONTHS)   # NPA: banks, once scraped   # EBITDA -> quarterly OPM
+QTR_RE = re.compile(r"^(Q_EPS_GENERIC|Q_PL_PAT_CR|Q_PL_REVENUE_CR|Q_PL_EBITDA_CR|Q_PL_GNPA_PCT|Q_PL_NNPA_PCT|Q_PL_PBT_CR|Q_PL_OTHER_INCOME_CR)_Q(%s)(\d{4})$" % MONTHS)   # NPA: banks, once scraped   # EBITDA -> quarterly OPM
 SH_RE = re.compile(r"^SH_(PROMOTER|FII|DII|PUBLIC)_PCT_Q(%s)(\d{4})$" % MONTHS)
 SH_KEY = {"PROMOTER": "pro", "PUBLIC": "pub", "FII": "fii", "DII": "dii"}
 
@@ -713,6 +714,41 @@ def growth_pct(then, now):
 # ----------------------------------------------------------------------------
 # METRICS (same maths for both dates)
 # ----------------------------------------------------------------------------
+def quality_extras(r, F, cut):
+    """Inputs for the checklist's profit gate and double-weight checks, as known at `cut` (today or a back date):
+       qp   = net profit of the last 8 quarters (oldest → newest)    → must be positive, and growing
+       qoi  = other income as % of profit before tax, last 4 quarters → is profit propped up by other income?
+       sg5  = 5-year sales CAGR % (annual revenue)                    → sales growth
+       pyr  = [years with a net profit, years checked], last 10 years → profit every year?
+       pro3 = promoter holding change, pp, over up to the last 3 years (12 quarters)"""
+    qcut, acut = cut - pd.Timedelta(days=QUARTER_LAG_DAYS), cut - pd.Timedelta(days=ANNUAL_LAG_DAYS)
+    scut = cut - pd.Timedelta(days=HOLDING_LAG_DAYS)
+    out = {}
+    q = series(r, F.get("Q_PL_PAT_CR", []), qcut)[-8:]
+    if q and (cut - q[-1][0]).days < 200:                     # a stale last quarter says nothing about now
+        out["qp"] = [round(p[2], 1) for p in q]
+    oi = {p[0]: p[2] for p in series(r, F.get("Q_PL_OTHER_INCOME_CR", []), qcut)}
+    pbt = series(r, F.get("Q_PL_PBT_CR", []), qcut)[-4:]
+    if len(pbt) == 4 and all(p[0] in oi for p in pbt):
+        tot = sum(p[2] for p in pbt)
+        out["qoi"] = round(sum(oi[p[0]] for p in pbt) / tot * 100, 1) if tot > 0 else 999.0   # no pre-tax profit: all of it
+    rev = latest_run(series(r, F.get("A_PL_REVENUE_CR", []), acut), cut)
+    if len(rev) >= 4:
+        a, b = rev[-6] if len(rev) >= 6 else rev[0], rev[-1]
+        yrs = (b[0] - a[0]).days / 365.25
+        if a[2] > 0 and b[2] > 0 and yrs >= 2.5:
+            out["sg5"] = round(((b[2] / a[2]) ** (1 / yrs) - 1) * 100, 2)
+    pat = series(r, F.get("A_PL_PAT_CR", []), acut)[-10:]
+    if len(pat) >= 3:
+        out["pyr"] = [sum(1 for p in pat if p[2] > 0), len(pat)]
+    pro = series(r, F.get("pro", []), scut)
+    if len(pro) >= 2:
+        then = next((p for p in pro if (pro[-1][0] - p[0]).days <= 3 * 366), pro[0])
+        out["pro3"] = round(pro[-1][2] - then[2], 2)
+        out["pro3y"] = round((pro[-1][0] - then[0]).days / 365.25, 1)
+    return out
+
+
 def build_record(r, F, inp, fin):
     acut, ref = inp["acut"], inp["ref"]
     price, pe, ttm, mcap = inp["price"], inp["pe"], inp["ttm"], inp["mcap"]
@@ -827,6 +863,8 @@ def build_all(df, asof, prices=None, bench=None):
         g = lambda k: px.get(k) if ok(px.get(k)) else None
         rec0 = build_record(r, F, inputs_now(r, F, asof, fin), fin)
         rec0["mom"] = momentum(px, "NOW")
+        qx = quality_extras(r, F, asof)
+        rec0.update(qx)
         now.append(rec0)
 
         ltp_ok = g("LTP") and near(px.get("LTP_DATE"), asof)
@@ -835,6 +873,7 @@ def build_all(df, asof, prices=None, bench=None):
         rec_n = build_record(r, F, inputs_sm(r, F, asof, fin, ltp, g("HIGH_52W_NOW") or r["HIGH_52W"]), fin)
         rec_n["pxSrc"] = ltp_src
         rec_n["mom"] = rec0["mom"]
+        rec_n.update(qx)
         smnow.append(rec_n)
         ltps[sym] = (ltp, ltp_src)
 
@@ -875,6 +914,7 @@ def build_back(df, F, asof, key, prices, bench, ltps):
             rec["mcap"] = num(r["MARKET_CAP_CR"], 0)      # no price then: today's size, only for the Mcap filters
             rec["mcapToday"] = True
         rec["mom"] = momentum(px, key) if p1 else None   # momentum as of the back date (prices up to then only)
+        rec.update(quality_extras(r, F, back))             # profit gate + growth checks, as known on that date
         a, b = inputs_fund(r, F, back, fin, with_trend=False)["fund"], inputs_fund(r, F, asof, fin, with_trend=False)["fund"]
         patG, patL = growth_pct(a["pat"], b["pat"])
         revG, _ = growth_pct(a["rev"], b["rev"])
@@ -1248,6 +1288,9 @@ body.night{--pxline:#ece6da} body.day{--pxline:#36332e}           /* price line:
 .vd-c i{font-style:normal;font-weight:700;width:14px;flex:none;text-align:center}
 .vd-c.ok i{color:var(--good)} .vd-c.no i{color:var(--bad)} .vd-c.na{color:var(--faint)} .vd-c.na i{color:var(--faint)}
 .vd-c small{display:block;font:500 11px var(--mono);color:var(--faint);margin-top:1px}
+.vd-w{font:700 9px var(--mono);font-style:normal;color:var(--brass);border:1px solid var(--brass);border-radius:4px;padding:0 4px;margin-left:4px;vertical-align:2px}
+.vd-w.gate{color:var(--bad);border-color:var(--bad)}
+.vd-gate{margin:8px 0 0!important;font-size:12px!important;color:var(--bad)!important}
 .vd-note{margin:10px 0 0!important;font-size:11px!important;color:var(--faint)!important;line-height:1.45}
 .pf-zh .b .vd{margin-left:6px;font-size:9.5px}
 .no-name{margin:-4px 0 10px!important;color:var(--mute);font-size:13px}
@@ -3200,7 +3243,12 @@ document.addEventListener('click', e => {
    Share of tests passed → ≥ 75% Buy (Hold if you own it) · 50–75% Watch · < 50% Sell if you own it (Avoid if not).
    A test with no data for that stock (or one only for stocks you own) is skipped, not counted either way. */
 const VD_LIM = {grahamOver: 1, peVsBuy: 1.5, peVsInd: 1.5, minScore: 40, hot: 95, minMom: 30, min3m: -15, maxTrend: .25,
-                maxDe: 1, minQ: 12, minProD: -2, maxWt: 20, betterBy: 20, stopLoss: -20};
+                maxDe: 1, minQ: 12, minProD: -2, minPro3: -5, maxWt: 20, betterBy: 20, stopLoss: -20,
+                minEpsG: 10, minSalesG: 8, maxOtherInc: 30};
+/* How it works: two PROFIT GATES first, then weighted checks (growth and profit quality count double).
+   Gate 1 (must): net profit positive in each of the latest 4 quarters, else Sell / Avoid whatever the rest says.
+   Gate 2: profit of the latest 4 quarters above the 4 before, else at best Watch.
+   Score = points passed ÷ points that could be judged: ≥ 75% Buy / Hold · 50–75% Watch · < 50% Sell / Avoid. */
 /* qty-weighted PE / score saved with the buys of the shares you still hold (saved from now on, for every new buy) */
 function pfBuyStat(h, k) {
   if (!h || !PF.txns) return null;
@@ -3224,7 +3272,24 @@ function verdict(sym, P, snap) {
   const worse = flags.length > 0 || (s.tr && s.tr.pass / s.tr.of <= L.maxTrend) || (!s.fin && s.de > L.maxDe) || (q != null && q < L.minQ);
   const peers = s.ind && IND[s.ind] ? IND[s.ind].stocks.filter(x => x.score != null && x.sym !== sym) : [];
   const best = peers.reduce((b, x) => !b || x.score > b.score ? x : b, null);
-  const C = [], add = (g, label, pass, why) => C.push({g, label, pass, why});
+  const C = [], add = (g, label, pass, why, w = 1) => C.push({g, label, pass, why, w});
+  // 0. profit gates (quarterly net profit, as known on that date)
+  const qp = s.qp || [], l4 = qp.slice(-4), p4 = qp.length >= 8 ? qp.slice(-8, -4) : null, sum = a => a.reduce((t, v) => t + v, 0);
+  const qfmt = a => a.map(v => fmt(v, 0)).join(' · ');
+  add('Profit gate', 'Net profit positive in each of the latest 4 quarters', l4.length === 4 ? l4.every(v => v > 0) : null,
+      l4.length === 4 ? `₹ Cr: ${qfmt(l4)}` : 'not enough quarterly results', 'gate');
+  add('Profit gate', 'Latest 4 quarters\' profit above the 4 before', p4 ? sum(l4) > sum(p4) : null,
+      p4 ? `₹${fmt(sum(l4), 0)} Cr vs ₹${fmt(sum(p4), 0)} Cr` : 'needs 8 quarters', 'cap');
+  // 1b. growth and profit quality (count double)
+  add('Growth & quality', `Profit growth: 5-year EPS growth ${L.minEpsG}%+ a year`, s.cagr != null ? s.cagr >= L.minEpsG : (s.loss5 ? false : null),
+      s.cagr != null ? `EPS CAGR ${f1(s.cagr)}%` : s.loss5 ? `${s.loss5} loss year(s): no growth figure` : '', 2);
+  add('Growth & quality', `Sales growth: 5-year sales growth ${L.minSalesG}%+ a year`, s.sg5 != null ? s.sg5 >= L.minSalesG : null,
+      s.sg5 != null ? `sales CAGR ${fmt(s.sg5, 2)}%` : '', 2);
+  add('Growth & quality', 'Net profit in every year (last 10)', s.pyr ? s.pyr[0] === s.pyr[1] : null,
+      s.pyr ? `profit in ${s.pyr[0]} of ${s.pyr[1]} years` : '', 2);
+  const oiPct = s.qoi != null ? s.qoi : s.oi;
+  add('Growth & quality', `Profit not propped up by other income (under ${L.maxOtherInc}% of pre-tax profit)`, oiPct != null ? oiPct < L.maxOtherInc : null,
+      oiPct != null ? (oiPct >= 999 ? 'no pre-tax profit' : `other income ${f0(oiPct)}% of pre-tax profit${s.qoi != null ? ' (last 4 qtrs)' : ''}`) : '', 2);
   // 1. valuation
   add('Valuation', 'Price at or below the Graham number', s.graham ? px <= s.graham : null,
       s.graham ? `₹${fmt(px, 0)} vs Graham ₹${fmt(s.graham, 0)}` : 'no Graham number (loss or negative book)');
@@ -3244,7 +3309,9 @@ function verdict(sym, P, snap) {
   add('Business', 'Fundamentals trend above 1/4', s.tr ? s.tr.pass / s.tr.of > L.maxTrend : null, s.tr ? `${s.tr.pass}/${s.tr.of} improving` : '');
   add('Business', `Debt ÷ equity ${L.maxDe} or less`, s.fin || s.de == null ? null : s.de <= L.maxDe, s.fin ? 'not used for financials' : s.de != null ? `D/E ${fmt(s.de, 2)}` : '');
   add('Business', `${s.fin ? 'ROE' : 'ROCE'} ${L.minQ}% or more`, q != null ? q >= L.minQ : null, q != null ? `${s.fin ? 'ROE' : 'ROCE'} ${f1(q)}%` : '');
-  add('Business', `Promoter holding steady (not down over ${-L.minProD} pp in a year)`, proD != null ? proD >= L.minProD : null, proD != null ? `${proD > 0 ? '+' : ''}${fmt(proD, 2)} pp` : '');
+  add('Business', `Promoter holding steady (not down over ${-L.minProD} pp in a year or ${-L.minPro3} pp over the longer run)`,
+      proD != null || s.pro3 != null ? (proD == null || proD >= L.minProD) && (s.pro3 == null || s.pro3 >= L.minPro3) : null,
+      [proD != null ? `${proD > 0 ? '+' : ''}${fmt(proD, 2)} pp in a year` : '', s.pro3 != null ? `${s.pro3 > 0 ? '+' : ''}${fmt(s.pro3, 2)} pp over ${fmt(s.pro3y, 1)} yrs` : ''].filter(Boolean).join(' · '));
   // 4. portfolio
   add('Portfolio', `Position under ${L.maxWt}% of your holdings`, held && h.wt != null ? h.wt <= L.maxWt : null, held ? `${f1(h.wt)}% of holdings` : '');
   add('Portfolio', `No clearly better stock in ${esc(s.ind || 'its industry')}`, best && s.score != null ? best.score - s.score < L.betterBy : null,
@@ -3253,9 +3320,13 @@ function verdict(sym, P, snap) {
       held && h.priced ? `${pctTxt(h.pnlPct, 1)} from your average${worse ? ', business signs weak' : ''}` : '');
   add('Portfolio', "Still on NSE's list", held && PF.mkt && PF.mkt.notListed ? !PF.mkt.notListed.includes(sym) : null, '');
   if (snap) C.splice(0, C.length, ...C.filter(c => c.g !== 'Portfolio' || /better stock/.test(c.label)));   // past dates: only checks that mean something then
-  const used = C.filter(c => c.pass != null), pass = used.filter(c => c.pass).length, pct = used.length ? pass / used.length * 100 : null;
-  const st = pct == null ? 'na' : pct >= 75 ? (held ? 'hold' : 'buy') : pct >= 50 ? 'watch' : (held ? 'sell' : 'avoid');
-  return {checks: C, pass, n: used.length, pct, st, held, label: {buy: 'Buy', hold: 'Hold', watch: 'Watch', sell: 'Sell', avoid: 'Avoid', na: '–'}[st]};
+  const pts = C.filter(c => c.pass != null && typeof c.w === 'number');            // gates don't score; they overrule
+  const pass = pts.filter(c => c.pass).reduce((t, c) => t + c.w, 0), n = pts.reduce((t, c) => t + c.w, 0), pct = n ? pass / n * 100 : null;
+  let st = pct == null ? 'na' : pct >= 75 ? (held ? 'hold' : 'buy') : pct >= 50 ? 'watch' : (held ? 'sell' : 'avoid');
+  const gate = C.find(c => c.w === 'gate'), cap = C.find(c => c.w === 'cap'), why = [];
+  if (gate.pass === false) { st = held ? 'sell' : 'avoid'; why.push('a loss in the latest 4 quarters'); }
+  else if (cap.pass === false && (st === 'buy' || st === 'hold')) { st = 'watch'; why.push('profit lower than the 4 quarters before'); }
+  return {checks: C, pass, n, pct, st, held, gateWhy: why.join(''), label: {buy: 'Buy', hold: 'Hold', watch: 'Watch', sell: 'Sell', avoid: 'Avoid', na: '–'}[st]};
 }
 /* ---------- status history: price at each saved date (1.5Y … 3M back) and today, coloured by that date's status ----------
    Uses the same Historical files as the Historical switch (loaded once, then from the phone's cache). */
@@ -3313,8 +3384,9 @@ function vdSpark(host, sym, PS) {
   const show = i => {
     const p = pts[i], v = p.v;
     if (tip._i === i && !tip.hidden) return; tip._i = i;
-    tip.innerHTML = cache[i] = cache[i] || `<div class="vh-h"><b>${esc(p.d)}</b> ${vdChip(v)} <b>${fmt(v.pct, 0)}%</b> <small>${v.pass}/${v.n} checks</small><span class="vh-pxv">₹${fmt(p.px, p.px < 100 ? 2 : 0)}</span></div>`
-      + v.checks.filter(c => c.pass != null).map(c => `<div class="vd-c ${c.pass ? 'ok' : 'no'}"><i>${c.pass ? '✓' : '✗'}</i><span>${c.label}${c.why ? `<small>${esc(c.why)}</small>` : ''}</span></div>`).join('');
+    tip.innerHTML = cache[i] = cache[i] || `<div class="vh-h"><b>${esc(p.d)}</b> ${vdChip(v)} <b>${fmt(v.pct, 0)}%</b> <small>${v.pass}/${v.n} pts</small><span class="vh-pxv">₹${fmt(p.px, p.px < 100 ? 2 : 0)}</span></div>`
+      + (v.gateWhy ? `<p class="vd-gate">Capped: ${esc(v.gateWhy)}</p>` : '')
+      + v.checks.filter(c => c.pass != null).map(c => `<div class="vd-c ${c.pass ? 'ok' : 'no'}"><i>${c.pass ? '✓' : '✗'}</i><span>${c.label} ${vdTag(c)}${c.why ? `<small>${esc(c.why)}</small>` : ''}</span></div>`).join('');
     tip.hidden = false;                                    // fixed to the screen, so the popup's edge never cuts it off
     const r = svg.getBoundingClientRect(), tw = Math.min(300, innerWidth - 24), cx = r.left + X(i) * r.width / W;
     tip.style.width = tw + 'px';
@@ -3326,13 +3398,16 @@ function vdSpark(host, sym, PS) {
   svg.addEventListener('mouseleave', () => { tip.hidden = true; });
   host.closest('.wip-box').addEventListener('click', e => { if (!e.target.closest('.hit')) tip.hidden = true; });
 }
-const vdChip = (v, big) => !v ? '' : `<span class="vd vd-${v.st}${big ? ' big' : ''}" title="${v.pass} of ${v.n} checks pass">${v.label}${big ? ` <small>${v.pass}/${v.n} · ${fmt(v.pct, 0)}%</small>` : ''}</span>`;
+const vdChip = (v, big) => !v ? '' : `<span class="vd vd-${v.st}${big ? ' big' : ''}" title="${v.pass} of ${v.n} points${v.gateWhy ? ' · capped by ' + v.gateWhy : ''}">${v.label}${big ? ` <small>${v.pass}/${v.n} pts · ${fmt(v.pct, 0)}%</small>` : ''}</span>`;
+const vdTag = c => c.w === 'gate' ? '<em class="vd-w gate">must</em>' : c.w === 'cap' ? '<em class="vd-w gate">cap</em>' : c.w === 2 ? '<em class="vd-w">×2</em>' : '';
 function vdList(v) {
   if (!v) return '';
   let g0 = '';
   return v.checks.map(c => (c.g !== g0 ? `<div class="vd-g">${g0 = c.g}</div>` : '')
-    + `<div class="vd-c ${c.pass == null ? 'na' : c.pass ? 'ok' : 'no'}"><i>${c.pass == null ? '–' : c.pass ? '✓' : '✗'}</i><span>${c.label}${c.why ? `<small>${esc(c.why)}</small>` : ''}</span></div>`).join('')
-    + `<p class="vd-note">≥ 75% pass → ${v.held ? 'Hold' : 'Buy'} · 50–75% → Watch · under 50% → ${v.held ? 'Sell' : 'Avoid'}. “–” = no data or not applicable, not counted.</p>`;
+    + `<div class="vd-c ${c.pass == null ? 'na' : c.pass ? 'ok' : 'no'}"><i>${c.pass == null ? '–' : c.pass ? '✓' : '✗'}</i><span>${c.label} ${vdTag(c)}${c.why ? `<small>${esc(c.why)}</small>` : ''}</span></div>`).join('')
+    + (v.gateWhy ? `<p class="vd-gate">Status capped: ${esc(v.gateWhy)}.</p>` : '')
+    + `<p class="vd-note"><b>must</b>: a loss in any of the latest 4 quarters → ${v.held ? 'Sell' : 'Avoid'} · <b>cap</b>: profit below the 4 quarters before → at best Watch ·
+       <b>×2</b> checks count double · ≥ 75% of points → ${v.held ? 'Hold' : 'Buy'} · 50–75% → Watch · under 50% → ${v.held ? 'Sell' : 'Avoid'} · “–” = no data, not counted.</p>`;
 }
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('pf-zh')) newsOverlay(e.target.dataset.news); });
 /* stock name (any table, news panel) → light overlay: its last-7-days news, key numbers, Buy / Sell, Screener.in link */
