@@ -162,6 +162,14 @@ input { font-family: var(--sans); }
 }
 .fund-btn:hover { background: var(--accent); color: var(--bg); }
 .fund-btn svg { flex-shrink: 0; }
+/* Login button / user menu, right of the Fundamentals button */
+.au-slot { display: inline-flex; align-items: center; margin-left: 12px; flex-shrink: 0; min-width: 32px; min-height: 30px; }
+.au-slot:empty { visibility: hidden; }                                   /* nothing shows until the login state is known */
+.au-login {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--border2); border-radius: 6px;
+  background: transparent; color: var(--text); font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.4px; cursor: pointer;
+}
+.au-login:hover { border-color: var(--accent); color: var(--accent); }
 #theme-toggle {
   display: flex; align-items: center; gap: 6px; margin-left: 14px; flex-shrink: 0;
 }
@@ -693,15 +701,17 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
   body { overflow: hidden; }
   #header {
     display: grid !important;
-    grid-template-columns: 1fr auto auto !important;              /* extra column for the Fundamentals button */
+    grid-template-columns: 1fr auto auto auto !important;         /* Fundamentals button + login / user menu */
     grid-template-rows: auto auto !important;
-    grid-template-areas: "logo fund toggle" "tabs tabs tabs" !important;
+    grid-template-areas: "logo fund user toggle" "tabs tabs tabs tabs" !important;
     padding: 8px 12px 0 !important;
     height: auto !important; gap: 0 !important; align-items: center !important;
   }
   .hni-logo    { grid-area: logo; gap: 8px; align-items: center; }
   #theme-toggle { grid-area: toggle; margin-left: 0; gap: 6px; justify-self: end; }
-  .fund-btn { grid-area: fund; margin: 0 12px 0 0; padding: 6px 9px; font-size: 10.5px; }   /* sits left of the toggle */
+  .fund-btn { grid-area: fund; margin: 0 8px 0 0; padding: 6px 9px; font-size: 10.5px; }   /* sits left of the login / user menu */
+  .au-slot { grid-area: user; margin: 0 10px 0 0; }
+  .au-login { padding: 6px 9px; font-size: 10.5px; }
   .universe-switch { grid-area: tabs; }
   .h-stats { display: none !important; }
   .hni-mark svg { width: 30px; height: 30px; }
@@ -1034,6 +1044,8 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
     addEventListener('pageshow',function(e){if(e.persisted)window.hniDone();});   // back button: button usable again
   })();
   </script>
+  <!-- login button, or the signed-in user's initials menu (filled by auth.js once it knows) -->
+  <span id="au-slot" class="au-slot"></span>
   <div id="theme-toggle">
     <span class="toggle-icon moon-icon">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
