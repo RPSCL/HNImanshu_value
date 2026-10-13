@@ -115,7 +115,7 @@ ANNUAL_FIELDS = ["B_BS_TOTAL_BORROWINGS_CR", "B_BS_SHARE_CAPITAL_CR",           
                  "A_PL_DIVIDEND_CR", "A_PL_OPM_PCT", "A_PL_EBITDA_CR", "C_CF_OPERATING_CR", "C_CF_INVESTING_CR",
                  "B_BS_RESERVES_CR", "B_BS_TOTAL_ASSETS_CR",
                  "B_BS_NET_BLOCK_CR", "B_BS_CWIP_CR", "B_BS_INVESTMENTS_CR",          # asset backing (fixed assets / investments once scraped)
-                 "A_PL_REVENUE_CR"]                                                    # 5-year sales growth (Buy / Hold / Sell checklist)
+                 "A_PL_REVENUE_CR"]                                                    # 5-year sales growth (checklist light)
 ANNUAL_RE = re.compile(r"^(%s)_(%s)(\d{4})$" % ("|".join(ANNUAL_FIELDS), MONTHS))
 QTR_RE = re.compile(r"^(Q_EPS_GENERIC|Q_PL_PAT_CR|Q_PL_REVENUE_CR|Q_PL_EBITDA_CR|Q_PL_GNPA_PCT|Q_PL_NNPA_PCT|Q_PL_PBT_CR|Q_PL_OTHER_INCOME_CR)_Q(%s)(\d{4})$" % MONTHS)   # NPA: banks, once scraped   # EBITDA -> quarterly OPM
 SH_RE = re.compile(r"^SH_(PROMOTER|FII|DII|PUBLIC)_PCT_Q(%s)(\d{4})$" % MONTHS)
@@ -1275,9 +1275,20 @@ body.night{--pxline:#ece6da} body.day{--pxline:#36332e}           /* price line:
 .no-g{font:600 9.5px var(--mono);color:var(--brass);text-transform:uppercase;letter-spacing:.7px;margin:4px 0 6px;padding-top:8px;border-top:1px solid var(--line)}
 .no-kv small{font:500 10.5px var(--mono);color:var(--faint);margin-left:4px}
 .no-flags{margin:-2px 0 12px!important;font-size:12px!important;color:var(--faint)!important}
-/* Buy / Hold / Watch / Sell chip + checklist */
+/* checklist light: a small sideways traffic light (red · amber · green); only the current lamp glows */
+.tlw{display:inline-flex;align-items:center;gap:8px;vertical-align:middle}
+.tl{display:inline-flex;gap:3px;padding:3px 4px;border-radius:7px;background:linear-gradient(#26262a,#0c0c0e);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 1px 2px rgba(0,0,0,.4)}
+.tl i{width:8px;height:8px;border-radius:50%;background:#2c2c30;box-shadow:inset 0 1px 2px rgba(0,0,0,.6)}
+.tl-red .r{background:radial-gradient(circle at 35% 30%,#ff9b8f,#e5413a 55%,#a51d17);box-shadow:0 0 6px 1px rgba(229,65,58,.75)}
+.tl-amber .a{background:radial-gradient(circle at 35% 30%,#ffe08a,#f0a020 55%,#b86c00);box-shadow:0 0 6px 1px rgba(240,160,32,.75)}
+.tl-green .g{background:radial-gradient(circle at 35% 30%,#a6f5a0,#3ec65a 55%,#1d8a32);box-shadow:0 0 6px 1px rgba(62,198,90,.75)}
+.tlw.big .tl{gap:5px;padding:5px 7px;border-radius:10px}
+.tlw.big .tl i{width:14px;height:14px}
+.tlw.big .tl-red .r,.tlw.big .tl-amber .a,.tlw.big .tl-green .g{box-shadow:0 0 10px 2px currentColor}
+.tlw.big .tl-red{color:rgba(229,65,58,.65)} .tlw.big .tl-amber{color:rgba(240,160,32,.65)} .tlw.big .tl-green{color:rgba(62,198,90,.65)}
+.tlw small{font:600 11.5px var(--mono);color:var(--mute)}
+.vd-disc{margin:8px 0 0!important;font-size:10.5px!important;color:var(--faint)!important;line-height:1.45}
 .vd{display:inline-block;font:700 10px/1 var(--mono);letter-spacing:.5px;text-transform:uppercase;padding:3px 6px;border-radius:5px;border:1px solid currentColor;vertical-align:2px;white-space:nowrap}
-.vd-buy,.vd-hold{color:var(--good)} .vd-watch{color:var(--brass)} .vd-sell,.vd-avoid{color:var(--bad)} .vd-na{color:var(--faint)}
 .vd.big{font-size:12.5px;padding:5px 9px}
 .vd.big small{font:600 11px var(--mono);text-transform:none;letter-spacing:0;opacity:.85;margin-left:6px}
 .vd-box{margin:0 0 12px}
@@ -1294,7 +1305,7 @@ body.night{--pxline:#ece6da} body.day{--pxline:#36332e}           /* price line:
 .vd-w.gate{color:var(--bad);border-color:var(--bad)}
 .vd-gate{margin:8px 0 0!important;font-size:12px!important;color:var(--bad)!important}
 .vd-note{margin:10px 0 0!important;font-size:11px!important;color:var(--faint)!important;line-height:1.45}
-.pf-zh .b .vd{margin-left:6px;font-size:9.5px}
+.pf-zh .b .tlw{margin-left:6px}
 .no-name{margin:-4px 0 10px!important;color:var(--mute);font-size:13px}
 .no-name span{color:var(--faint)}
 .no-kv{display:flex;flex-wrap:wrap;gap:6px 18px;margin-bottom:12px}
@@ -2966,7 +2977,7 @@ const PFC = {
   val: {k:'val', label:'Value ₹', v:r => r.value, f:r => r.priced ? fmt(r.value, 0) : `<span class="na" title="No price: valued at cost">${fmt(r.value, 0)}</span>`},
   pnl: {k:'pnl', label:'P&L', tip:'Unrealised profit / loss, ₹ and %', v:r => r.priced ? r.pnlPct : null, x:r => r.priced ? fmt(r.pnl, 0) : '', f:pnlCell},
   wt: {k:'wt', label:'Wt %', tip:'Share of the holdings value', v:r => r.wt, f:r => fmt(r.wt, 1)},
-  vd: {k:'vd', label:'Status', tip:'Hold / Watch / Sell from the checklist: tap the stock name to see it', v:r => r.vd ? r.vd.pct : null, x:r => r.vd ? r.vd.label : '', f:r => r.vd ? vdChip(r.vd) : NA},
+  vd: {k:'vd', label:'Checklist', tip:'Checklist light (green / amber / red) and its score: tap the stock name to see every check. Not investment advice.', v:r => r.vd ? r.vd.pct : null, x:r => r.vd ? r.vd.label + ' ' + Math.round(r.vd.pct) + '%' : '', f:r => r.vd ? vdChip(r.vd) : NA},
   score: Object.assign(pfKnown(C.score), {label:'Score'}), mom: Object.assign(pfKnown(C.mom), {label:'Mom.'}), trend: pfKnown(C.trend), flags: pfKnown(C.flags),
   ind: pfKnown(C.ind), name: pfKnown(Object.assign({}, C.name, {f: s => `<span class="co">${esc(s.name)}</span>`})),
   msym: Object.assign({}, C.sym, {f: r => pfSymCell(r) + `<div class="pf-co">${fmt(r.qty, 0)} @ ${fmt(r.avg, 2)}</div>`}),
@@ -3242,16 +3253,16 @@ document.addEventListener('click', e => {
       async () => { PF.txns = PF.txns.filter(t => !ids.has(t.id)); await pfSave(); route(); });
   }
 });
-/* ---------- Buy / Hold / Sell: a checklist of plain yes / no tests per stock ----------
-   Share of tests passed → ≥ 75% Buy (Hold if you own it) · 50–75% Watch · < 50% Sell if you own it (Avoid if not).
+/* ---------- Checklist light: plain yes / no tests per stock, shown as a green / amber / red traffic light ----------
+   Only a summary of how many checks the published numbers pass: never worded as buy / sell / hold advice.
    A test with no data for that stock (or one only for stocks you own) is skipped, not counted either way. */
 const VD_LIM = {grahamOver: 1, peVsBuy: 1.5, peVsInd: 1.5, minScore: 40, hot: 95, minMom: 30, min3m: -15, maxTrend: .25,
                 maxDe: 1, minQ: 12, minProD: -2, minPro3: -5, maxWt: 20, betterBy: 20, stopLoss: -20,
                 minEpsG: 10, minSalesG: 8, maxOtherInc: 30, buyAt: 75, watchAt: 65};
 /* How it works: two PROFIT GATES first, then weighted checks (growth and profit quality count double).
-   Gate 1 (must): net profit positive in each of the latest 4 quarters, else Sell / Avoid whatever the rest says.
-   Gate 2: the best of the latest 4 quarters not below the weakest of the 4 before (2 vs 2 with fewer quarters), else at best Watch.
-   Score = points passed ÷ points that could be judged: ≥ 75% Buy / Hold · 65–75% Watch · < 65% Sell / Avoid. */
+   Gate 1 (must): net profit positive in each of the latest 4 quarters, else red whatever the rest says.
+   Gate 2: the best of the latest 4 quarters not below the weakest of the 4 before (2 vs 2 with fewer quarters), else amber at most.
+   Score = points passed ÷ points that could be judged: ≥ 75% green · 65–75% amber · < 65% red. */
 /* qty-weighted PE / score saved with the buys of the shares you still hold (saved from now on, for every new buy) */
 function pfBuyStat(h, k) {
   if (!h || !PF.txns) return null;
@@ -3260,7 +3271,7 @@ function pfBuyStat(h, k) {
   return q ? t / q : null;
 }
 /* snap (optional) = a past date from vdHistLoad(): judged with that date's numbers and price; the portfolio
-   checks (position size, stop-loss, NSE list) are left out there because they are about today */
+   checks (position size, fall from your average, NSE list) are left out there because they are about today */
 function verdict(sym, P, snap) {
   const s = snap ? snap.by.get(sym) : TODAY.get(sym);
   if (!s) return null;                                     // not in the three lists: no fundamentals to judge
@@ -3306,7 +3317,7 @@ function verdict(sym, P, snap) {
       s.score != null ? `score ${f0(s.score)}${buySc != null ? ` (was ${f0(buySc)} at buy)` : ''}` : '');
   // 2. momentum
   add('Momentum', `Not overheated (momentum under ${L.hot}, or ${L.hot}+ but still cheap)`, s.momS != null ? s.momS < L.hot || !expensive : null,
-      s.momS != null ? `momentum ${f0(s.momS)}${s.momS >= L.hot ? (expensive ? ' and expensive: sell into strength' : ': strong, consider trimming') : ''}` : '');
+      s.momS != null ? `momentum ${f0(s.momS)}${s.momS >= L.hot ? (expensive ? ': very strong, and valuation stretched' : ': very strong, valuation still fine') : ''}` : '');
   const r3 = s.mom && ok(s.mom[0]) ? s.mom[0] : null;
   add('Momentum', `Momentum holding up (${L.minMom}+, 3M return above ${L.min3m}%)`, s.momS != null ? s.momS >= L.minMom && !(r3 != null && r3 < L.min3m) : null,
       s.momS != null ? `momentum ${f0(s.momS)}${r3 != null ? ` · 3M ${pctTxt(r3, 1)}` : ''}` : '');
@@ -3322,17 +3333,17 @@ function verdict(sym, P, snap) {
   add('Portfolio', `Position under ${L.maxWt}% of your holdings`, held && h.wt != null ? h.wt <= L.maxWt : null, held ? `${f1(h.wt)}% of holdings` : '');
   add('Portfolio', `No clearly better stock in ${esc(s.ind || 'its industry')}`, best && s.score != null ? best.score - s.score < L.betterBy : null,
       best && s.score != null ? (best.score - s.score >= L.betterBy ? `${best.sym} scores ${f0(best.score)} vs ${f0(s.score)}` : `best peer ${best.sym} ${f0(best.score)}`) : '');
-  add('Portfolio', `No stop-loss (down ${-L.stopLoss}%+ and the business got worse)`, held && h.priced ? !(h.pnlPct <= L.stopLoss && worse) : null,
+  add('Portfolio', `Not down ${-L.stopLoss}%+ from your average while the business weakened`, held && h.priced ? !(h.pnlPct <= L.stopLoss && worse) : null,
       held && h.priced ? `${pctTxt(h.pnlPct, 1)} from your average${worse ? ', business signs weak' : ''}` : '');
   add('Portfolio', "Still on NSE's list", held && PF.mkt && PF.mkt.notListed ? !PF.mkt.notListed.includes(sym) : null, '');
   if (snap) C.splice(0, C.length, ...C.filter(c => c.g !== 'Portfolio' || /better stock/.test(c.label)));   // past dates: only checks that mean something then
   const pts = C.filter(c => c.pass != null && typeof c.w === 'number');            // gates don't score; they overrule
   const pass = pts.filter(c => c.pass).reduce((t, c) => t + c.w, 0), n = pts.reduce((t, c) => t + c.w, 0), pct = n ? pass / n * 100 : null;
-  let st = pct == null ? 'na' : pct >= L.buyAt ? (held ? 'hold' : 'buy') : pct >= L.watchAt ? 'watch' : (held ? 'sell' : 'avoid');
+  let st = pct == null ? 'na' : pct >= L.buyAt ? 'green' : pct >= L.watchAt ? 'amber' : 'red';   // a light, never a buy / sell call
   const gate = C.find(c => c.w === 'gate'), cap = C.find(c => c.w === 'cap'), why = [];
-  if (gate.pass === false) { st = held ? 'sell' : 'avoid'; why.push('a loss in the latest 4 quarters'); }
-  else if (cap.pass === false && (st === 'buy' || st === 'hold')) { st = 'watch'; why.push('latest quarters all below the weakest of the quarters before'); }
-  return {checks: C, pass, n, pct, st, held, gateWhy: why.join(''), label: {buy: 'Buy', hold: 'Hold', watch: 'Watch', sell: 'Sell', avoid: 'Avoid', na: '–'}[st]};
+  if (gate.pass === false) { st = 'red'; why.push('red: a loss in the latest 4 quarters'); }
+  else if (cap.pass === false && st === 'green') { st = 'amber'; why.push('amber at most: latest quarters all below the weakest of the quarters before'); }
+  return {checks: C, pass, n, pct, st, held, gateWhy: why.join(''), label: {green: 'Green', amber: 'Amber', red: 'Red', na: '–'}[st]};
 }
 /* ---------- status history: price at each saved date (1.5Y … 3M back) and today, coloured by that date's status ----------
    Uses the same Historical files as the Historical switch (loaded once, then from the phone's cache). */
@@ -3364,7 +3375,7 @@ function vdHistLoad() {                                   // one file at a time,
   })();
 }
 const VH_PTS = new Map();                                 // stock → its past points, worked out once
-const VD_COL = {buy: 'var(--good)', hold: 'var(--good)', watch: '#e8952e', sell: 'var(--bad)', avoid: 'var(--bad)', na: 'var(--faint)'};
+const VD_COL = {green: '#3ec65a', amber: '#f0a020', red: '#e5413a', na: 'var(--faint)'};
 /* the sparkline; hovering (or tapping) a point shows that date's checklist */
 function vdSpark(host, sym, PS) {
   const now = verdict(sym, PS), s = TODAY.get(sym);
@@ -3373,7 +3384,7 @@ function vdSpark(host, sym, PS) {
   const pxNow = pfLtp(sym) != null ? pfLtp(sym) : s && s.cmp;
   if (now && pxNow) pts.push({d: 'Today', px: pxNow, v: now});
   if (pts.length < 2) { host.innerHTML = ''; return; }
-  /* main line = checklist score % (0–100, fixed scale; faint guides at 50 and 75 = the Watch / Buy lines), coloured by status;
+  /* main line = checklist score % (0–100, fixed scale; faint guides at the amber and green lines), coloured by the light;
      thin yellow line = price on its own scale, just to see how the price moved alongside */
   const W = 176, H = 50, pad = 5, lo = Math.min(...pts.map(p => p.px)), hi = Math.max(...pts.map(p => p.px));
   const X = i => pad + i * (W - 2 * pad) / (pts.length - 1);
@@ -3391,7 +3402,7 @@ function vdSpark(host, sym, PS) {
     const p = pts[i], v = p.v;
     if (tip._i === i && !tip.hidden) return; tip._i = i;
     tip.innerHTML = cache[i] = cache[i] || `<div class="vh-h"><b>${esc(p.d)}</b> ${vdChip(v)} <b>${fmt(v.pct, 0)}%</b> <small>${v.pass}/${v.n} pts</small><span class="vh-pxv">₹${fmt(p.px, p.px < 100 ? 2 : 0)}</span></div>`
-      + (v.gateWhy ? `<p class="vd-gate">Capped: ${esc(v.gateWhy)}</p>` : '')
+      + (v.gateWhy ? `<p class="vd-gate">${esc(v.gateWhy)}</p>` : '')
       + v.checks.filter(c => c.pass != null).map(c => `<div class="vd-c ${c.pass ? 'ok' : 'no'}"><i>${c.pass ? '✓' : '✗'}</i><span>${c.label} ${vdTag(c)}${c.why ? `<small>${esc(c.why)}</small>` : ''}</span></div>`).join('');
     tip.hidden = false;                                    // fixed to the screen, so the popup's edge never cuts it off
     const two = innerWidth >= 760;                          // room for two columns: everything shows without scrolling
@@ -3413,16 +3424,21 @@ function vdSpark(host, sym, PS) {
   tip.addEventListener('mouseleave', later);
   host.closest('.wip-box').addEventListener('click', e => { if (!e.target.closest('.hit') && !e.target.closest('.vh-tip')) { tip.hidden = true; tip._i = null; } });
 }
-const vdChip = (v, big) => !v ? '' : `<span class="vd vd-${v.st}${big ? ' big' : ''}" title="${v.pass} of ${v.n} points${v.gateWhy ? ' · capped by ' + v.gateWhy : ''}">${v.label}${big ? ` <small>${v.pass}/${v.n} pts · ${fmt(v.pct, 0)}%</small>` : ''}</span>`;
+const vdChip = (v, big) => !v ? '' : `<span class="tlw${big ? ' big' : ''}" title="Checklist light: ${v.label.toLowerCase()} · ${v.pass} of ${v.n} points${v.gateWhy ? ' · ' + v.gateWhy : ''}" role="img" aria-label="Checklist light ${v.label}, ${v.pass} of ${v.n} points">`
+  + `<span class="tl tl-${v.st}"><i class="r"></i><i class="a"></i><i class="g"></i></span>${big ? ` <small>${v.pass}/${v.n} pts · ${fmt(v.pct, 0)}%</small>` : ''}</span>`;
+const VD_DISCLAIMER = `<p class="vd-disc">The light only shows how many of these checks the published numbers pass. It is an educational screen,
+  not a recommendation to buy, sell or hold any security, and not investment advice. HNImanshu is not a SEBI-registered investment adviser
+  or research analyst. Data can be late or wrong; please do your own research or consult a SEBI-registered adviser.</p>`;
 const vdTag = c => c.w === 'gate' ? '<em class="vd-w gate">must</em>' : c.w === 'cap' ? '<em class="vd-w gate">cap</em>' : c.w === 2 ? '<em class="vd-w">×2</em>' : '';
 function vdList(v) {
   if (!v) return '';
   let g0 = '';
   return v.checks.map(c => (c.g !== g0 ? `<div class="vd-g">${g0 = c.g}</div>` : '')
     + `<div class="vd-c ${c.pass == null ? 'na' : c.pass ? 'ok' : 'no'}"><i>${c.pass == null ? '–' : c.pass ? '✓' : '✗'}</i><span>${c.label} ${vdTag(c)}${c.why ? `<small>${esc(c.why)}</small>` : ''}</span></div>`).join('')
-    + (v.gateWhy ? `<p class="vd-gate">Status capped: ${esc(v.gateWhy)}.</p>` : '')
-    + `<p class="vd-note"><b>must</b>: a loss in any of the latest 4 quarters → ${v.held ? 'Sell' : 'Avoid'} · <b>cap</b>: latest quarters all below the weakest before → at best Watch ·
-       <b>×2</b> checks count double · ≥ ${VD_LIM.buyAt}% of points → ${v.held ? 'Hold' : 'Buy'} · ${VD_LIM.watchAt}–${VD_LIM.buyAt}% → Watch · under ${VD_LIM.watchAt}% → ${v.held ? 'Sell' : 'Avoid'} · “–” = no data, not counted.</p>`;
+    + (v.gateWhy ? `<p class="vd-gate">Light set by the profit gate: ${esc(v.gateWhy)}.</p>` : '')
+    + `<p class="vd-note"><b>must</b>: a loss in any of the latest 4 quarters → red · <b>cap</b>: latest quarters all below the weakest before → amber at most ·
+       <b>×2</b> checks count double · ≥ ${VD_LIM.buyAt}% of points → green · ${VD_LIM.watchAt}–${VD_LIM.buyAt}% → amber · under ${VD_LIM.watchAt}% → red · “–” = no data, not counted.</p>`
+    + VD_DISCLAIMER;
 }
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('pf-zh')) newsOverlay(e.target.dataset.news); });
 /* stock name (any table, news panel) → light overlay: its last-7-days news, key numbers, Buy / Sell, Screener.in link */
@@ -3798,6 +3814,14 @@ function methodView() {
   + g('Closed', 'A stock sold down to 0 moves here and its trades lock; its money is back in Cash. Only its Remove button (type confirm) deletes it.', 'Bought 100, sold 100 → closed.')
   )}
   <p>Stocks outside these lists can be added too; they have no price here, so they are valued at cost. Prices are the latest in this page's data (updated weekly), not live.</p>
+
+  <h2>Checklist light</h2>
+  <p>Tap any stock name to see its <b>checklist</b>: plain yes / no tests on the published numbers (profit in each recent quarter, profit and sales growth,
+  profit every year, other income, valuation vs Graham number / its past PE / its industry, momentum, debt, ROCE, promoter holding).
+  Growth and profit-quality tests count double. The share of points passed lights a small traffic light:
+  <b style="color:#3ec65a">green</b> ${VD_LIM.buyAt}% or more · <b style="color:#f0a020">amber</b> ${VD_LIM.watchAt}–${VD_LIM.buyAt}% · <b style="color:#e5413a">red</b> below ${VD_LIM.watchAt}%
+  or a loss in any of the latest 4 quarters. The little line next to it shows the same score on each Historical date, with the price.</p>
+  ${VD_DISCLAIMER}
 
   <h2>Screens (Value screen)</h2>
   ${tbl(
