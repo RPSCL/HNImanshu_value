@@ -1096,9 +1096,14 @@ body.day .toggle-thumb{transform:translateX(16px)}
   .pchips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch;scrollbar-width:none}   /* one swipeable row */
   .pchips::-webkit-scrollbar{display:none}
   .btn.fbtn{padding:0 10px}
-  .fback{position:fixed;inset:0;z-index:90;background:transparent}   /* invisible: only catches the tap that closes it */
+  /* phone: Filters is a bottom sheet like the other menus: fixed to the bottom, page dimmed behind, scrolls inside */
+  .fback{position:fixed;inset:0;z-index:300;background:rgba(8,8,10,.6)}   /* tap it to close */
   .fbox.dopen .fback{display:block}
-  .fdrop{position:fixed;left:10px;right:10px;top:10px;bottom:auto;width:auto;z-index:91;padding:12px 14px 16px;border-radius:14px}
+  .fdrop{position:fixed;left:0;right:0;bottom:0;top:auto!important;width:auto;z-index:301;max-height:88vh;padding:0 16px 22px;
+         border-radius:16px 16px 0 0;border-bottom:0;overscroll-behavior:contain;animation:fdUp .22s cubic-bezier(.2,.8,.2,1)}
+  .fdrop::before{content:"";display:block;width:38px;height:4px;border-radius:2px;background:var(--line);margin:8px auto 2px}
+  .fdrop .fdhead{top:0;padding-top:10px}
+  @keyframes fdUp{from{transform:translateY(40%)}}
   body.fmodal{overflow:hidden}
   .fgrid{grid-template-columns:1fr 1fr;gap:10px}
   .fld > span{font-size:10px}
@@ -2320,10 +2325,8 @@ function placeDrop(f) {
   let st = f.nextElementSibling;
   while (st && !st.classList.contains('stats')) st = st.nextElementSibling;
   const fr = f.getBoundingClientRect(), sb = st ? st.getBoundingClientRect().bottom : fr.bottom;
-  if (isPhone()) {                                        // floating window between the stats strip and the bottom edge
-    const top = sb + 6 < innerHeight - 260 ? Math.max(10, sb + 6) : 10;
-    drop.style.top = top + 'px'; back.style.top = '';
-    drop.style.maxHeight = Math.min(innerHeight - top - 10, Math.round(innerHeight * 0.55)) + 'px';   // table stays visible below
+  if (isPhone()) {                                        // bottom sheet: placed by CSS
+    drop.style.top = ''; back.style.top = ''; drop.style.maxHeight = '';
   } else {
     drop.style.top = (sb - fr.top + 6) + 'px'; back.style.top = ''; drop.style.maxHeight = '';
   }
@@ -2950,8 +2953,8 @@ function pfNotListed(open) {
   return `<p class="pf-err">⚠ Not on NSE's list today: ${bad.map(x => `<button type="button" class="btn ghost" data-rn="${esc(x)}" title="Update the symbol / name">${esc(x)} ✎</button>`).join(' ')}
     — delisted, suspended or the symbol changed. Tap one to update it.</p>`;
 }
-/* "⟳ Live prices" (admins, when the Worker address is set in auth.js): starts ltp.yml on GitHub, then checks
-   hni_market/ltp every 15 s until the new prices land (about 1–2 minutes), and redraws */
+/* "⟳ Live prices" (only when window.hniStore offers refresh()): asks for fresh prices, then checks the market
+   doc every 15 s until they land (about 1–2 minutes), and redraws */
 const pfCanRefresh = () => !!(WEB && window.hniStore && window.hniStore.canRefresh && window.hniStore.canRefresh());
 let PF_POLL = null;
 async function pfRefresh(btn) {
@@ -2971,7 +2974,7 @@ async function pfRefresh(btn) {
     if ((location.hash || '') === '#/portfolio') route();
   }, 15000);
 }
-window.addEventListener('hni-admin', () => { if ((location.hash || '') === '#/portfolio' && PF.txns) route(); });   // extra admin confirmed → show the button
+window.addEventListener('hni-ext', () => { if ((location.hash || '') === '#/portfolio' && PF.txns) route(); });   // refresh() became available → show the button
 /* LTP: live Angel price for held stocks when portfolio_ltp.py has run, else the latest close in this page */
 const pfLive = sym => PF.mkt && PF.mkt.prices && PF.mkt.prices[sym];
 const pfLtp = sym => { const l = pfLive(sym); if (l && l.ltp) return l.ltp; const s = TODAY.get(sym); return s && ok(s.cmp) ? s.cmp : null; };
@@ -3105,7 +3108,7 @@ function pfPanel(host, title, sub, table) {
 }
 let P_DAY = '';                                            // the trading day of the live prices (yyyy-mm-dd)
 function pfSummary(txns, mkt) {
-  const keep = PF.mkt; PF.mkt = mkt === undefined ? PF.mkt : mkt;   // admin view passes the market doc it read
+  const keep = PF.mkt; PF.mkt = mkt === undefined ? PF.mkt : mkt;   // a market doc passed in is used instead of the page's own
   P_DAY = (PF.mkt && PF.mkt.asOf) || '';
   const R = pfReplay(txns || []);
   const withData = p => { const s = TODAY.get(p.sym); return Object.assign({}, s || {ind: ''}, p, {known: !!s, name: (s && s.name) || p.name || p.sym}); };   // list name wins; typed name for others
@@ -3137,32 +3140,10 @@ function pfSummary(txns, mkt) {
   PF.mkt = keep;
   return out;
 }
-/* admin (auth.js Users list): read-only look at any user's portfolio */
+/* portfolio figures for a {txns} doc and a market doc, plus the page's number formatters */
 window.hniPf = {
-  summary(d, mkt) { const P = pfSummary(pfTxnsOf(d), mkt); return {worth: P.worth, gain: P.gain, gainPct: P.gainPct, day: P.day, dayPct: P.dayPct, n: P.open.length, cash: P.R.cash}; },
-  /* the whole portfolio, read-only: holdings, closed and EVERY transaction, as plain light tables (no sorting /
-     batching machinery), so the overlay opens at once and scrolls smoothly even with thousands of rows */
-  html(d, mkt) {
-    const t = pfTxnsOf(d), P = pfSummary(t, mkt), nl = new Set((mkt && mkt.notListed) || []);
-    const k = (a, b, c = '') => `<div class="pf-k ${c}"><span>${a}</span><b>${b}</b></div>`;
-    const h = (title, n, sub = '') => `<div class="au-pfh">${title} <small>${n}${sub ? ' · ' + sub : ''}</small></div>`;
-    const tbl = (head, body, empty, cols) => `<div class="au-tbl"><table><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols}">${empty}</td></tr>`}</tbody></table></div>`;
-    const rows = P.open.sort((a, b) => b.value - a.value).map(r => `<tr><td><b>${esc(r.sym)}</b>${nl.has(r.sym) ? ' <span class="au-dn" title="Not on NSE\'s list today">⚠</span>' : ''}</td><td class="r">${fmt(r.qty, 0)}</td><td class="r">${fmt(r.avg, 2)}</td><td class="r">${r.ltp == null ? '–' : fmt(r.ltp, 2)}</td>
-      <td class="r">${fmt(r.value, 0)}</td><td class="r">${r.priced ? signed(r.pnl) : '–'}</td><td class="r">${r.day == null ? '–' : signed(r.day)}</td></tr>`).join('');
-    const cl = P.closed.slice().sort((a, b) => String(b.last || '').localeCompare(String(a.last || ''))).map(r => `<tr><td><b>${esc(r.sym)}</b></td><td class="r">${fmt(r.sQty, 0)}</td>
-      <td class="r">${fmt(r.bQty ? r.bAmt / r.bQty : null, 2)} → ${fmt(r.sQty ? r.sAmt / r.sQty : null, 2)}</td><td class="r">${signed(r.realized - r.charges)}</td><td>${esc(r.last || '')}</td></tr>`).join('');
-    const tx = pfSorted(t).reverse().map(x => `<tr><td>${esc(x.date || '')}</td><td>${TX_LABEL[x.t] || x.t}</td><td>${x.sym ? '<b>' + esc(x.sym) + '</b> ' + fmt(x.qty, 0) + ' @ ' + fmt(x.px, 2) : ''}</td>
-      <td class="r">₹${fmt(x.sym ? x.qty * x.px : x.amt, 0)}</td><td class="r">${x.ch ? fmt(x.ch, 2) : ''}</td></tr>`).join('');
-    const bad = P.open.filter(r => nl.has(r.sym)).map(r => r.sym);
-    return `<div class="pf-sum">${k('Net gain', rs(P.gain, true), 'gain ' + (P.gain >= 0 ? 'pos' : 'neg'))}${k('Day', P.day == null ? '–' : signed(P.day))}${k('Net worth', rs(P.worth))}${k('Cash', rs(P.R.cash))}${k('Holdings', rs(P.hold))}${k('Money in', rs(P.deposits))}</div>
-      ${bad.length ? `<p class="au-pfwarn">⚠ Not on NSE's list today: ${bad.map(esc).join(', ')} (delisted, suspended or a wrong symbol).</p>` : ''}
-      ${h('Holdings', P.open.length, P.asOf ? 'LTP ' + esc(P.asOf) : 'last close')}
-      ${tbl('<th>Stock</th><th class="r">Qty</th><th class="r">Avg</th><th class="r">LTP</th><th class="r">Value</th><th class="r">P&amp;L</th><th class="r">Day</th>', rows, 'No open holdings.', 7)}
-      ${h('Closed', P.closed.length)}
-      ${tbl('<th>Stock</th><th class="r">Qty</th><th class="r">Buy → Sell ₹</th><th class="r">Net ₹</th><th>Closed</th>', cl, 'None.', 5)}
-      ${h('Transactions', t.length, 'newest first')}
-      ${tbl('<th>Date</th><th>Type</th><th>Stock</th><th class="r">Amount</th><th class="r">Charges</th>', tx, 'None yet.', 5)}`;
-  },
+  calc(d, mkt) { const t = pfTxnsOf(d); return {P: pfSummary(t, mkt), txns: pfSorted(t)}; },
+  fmt, rs, signed, esc, TX_LABEL,
 };
 function portfolioView() {
   setNav('portfolio'); view.innerHTML = '';

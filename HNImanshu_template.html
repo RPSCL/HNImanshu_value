@@ -162,14 +162,16 @@ input { font-family: var(--sans); }
 }
 .fund-btn:hover { background: var(--accent); color: var(--bg); }
 .fund-btn svg { flex-shrink: 0; }
+.pf-btn + .fund-btn { margin-left: 8px; }                                /* Portfolio, then Fundamentals */
 /* Login button / user menu, right of the Fundamentals button */
 .au-slot { display: inline-flex; align-items: center; margin-left: 12px; flex-shrink: 0; min-width: 32px; min-height: 30px; }
 .au-slot:empty { visibility: hidden; }                                   /* nothing shows until the login state is known */
-.au-login {
-  display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--border2); border-radius: 6px;
-  background: transparent; color: var(--text); font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.4px; cursor: pointer;
+.au-login {                                                              /* same look as the Fundamentals button */
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--accent); border-radius: 6px;
+  background: transparent; color: var(--accent); font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.4px;
+  white-space: nowrap; cursor: pointer; transition: background 0.15s, color 0.15s;
 }
-.au-login:hover { border-color: var(--accent); color: var(--accent); }
+.au-login:hover { background: var(--accent); color: var(--bg); }
 #theme-toggle {
   display: flex; align-items: center; gap: 6px; margin-left: 14px; flex-shrink: 0;
 }
@@ -701,17 +703,24 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
   body { overflow: hidden; }
   #header {
     display: grid !important;
-    grid-template-columns: 1fr auto auto auto !important;         /* Fundamentals button + login / user menu */
+    grid-template-columns: minmax(0,1fr) auto auto auto auto !important;    /* Portfolio + Fundamentals buttons + login / user menu */
     grid-template-rows: auto auto !important;
-    grid-template-areas: "logo fund user toggle" "tabs tabs tabs tabs" !important;
+    grid-template-areas: "logo pf fund user toggle" "tabs tabs tabs tabs tabs" !important;
     padding: 8px 12px 0 !important;
     height: auto !important; gap: 0 !important; align-items: center !important;
   }
   .hni-logo    { grid-area: logo; gap: 8px; align-items: center; }
   #theme-toggle { grid-area: toggle; margin-left: 0; gap: 6px; justify-self: end; }
-  .fund-btn { grid-area: fund; margin: 0 8px 0 0; padding: 6px 9px; font-size: 10.5px; }   /* sits left of the login / user menu */
+  .fund-btn { grid-area: fund; margin: 0 8px 0 0 !important; padding: 6px 9px; font-size: 10.5px; }   /* sits left of the login / user menu */
+  .pf-btn { grid-area: pf; padding: 6px 8px; }                       /* phone: bag icon only */
+  .pf-btn span { display: none; }
   .au-slot { grid-area: user; margin: 0 10px 0 0; }
-  .au-login { padding: 6px 9px; font-size: 10.5px; }
+  .au-login { padding: 6px 8px; font-size: 10.5px; }
+  .au-login span { display: none; }                                  /* phone: person icon only, like the Portfolio bag */
+  .hni-logo { min-width: 0; overflow: hidden; }
+}
+@media (max-width: 440px) {
+  .hni-logo > div:not(.hni-mark) { display: none; }                  /* narrow phones: just the H mark (room for the buttons) */
   .universe-switch { grid-area: tabs; }
   .h-stats { display: none !important; }
   .hni-mark svg { width: 30px; height: 30px; }
@@ -1016,6 +1025,11 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
     <div class="hstat"><div class="hstat-val" id="hs-dv">—</div><div class="hstat-lbl">Deep Value</div></div>
     <div class="hstat"><div class="hstat-val" id="hs-best">—</div><div class="hstat-lbl">A/B+</div></div>
   </div>
+  <!-- Portfolio: the Fundamentals page's Portfolio tab (login needed, same first-tap handling as Fundamentals) -->
+  <a class="fund-btn pf-btn" id="pf-btn" href="fundamentals#/portfolio" data-auth-link title="Your portfolio" aria-label="Portfolio">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg>
+    <span>Portfolio</span>
+  </a>
   <!-- Fundamentals page link — clean URL (firebase.json cleanUrls), no ?uni=: the page remembers the user's own List pick -->
   <a class="fund-btn" id="fund-btn" href="fundamentals" data-auth-link title="Industries, value screen and methodology">
     <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M2 11V7M5 11V4M8 11V6M11 11V2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
@@ -1031,7 +1045,7 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
         o.innerHTML='<div class="au-chkbox" role="status" aria-live="polite"><i class="au-spin"></i><span>Checking login…</span></div>';document.body.appendChild(o);}
       if(o)o.classList.toggle('open',!!on);
     }
-    window.hniDone=function(){chk(false);var a=document.querySelector('[data-auth-link]');if(a){a.removeAttribute('aria-disabled');a.classList.remove('au-busy');}};
+    window.hniDone=function(){chk(false);document.querySelectorAll('[data-auth-link]').forEach(function(a){a.removeAttribute('aria-disabled');a.classList.remove('au-busy');});};
     document.addEventListener('click',function(e){
       var a=e.target.closest&&e.target.closest('[data-auth-link]');
       if(!a||e.ctrlKey||e.metaKey||e.shiftKey)return;
