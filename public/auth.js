@@ -280,8 +280,8 @@ async function setAdmin(back, uid) {
 }
 
 // ---------- signed-in chip (Fundamentals header) ----------
-function showUser(u) {
-  const host = document.querySelector("header .global");
+function showUser(u, slot) {
+  const host = slot || document.querySelector("header .global");        // Fundamentals header, or the screener's #au-slot
   if (!host || $(".au-user", host)) return;
   const n = nameOf(u);
   const el = document.createElement("span");
@@ -293,9 +293,21 @@ function showUser(u) {
   $(".au-av", el).addEventListener("click", (e) => { e.stopPropagation(); el.classList.toggle("open"); });
   document.addEventListener("click", (e) => { if (!el.contains(e.target)) el.classList.remove("open"); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") el.classList.remove("open"); });
-  $(".au-out", el).addEventListener("click", async () => { await signOut(auth); location.href = HOME; });
+  $(".au-out", el).addEventListener("click", async () => { await signOut(auth); if (GATED) location.href = HOME; else location.reload(); });   // screener: reloads signed out (Login shows, admin dot gone)
   if (ADMIN) $(".au-adm", el).addEventListener("click", () => { el.classList.remove("open"); openUsers(); });
-  host.insertBefore(el, host.querySelector("#theme-toggle"));
+  host.insertBefore(el, host.querySelector("#theme-toggle"));   // (no toggle in the slot: it simply goes at the end)
+}
+/* screener: "Login" when signed out, the initials menu when signed in */
+function paintSlot(u) {
+  const slot = document.getElementById("au-slot");
+  if (!slot) return;
+  slot.innerHTML = "";
+  if (u) return showUser(u, slot);
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "au-login";
+  b.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>Login';
+  b.addEventListener("click", () => openPopup(null));            // after logging in you stay on the screener
+  slot.appendChild(b);
 }
 
 // ---------- online now + total visitors (admin-only readout) ----------
@@ -364,6 +376,7 @@ const ready = new Promise((resolve) => {
       return;
     }
     if (GATED) document.documentElement.classList.add("auth-ok");   // show the page at once; admin check follows
+    else paintSlot(u);                                         // screener: Login button or the user menu
     if (!u) return;
     // Portfolio tab: the page saves / loads the user's holdings through this (Firestore hni_portfolio/{uid}, owner only)
     window.hniStore = {
@@ -383,7 +396,7 @@ const ready = new Promise((resolve) => {
     idle(async () => {
       record(u);
       const a = await checkAdmin(u);
-      if (a && !ADMIN) { ADMIN = true; const old = $(".au-user"); if (old) old.remove(); if (GATED) showUser(u); window.dispatchEvent(new Event("hni-admin")); }   // menu gains "Users"
+      if (a && !ADMIN) { ADMIN = true; const old = $(".au-user"); if (old) old.remove(); if (GATED) showUser(u); else paintSlot(u); window.dispatchEvent(new Event("hni-admin")); }   // menu gains "Users"
       if (ADMIN) showAdminDot();
     }, 1500);
   });
