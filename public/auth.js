@@ -143,6 +143,7 @@ function buildPopup() {
 function openPopup(next) {
   nextUrl = next || null;
   buildPopup();
+  if (!GATED) box.classList.add("au-blur");                 // screener: the page behind is blurred
   box._reset();
   box.classList.add("open");
   setTimeout(() => $(".au-google", box).focus(), 30);
@@ -389,20 +390,18 @@ const ready = new Promise((resolve) => {
 });
 
 if (!GATED) {
-  // screener: gate the links that need a login
-  document.addEventListener("click", async (e) => {
-    const a = e.target.closest && e.target.closest("[data-auth-link]");
-    if (!a || e.ctrlKey || e.metaKey || e.shiftKey) return;
-    e.preventDefault();
-    // Signed in last time → go at once. Firebase can take 1–2 s to confirm a login on page load, and with no visible
-    // reaction people clicked 2–3 times. The Fundamentals page itself confirms the login (and sends you back if needed).
-    if (current || hinted()) { location.href = a.href; return; }
-    a.classList.add("au-busy");                              // something visibly happens while Firebase answers
+  // screener: the Fundamentals button. Its tap is caught by a small script in the page itself (so the FIRST tap works
+  // even before this file has loaded): it disables the button, shows "Checking login…" and then calls this.
+  window.hniAuthGo = async (href) => {
+    window.hniPending = null;
+    // signed in last time → go at once (the Fundamentals page confirms the login itself, and sends you back if needed)
+    if (current || hinted()) { location.href = href; return; }
     await ready;
-    a.classList.remove("au-busy");
-    if (current) location.href = a.href;
-    else openPopup(a.href);
-  }, true);
+    if (current) { location.href = href; return; }
+    if (window.hniDone) window.hniDone();                      // not signed in: "Checking login…" → the login box
+    openPopup(href);
+  };
+  if (window.hniPending) window.hniAuthGo(window.hniPending);   // tapped while this file was still loading
   // signed-in visitors: fetch the Fundamentals page quietly in the background, so it opens instantly (not for everyone:
   // it is ~260 KB, and free hosting has a daily transfer limit)
   ready.then(() => {

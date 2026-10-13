@@ -15,13 +15,18 @@ body{
   --au-sans: var(--sans, 'DM Sans', system-ui, sans-serif);
 }
 
-/* Fundamentals gate: nothing of the page shows until auth.js confirms a login (html.auth-ok) */
-html[data-auth="required"]:not(.auth-ok) body > *:not(.au-wait){visibility:hidden}
-.au-wait{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;gap:10px;
-  font:500 13px var(--au-mono);color:var(--au-faint);background:var(--bg, #0e0e0f);z-index:200}
+/* Fundamentals gate: until auth.js confirms a login (html.auth-ok) the page shows blurred behind a small "Checking login…" box */
+html[data-auth="required"]:not(.auth-ok) body > *:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none;user-select:none}
+.au-wait,.au-chk{position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(8,8,10,.35)}
 html.auth-ok .au-wait{display:none}
-.au-wait i{width:14px;height:14px;border-radius:50%;border:2px solid var(--au-line);border-top-color:var(--au-acc);animation:au-spin .8s linear infinite}
+.au-chk{display:none;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}   /* screener: only for the moment it is open */
+.au-chk.open{display:flex}
+.au-chkbox{display:flex;align-items:center;gap:12px;padding:16px 22px;border-radius:12px;background:var(--au-bg);border:1px solid var(--au-line);
+  color:var(--au-ink);font:600 13px var(--au-mono);box-shadow:0 18px 50px rgba(0,0,0,.45);max-width:100%}
+.au-chkbox a{color:var(--au-acc)}
+.au-spin{flex:none;width:16px;height:16px;border-radius:50%;border:2px solid var(--au-line);border-top-color:var(--au-acc);animation:au-spin .8s linear infinite}
 @keyframes au-spin{to{transform:rotate(360deg)}}
+.au-back.au-blur{-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);background:rgba(8,8,10,.35)}   /* screener login popup: page behind blurred */
 
 /* popup */
 .au-back{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;padding:16px;
@@ -131,6 +136,5 @@ html.au-lock,html.au-lock body{overflow:hidden}                     /* page behi
   .au-pfv .au-tbl td,.au-pfv .au-tbl th{padding:6px 8px}
 }
 
-/* Fundamentals button while Firebase confirms the login (first visit only): a soft pulse instead of nothing */
-[data-auth-link].au-busy{opacity:.6;pointer-events:none;animation:au-busy .9s ease-in-out infinite alternate}
-@keyframes au-busy{to{opacity:.35}}
+/* Fundamentals button: disabled (dimmed) from the first tap until the next page or the login box shows */
+[data-auth-link].au-busy{opacity:.45;pointer-events:none}
