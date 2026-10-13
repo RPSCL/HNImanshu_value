@@ -349,11 +349,14 @@ idle(presence);                                         // online counter: after
 idle(countVisitor, 4000);
 
 // ---------- page wiring ----------
+const SIGNED_HINT = "hni_signed";                          // "1" = signed in last time (only a hint: Fundamentals checks for real)
+const hinted = () => { try { return localStorage.getItem(SIGNED_HINT) === "1"; } catch (e) { return false; } };
 let current = null;
 const ready = new Promise((resolve) => {
   onAuthStateChanged(auth, async (u) => {
     if (u && expired(u)) { await signOut(auth); u = null; }   // 7-day session limit
     current = u;
+    try { localStorage.setItem(SIGNED_HINT, u ? "1" : "0"); } catch (e) {}   // lets the next visit open Fundamentals instantly
     resolve();
     if (GATED && !u) {                                        // no login: back to the screener with the popup open
       location.replace(HOME + "?login=" + encodeURIComponent(location.pathname.replace(/^\//, "") + location.hash));
@@ -391,10 +394,24 @@ if (!GATED) {
     const a = e.target.closest && e.target.closest("[data-auth-link]");
     if (!a || e.ctrlKey || e.metaKey || e.shiftKey) return;
     e.preventDefault();
+    // Signed in last time → go at once. Firebase can take 1–2 s to confirm a login on page load, and with no visible
+    // reaction people clicked 2–3 times. The Fundamentals page itself confirms the login (and sends you back if needed).
+    if (current || hinted()) { location.href = a.href; return; }
+    a.classList.add("au-busy");                              // something visibly happens while Firebase answers
     await ready;
+    a.classList.remove("au-busy");
     if (current) location.href = a.href;
     else openPopup(a.href);
   }, true);
+  // signed-in visitors: fetch the Fundamentals page quietly in the background, so it opens instantly (not for everyone:
+  // it is ~260 KB, and free hosting has a daily transfer limit)
+  ready.then(() => {
+    const c = navigator.connection;
+    if (!current || (c && (c.saveData || /2g/.test(c.effectiveType || "")))) return;
+    const a = document.querySelector("[data-auth-link]");
+    if (!a) return;
+    idle(() => { const l = document.createElement("link"); l.rel = "prefetch"; l.href = a.href; document.head.appendChild(l); }, 3000);
+  });
   const want = new URLSearchParams(location.search).get("login");
   if (want != null) {
     history.replaceState(null, "", location.pathname + location.hash);          // clean the address bar

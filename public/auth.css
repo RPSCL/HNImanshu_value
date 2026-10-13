@@ -130,3 +130,7 @@ html.au-lock,html.au-lock body{overflow:hidden}                     /* page behi
   .au-pfv .au-box{max-height:none;height:100%;border-radius:12px}    /* phone: the whole screen, one scroll */
   .au-pfv .au-tbl td,.au-pfv .au-tbl th{padding:6px 8px}
 }
+
+/* Fundamentals button while Firebase confirms the login (first visit only): a soft pulse instead of nothing */
+[data-auth-link].au-busy{opacity:.6;pointer-events:none;animation:au-busy .9s ease-in-out infinite alternate}
+@keyframes au-busy{to{opacity:.35}}
