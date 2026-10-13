@@ -1161,7 +1161,43 @@ body.pf-mode #pfBackV{display:inline-flex}
 body.pf-mode #backBtn,body.pf-mode .global > .gsep,body.pf-mode #uniChip,body.pf-mode .global > .chip.strike,body.pf-mode #histGrp,
 body.pf-mode #saveHtml,body.pf-mode #nav,body.pf-mode #meta{display:none!important}
 .btn.hbag:hover,.btn.hbag.on{border-color:var(--brass);color:var(--brass);background:var(--brassbg)}
-@media (max-width:700px){.btn.hbag{position:absolute;top:13px;right:calc(var(--au-right,104px) + 40px);width:32px;height:32px;padding:0;justify-content:center;border-radius:50%}}
+@media (max-width:700px){.btn.hbag{position:absolute;top:13px;right:calc(var(--au-right,104px) + 80px);width:32px;height:32px;padding:0;justify-content:center;border-radius:50%}}
+/* ---------- phone header, de-cluttered ----------
+   top-right: Portfolio · Telegram · avatar · day/night.  Then three rows with thin lines between them:
+   ← Screener  /  List · PSU · Semi PSU  /  Historical ······ period.  Tabs and screens live in two menu buttons (#mnav). */
+#mnav{display:none}
+@media (max-width:700px){
+  #weeklyBtn{position:absolute;top:13px;right:calc(var(--au-right,104px) + 40px);width:32px;height:32px;padding:0;gap:0;font-size:0;justify-content:center;border-radius:50%}
+  #weeklyBtn svg{width:17px;height:17px}
+  header.top .global{display:grid;grid-template-columns:1fr auto auto;grid-template-areas:"back back back" "l1 l1 l1" "uni psu semi" "l2 l2 l2" "hist hist hist";
+          column-gap:8px;row-gap:9px;align-items:center;width:100%}    /* "header.top" outranks the older flex rule further down */
+  header.top .global::before,header.top .global::after{content:"";height:1px;background:var(--line)}
+  header.top .global::before{grid-area:l1} header.top .global::after{grid-area:l2}
+  header.top .global > .gsep{display:none!important}
+  header.top #backBtn,header.top #pfBackV{grid-area:back;justify-self:start}
+  header.top #uniChip{grid-area:uni;justify-self:start}
+  header.top .global > .chip:has(#hidePSU){grid-area:psu} header.top .global > .chip:has(#hideSemi){grid-area:semi}
+  header.top #histGrp{grid-area:hist;justify-content:space-between;width:100%}
+  body.pf-mode header.top .global::before,body.pf-mode header.top .global::after{display:none}
+  body.pf-mode header.top .global{grid-template-areas:"back back back";row-gap:0}   /* Portfolio: only the return button row */
+  #nav{display:none}                                                   /* tabs → the menu button */
+  #mnav{display:flex;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:5}
+  body.pf-mode #mnav{display:none}
+  .mnav-b{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 12px;border:1px solid var(--line);border-radius:9px;background:var(--bg);
+          color:var(--ink);font:600 12.5px var(--mono);cursor:pointer;min-width:0}
+  .mnav-b span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mnav-b i{font-style:normal;color:var(--faint);font-size:11px}
+  #mnavTab{color:var(--brass);border-color:var(--brass)}
+  #mnavPre{flex:1;justify-content:space-between}
+  .fbox .fbar{display:none}                                            /* screens → the second menu; Filters → the round button */
+}
+/* the menu overlay (phone): a list of choices */
+.mlist{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.mlist button{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;padding:12px 14px;border:1px solid var(--line);
+  border-radius:10px;background:var(--bg);color:var(--ink);font:600 13.5px var(--sans);cursor:pointer}
+.mlist button small{display:block;font:400 11.5px var(--sans);color:var(--faint);margin-top:2px}
+.mlist button.on{border-color:var(--brass);background:var(--brassbg);color:var(--brass)}
+.mlist button.on::after{content:"✓";font-weight:700}
 .ind{vertical-align:middle}
 /* header: Weekly (Telegram) */
 .btn.hweek{gap:6px;color:var(--ink)}
@@ -1641,6 +1677,10 @@ __AUTH_BODY__<script>
   <a href="#/all" data-t="all">All Stocks</a>
   <a href="#/method" data-t="method">Methodology</a>
 </nav>
+<div id="mnav" aria-label="Pages and screens">
+  <button type="button" class="mnav-b" id="mnavTab" aria-haspopup="dialog"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Value screen</span><i>▾</i></button>
+  <button type="button" class="mnav-b" id="mnavPre" aria-haspopup="dialog" hidden><span>Deep value</span><i>▾</i></button>
+</div>
 <main id="view"></main>
 <button type="button" id="ffab" aria-label="Filters" title="Filters"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 3.5h12M4.5 8h7M7 12.5h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><b class="cnt"></b></button>
 
@@ -2116,6 +2156,30 @@ const assetCols = () => [C.pta].concat(has('pfa') ? [C.pfa] : [], has('invp') ? 
 
 /* ---------- views ---------- */
 const view = $('#view');
+/* phone: two menu buttons replace the tab row and the row of screens */
+const TABS = [['#/value', 'Value screen', 'Cheap, good-quality stocks by screen'], ['#/momentum', 'Momentum', 'Strongest price trends'],
+              ['#/', 'Industries', 'Industry PE, PB, ROE'], ['#/all', 'All Stocks', 'Every stock with every column'], ['#/method', 'Methodology', 'How every number is worked out']];
+function syncMnav() {
+  const h = location.hash || '#/', t = TABS.find(x => x[0] === h) || (h.startsWith('#/industry/') ? TABS[2] : null);
+  $('#mnavTab span').textContent = t ? t[1] : 'Menu';
+  const pre = view.querySelectorAll('.fbox .preset'), b = $('#mnavPre');
+  b.hidden = !pre.length;
+  if (pre.length) { const on = view.querySelector('.fbox .preset.on'); $('span', b).textContent = on ? on.textContent : 'Custom screen'; }
+}
+function menuSheet(title, items, pick) {
+  const w = modal(esc(title), `<div class="mlist">${items.map((it, i) => `<button type="button" data-i="${i}" class="${it.on ? 'on' : ''}"><span>${esc(it.name)}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span></button>`).join('')}</div>`, {noFocus: true, sheet: true});
+  w.querySelectorAll('.mlist button').forEach(b => b.addEventListener('click', () => { w._close(); pick(items[+b.dataset.i]); }));
+}
+$('#mnavTab').addEventListener('click', () => {
+  const h = location.hash || '#/';
+  menuSheet('Go to', TABS.map(t => ({name: t[1], sub: t[2], href: t[0], on: t[0] === h || (t[0] === '#/' && h.startsWith('#/industry/'))})), it => { location.hash = it.href; });
+});
+$('#mnavPre').addEventListener('click', () => {
+  const pre = [...view.querySelectorAll('.fbox .preset')];
+  menuSheet('Screen', pre.map(b => ({name: b.textContent, sub: (b.title || '').replace(/ \(click again to switch off\)$/, ''), btn: b, on: b.classList.contains('on')})),
+    it => { if (!it.on) it.btn.click(); });                             // picking the screen already on just closes the menu
+});
+new MutationObserver(syncMnav).observe(view, {childList: true, subtree: true});
 /* the Portfolio button is a switch: on the Portfolio page it goes back to Value screen */
 document.addEventListener('click', e => {
   const b = e.target.closest && e.target.closest('#pfBag');
@@ -4062,6 +4126,7 @@ if (WEB) {                                                  // website: back but
 }
 $('#weeklyBtn').addEventListener('click', () => modal('Weekly updates', `<p>Work in progress. Soon you'll get your portfolio summary every week on Telegram.</p>`));
 window.addEventListener('hashchange', route);
+if (isPhone() && !location.hash) history.replaceState(null, '', location.pathname + location.search + '#/value');   // phone: opens on Value screen
 (() => {                                                  // this session's last Historical setting
   let hs = null; try { hs = JSON.parse(sessionStorage.getItem(HS_KEY) || 'null'); } catch (e) {}
   if (hs && (hs.on || (hs.key && hs.key !== GF.backP))) setHistorical(hs.on, hs.key, true); else route();
@@ -4098,10 +4163,10 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
 # The inline rule hides the page even if auth.css is slow or blocked; auth.js adds html.auth-ok once a login is confirmed.
 AUTH_WEB = {
     "__AUTH_ATTR__": ' data-auth="required"',
-    "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait){visibility:hidden}</style>\n'
+    "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
                      '<link rel="stylesheet" href="auth.css">\n'
                      '<script type="module" src="auth.js"></script>\n',
-    "__AUTH_BODY__": '<div class="au-wait" id="auWait"><i></i>Checking login…</div>\n'
+    "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
                      'var w=document.getElementById("auWait");if(w)w.innerHTML=\'Login could not load. <a href="./">Back to screener</a>\';}},10000);</script>\n',

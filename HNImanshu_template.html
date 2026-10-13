@@ -1011,6 +1011,29 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
     <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M2 11V7M5 11V4M8 11V6M11 11V2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
     <span>Fundamentals</span>
   </a>
+  <script>
+  /* Fundamentals button: works on the FIRST tap, even before the login code (auth.js) has loaded.
+     Tap → button disabled + a small "Checking login…" box over the blurred page → auth.js opens Fundamentals or the login box. */
+  (function(){
+    function chk(on){
+      var o=document.getElementById('au-chk');
+      if(on&&!o){o=document.createElement('div');o.id='au-chk';o.className='au-chk';
+        o.innerHTML='<div class="au-chkbox" role="status" aria-live="polite"><i class="au-spin"></i><span>Checking login…</span></div>';document.body.appendChild(o);}
+      if(o)o.classList.toggle('open',!!on);
+    }
+    window.hniDone=function(){chk(false);var a=document.querySelector('[data-auth-link]');if(a){a.removeAttribute('aria-disabled');a.classList.remove('au-busy');}};
+    document.addEventListener('click',function(e){
+      var a=e.target.closest&&e.target.closest('[data-auth-link]');
+      if(!a||e.ctrlKey||e.metaKey||e.shiftKey)return;
+      e.preventDefault();e.stopImmediatePropagation();
+      if(a.getAttribute('aria-disabled')==='true')return;           // already on its way: ignore extra taps
+      a.setAttribute('aria-disabled','true');a.classList.add('au-busy');chk(true);
+      if(window.hniAuthGo)window.hniAuthGo(a.href);else window.hniPending=a.href;   // auth.js picks it up as soon as it loads
+      setTimeout(function(){if(window.hniPending===a.href){window.hniPending=null;location.href=a.href;}},8000);   // login code never loaded: just go
+    },true);
+    addEventListener('pageshow',function(e){if(e.persisted)window.hniDone();});   // back button: button usable again
+  })();
+  </script>
   <div id="theme-toggle">
     <span class="toggle-icon moon-icon">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
