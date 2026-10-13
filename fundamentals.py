@@ -1449,6 +1449,7 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:16p
 nav .hgrp{margin-left:auto;padding:4px 0}                       /* desktop: Historical + date at the far right of the tabs row */
 nav .hgrp .chip{height:30px}
 .btn.back .arr{display:none}
+#pfBackV{gap:6px} #pfBackV .arr{display:inline-block}   /* Portfolio page: the return icon shows on computers too */
 .gsep{display:none;width:1px;height:20px;background:var(--line);margin:0 2px;flex-shrink:0}
 #backChip{justify-content:center}
 .chip:has(input:focus-visible){outline:2px solid var(--brass);outline-offset:2px}
@@ -1601,7 +1602,7 @@ __AUTH_BODY__<script>
     <div class="sub" id="meta"></div>
   </div>
   <div class="global">
-    <a class="btn back" id="pfBackV" href="#/value"><svg class="arr" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Value</a>
+    <a class="btn back" id="pfBackV" href="#/value" title="Return to Value Screener"><svg class="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>Value Screener</a>
     <a class="btn back" id="backBtn" href="./"><svg class="arr" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg><span class="lg">Back to </span>Screener</a>
     <span class="gsep" aria-hidden="true"></span>
     <label class="chip" id="uniChip">List <select id="uniSel"></select></label>
