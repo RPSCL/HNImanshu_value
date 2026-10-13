@@ -199,7 +199,6 @@ function showUser(u, slot) {
   document.addEventListener("click", (e) => { if (!el.contains(e.target)) el.classList.remove("open"); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") el.classList.remove("open"); });
   $(".au-out", el).addEventListener("click", async () => {
-    try { Object.keys(sessionStorage).filter((k) => k.startsWith("hni_x_")).forEach((k) => sessionStorage.removeItem(k)); } catch (e) {}
     await signOut(auth); if (GATED) location.href = HOME; else location.reload();   // screener: reloads signed out
   });
   EXTRA.forEach((it) => $(".au-menu", el).insertBefore(itemBtn(it, el), $(".au-out", el)));
@@ -257,11 +256,9 @@ async function countVisitor() {
 // Some accounts have extra tools. Their code is not in this file: it sits in Firestore (hni_ext/ui), which the
 // database rules let only those accounts read. For everyone else the read is simply refused and nothing happens.
 async function loadExt(u) {
-  const k = "hni_x_" + u.uid;
-  try { if (sessionStorage.getItem(k) === "0") return; } catch (e) {}      // already checked in this tab session
   let code = null;
   try { await needFS(); const d = await getDoc(doc(db, ...EXT)); code = d.exists() ? d.data().code : null; } catch (e) {}
-  if (typeof code !== "string" || !code) { try { sessionStorage.setItem(k, "0"); } catch (e) {} return; }
+  if (typeof code !== "string" || !code) return;   // checked on every page load (no caching), so a new upload shows at once
   const url = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
   try {
     const m = await import(url);
