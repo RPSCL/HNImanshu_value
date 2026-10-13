@@ -1,13 +1,11 @@
 // auth.js — HNImanshu login (username + password, or Google) on Firebase Authentication (project hnimanshu).
 //
 // One file for both pages:
-//   • Screener (index.html): clicking an element with [data-auth-link] (the Fundamentals button) opens the
-//     login / register popup when nobody is signed in; after a successful login it goes to that link.
+//   • Screener (index.html): clicking an element with [data-auth-link] (Fundamentals, Portfolio) opens the
+//     login popup when nobody is signed in; after a successful login it goes to that link.
 //     Opening the screener with ?login=<path> pops the popup straight away (the Fundamentals gate sends people here).
 //   • Fundamentals (<html data-auth="required">): the page stays hidden until a login is confirmed; no login →
-//     back to the screener with the popup open. Shows "name · Logout" in the header.
-//   • Every login is recorded in Firestore hni_users/{uid} (username, email, provider, dates). Firestore rules let
-//     only the admin account read that list; the admin gets a "Users" button in the header to see it.
+//     back to the screener with the popup open. Shows the user's initials menu in the header.
 //   • Passwords never pass through this code's storage: Firebase Authentication keeps them hashed on its servers.
 //
 // Usernames: Firebase needs an email, so username "chirag" is stored as chirag@users.hnimanshu.app (never shown,
@@ -20,8 +18,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 // Firestore and the Realtime Database are loaded only when first needed (not before the page shows):
 // only Auth is needed to open a page, which keeps the first load light on slow (2G) connections.
-let getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection, serverTimestamp;
-let getDatabase, ref, set, remove, onValue, onDisconnect, increment;
+let getFirestore, doc, setDoc, getDoc, serverTimestamp;
+let getDatabase, ref, set, onValue, onDisconnect, increment;
 
 // Firebase project "hnimanshu", web app "valueapp" (Project settings → Your apps). These values are public by design;
 // security comes from the Firestore / Realtime Database rules, not from hiding them.
@@ -40,14 +38,10 @@ try {
 } catch (e) {}
 const USER_DOMAIN = "users.hnimanshu.app";        // username → hidden email for Firebase
 const SESSION_DAYS = 7;                           // log out a week after the last sign-in
-const ADMIN_EMAIL = "admin@" + USER_DOMAIN;       // username "admin" (created by you in the Firebase console)
-const USERS = "hni_users";                        // Firestore collection: one doc per account
-const ADMINS = "hni_admins";
+const USERS = "hni_users";                        // Firestore: one doc per account (its own owner writes it)
 const PORTFOLIO = "hni_portfolio";                // Firestore: one doc per user with their holdings
-const MARKET = ["hni_market", "ltp"];             // live LTP for held stocks, written by portfolio_ltp.py
-// "⟳ Live prices" button: address of the Cloudflare Worker (ltp_worker.js) that starts ltp.yml on GitHub.
-// Empty = no button. The GitHub token lives in the Worker, never here.
-const LTP_HOOK = "https://hni-ltp.himanshushekhar8.workers.dev/run";   // Cloudflare Worker (ltp_worker.js) that starts ltp.yml; no secret here, safe to be public
+const MARKET = ["hni_market", "ltp"];             // latest prices for held stocks
+const EXT = ["hni_ext", "ui"];                    // optional per-account add-on (see loadExt)
 const HOME = "./";                                // the screener
 const GATED = document.documentElement.dataset.auth === "required";
 
@@ -55,11 +49,11 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 let db = null, rtdb = null, FSP = null, RTP = null;
 const needFS = () => FSP = FSP || import("https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js").then((m) => {
-  ({ getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection, serverTimestamp } = m); db = getFirestore(app);
+  ({ getFirestore, doc, setDoc, getDoc, serverTimestamp } = m); db = getFirestore(app);
 });
 const needRT = () => RTP = RTP || (firebaseConfig.databaseURL                                // live online / visitor counters (hni/...)
   ? import("https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js").then((m) => {
-      ({ getDatabase, ref, set, remove, onValue, onDisconnect, increment } = m); rtdb = getDatabase(app); })
+      ({ getDatabase, ref, set, onValue, onDisconnect, increment } = m); rtdb = getDatabase(app); })
   : Promise.resolve());
 const idle = (fn, ms = 2500) => setTimeout(() => (window.requestIdleCallback || ((f) => f()))(fn), ms);   // after the page has settled
 const google = new GoogleAuthProvider();
@@ -69,14 +63,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const toEmail = (u) => `${u.trim().toLowerCase()}@${USER_DOMAIN}`;
 const nameOf = (u) => u.displayName || (u.email || "").replace("@" + USER_DOMAIN, "") || "user";
-const isMainAdmin = (u) => !!u && u.email === ADMIN_EMAIL;   // the "admin" username: always admin, can't be removed
-let ADMIN = false;                                           // set once per page from hni_admins (see checkAdmin)
-async function checkAdmin(u) {
-  if (!u) return false;
-  if (isMainAdmin(u)) return true;
-  try { await needFS(); return (await getDoc(doc(db, ADMINS, u.uid))).exists(); } catch (e) { return false; }
-}
-const initials = (n) => {                                    // "Himanshu Shekhar" → HS, "admin" → AD
+const initials = (n) => {                                    // "Himanshu Shekhar" → HS, "chirag" → CH
   const w = String(n || "?").trim().split(/[\s._-]+/).filter(Boolean);
   return (w.length > 1 ? w[0][0] + w[w.length - 1][0] : (w[0] || "?").slice(0, 2)).toUpperCase();
 };
@@ -168,7 +155,7 @@ function message(ex) {
   return "Something went wrong (" + (c || "unknown") + "). Please try again.";
 }
 
-// ---------- user record in Firestore (only the admin can read these) ----------
+// ---------- the account's own record in Firestore ----------
 async function record(u) {
   const key = "hni_rec_" + u.uid;                       // write at most once per browser session, keeps Firestore use tiny
   try { if (sessionStorage.getItem(key)) return; } catch (e) {}
@@ -183,103 +170,22 @@ async function record(u) {
   } catch (e) { console.warn("user record not saved:", e.code || e); }   // never blocks the page
 }
 
-// ---------- admin: list of users ----------
 // while any popup is open the page behind doesn't scroll (phones otherwise scroll the big page underneath)
 const syncLock = () => document.documentElement.classList.toggle("au-lock", !!document.querySelector(".au-back.open"));
-const fmt = (t) => (t && t.toDate ? t.toDate().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "–");
-async function openUsers() {
-  let back = $(".au-users");
-  if (!back) {
-    back = document.createElement("div");
-    back.className = "au-back au-users";
-    back.innerHTML = `<div class="au-box au-wide" role="dialog" aria-modal="true">
-      <button class="au-x" type="button" aria-label="Close">×</button>
-      <h2 class="au-title">Users <span class="au-count"></span></h2>
-      <input class="au-q" placeholder="Search username or email" spellcheck="false">
-      <div class="au-tbl"></div></div>`;
-    document.body.appendChild(back);
-    const close = () => { back.classList.remove("open"); syncLock(); };
-    $(".au-x", back).addEventListener("click", close);
-    back.addEventListener("click", (e) => { if (e.target === back) close(); });
-    back.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") close(); });
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && back.classList.contains("open") && !$(".au-pfv.open")) close(); });
-    $(".au-q", back).addEventListener("input", (e) => paint(back, e.target.value));
-  }
-  back.classList.add("open"); syncLock();
-  $(".au-tbl", back).innerHTML = '<p class="au-sub">Loading…</p>';
-  try {
-    await needFS();
-    const snap = await getDocs(collection(db, USERS));
-    const adm = new Set((await getDocs(collection(db, ADMINS))).docs.map((d) => d.id));
-    back._rows = snap.docs.map((d) => Object.assign({ uid: d.id, admin: adm.has(d.id) }, d.data())).sort((a, b) => ((b.lastLogin && b.lastLogin.seconds) || 0) - ((a.lastLogin && a.lastLogin.seconds) || 0));
-    paint(back, "");
-    if (window.hniPf) {                                       // Fundamentals page: add each user's portfolio worth and day gain
-      const mkt = await getDoc(doc(db, ...MARKET)).then((d) => (d.exists() ? d.data() : null)).catch(() => null);
-      back._mkt = mkt;
-      await Promise.all(back._rows.map(async (r) => {
-        try { const d = await getDoc(doc(db, PORTFOLIO, r.uid)); r.pfData = d.exists() ? d.data() : null; r.pf = r.pfData ? window.hniPf.summary(r.pfData, mkt) : null; }
-        catch (e) { r.pf = undefined; }
-      }));
-      paint(back, $(".au-q", back).value);
-    }
-  } catch (e) {
-    $(".au-tbl", back).innerHTML = `<p class="au-err">Couldn't load users (${esc(e.code || e)}). Check the Firestore rules.</p>`;
-  }
-}
-function paint(back, q) {
-  q = q.trim().toLowerCase();
-  const rows = (back._rows || []).filter((r) => !q || (r.username + " " + (r.email || "")).toLowerCase().includes(q));
-  $(".au-count", back).textContent = `· ${rows.length}`;
-  const inr = (v, sign) => v == null ? "–" : (v < 0 ? "−" : sign && v > 0 ? "+" : "") + "₹" + Math.round(Math.abs(v)).toLocaleString("en-IN");
-  const pfCell = (r) => !window.hniPf ? "" : `<td>${r.pf === undefined ? '<span class="au-tag">no access</span>' : r.pf ? inr(r.pf.worth) : "–"}</td>
-    <td class="${r.pf && r.pf.day != null ? (r.pf.day >= 0 ? "au-up" : "au-dn") : ""}">${r.pf ? inr(r.pf.day, true) : "–"}</td>
-    <td>${r.pfData ? `<button type="button" class="au-mk au-view" data-pf="${esc(r.uid)}">View</button>` : ""}</td>`;
-  $(".au-tbl", back).innerHTML = `<table><thead><tr><th>Username</th><th>Email</th><th>Via</th><th>Joined</th><th>Last login</th>${window.hniPf ? "<th>Portfolio</th><th>Day</th><th></th>" : ""}<th>Admin</th></tr></thead><tbody>${
-    rows.map((r) => `<tr><td>${esc(r.username || "")}</td><td>${r.provider === "google" ? esc(r.email || "") : "–"}</td><td>${esc(r.provider || "")}</td><td>${fmt(r.created)}</td><td>${fmt(r.lastLogin)}</td>${pfCell(r)}<td>${
-      r.email === ADMIN_EMAIL ? '<span class="au-tag">main</span>'
-        : `<button type="button" class="au-mk${r.admin ? " on" : ""}" data-uid="${esc(r.uid)}">${r.admin ? "Admin ✓" : "Make admin"}</button>`}</td></tr>`).join("")
-  }</tbody></table>`;
-  back.querySelectorAll(".au-mk[data-uid]").forEach((b) => b.addEventListener("click", () => setAdmin(back, b.dataset.uid)));
-  back.querySelectorAll("[data-pf]").forEach((b) => b.addEventListener("click", () => {
-    const r = back._rows.find((x) => x.uid === b.dataset.pf); if (r) viewPortfolio(r, back._mkt);
-  }));
-}
-// admin: one user's portfolio as an overlay (read-only), drawn by the Fundamentals page (window.hniPf.html)
-function viewPortfolio(r, mkt) {
-  let o = $(".au-pfv");
-  if (!o) {
-    o = document.createElement("div"); o.className = "au-back au-pfv";
-    // the box is capped at the screen height; everything inside scrolls in ONE place (.au-pfbody)
-    o.innerHTML = `<div class="au-box au-wide" role="dialog" aria-modal="true"><button class="au-x" type="button" aria-label="Close">×</button><h2 class="au-title"></h2><div class="au-pfbody"></div></div>`;
-    document.body.appendChild(o);
-    const close = () => { o.classList.remove("open"); $(".au-pfbody", o).innerHTML = ""; syncLock(); };   // emptied: nothing heavy left in the page
-    $(".au-x", o).addEventListener("click", close);
-    o.addEventListener("click", (e) => { if (e.target === o) close(); });
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && o.classList.contains("open")) { e.stopImmediatePropagation(); close(); } }, true);
-  }
-  $(".au-title", o).textContent = (r.username || r.email || "User") + " · portfolio";
-  const body = $(".au-pfbody", o);
-  body.innerHTML = '<p class="au-sub">Loading…</p>';
-  o.classList.add("open"); syncLock();
-  requestAnimationFrame(() => { body.innerHTML = window.hniPf.html(r.pfData, mkt); body.scrollTop = 0; });   // popup shows first, then the tables
-}
-// make / unmake an admin: Firestore hni_admins/{uid} (Users list, rules) + RTDB hni/admins/{uid} (online counter rules)
-async function setAdmin(back, uid) {
-  const r = (back._rows || []).find((x) => x.uid === uid);
-  if (!r) return;
-  const make = !r.admin;
-  if (!confirm((make ? "Make " : "Remove admin from ") + (r.username || r.email || uid) + (make ? " an admin? They will see every user and the online counter." : "?"))) return;
-  try {
-    await needFS(); await needRT();
-    if (make) await setDoc(doc(db, ADMINS, uid), { by: current ? current.uid : null, at: serverTimestamp() });
-    else await deleteDoc(doc(db, ADMINS, uid));
-    if (rtdb) await (make ? set(ref(rtdb, "hni/admins/" + uid), true) : remove(ref(rtdb, "hni/admins/" + uid))).catch(() => {});
-    r.admin = make;
-    paint(back, $(".au-q", back).value);
-  } catch (e) { alert("Couldn't change admin (" + (e.code || e) + "). Check the Firestore rules."); }
-}
 
-// ---------- signed-in chip (Fundamentals header) ----------
+// ---------- signed-in chip (Fundamentals header, screener #au-slot) ----------
+const EXTRA = [];                                          // extra menu items: {label, fn} (see addItem)
+const itemBtn = (it, el) => {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "au-ext"; b.setAttribute("role", "menuitem"); b.textContent = it.label;
+  b.addEventListener("click", () => { el.classList.remove("open"); it.fn(); });
+  return b;
+};
+function addItem(label, fn) {                              // also adds to a menu that is already on the page
+  const it = { label, fn };
+  EXTRA.push(it);
+  document.querySelectorAll(".au-user").forEach((el) => $(".au-menu", el).insertBefore(itemBtn(it, el), $(".au-out", el)));
+}
 function showUser(u, slot) {
   const host = slot || document.querySelector("header .global");        // Fundamentals header, or the screener's #au-slot
   if (!host || $(".au-user", host)) return;
@@ -288,13 +194,15 @@ function showUser(u, slot) {
   el.className = "au-user";
   el.innerHTML = `<button type="button" class="au-av" aria-haspopup="menu" title="Signed in as ${esc(n)}">${esc(initials(n))}</button>
     <span class="au-menu" role="menu"><span class="au-who"><b>${esc(n)}</b>${u.email && !u.email.endsWith("@" + USER_DOMAIN) ? `<i>${esc(u.email)}</i>` : ""}</span>
-    ${ADMIN ? '<button type="button" class="au-adm" role="menuitem">Users</button>' : ""}
     <button type="button" class="au-out" role="menuitem">Logout</button></span>`;
   $(".au-av", el).addEventListener("click", (e) => { e.stopPropagation(); el.classList.toggle("open"); });
   document.addEventListener("click", (e) => { if (!el.contains(e.target)) el.classList.remove("open"); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") el.classList.remove("open"); });
-  $(".au-out", el).addEventListener("click", async () => { await signOut(auth); if (GATED) location.href = HOME; else location.reload(); });   // screener: reloads signed out (Login shows, admin dot gone)
-  if (ADMIN) $(".au-adm", el).addEventListener("click", () => { el.classList.remove("open"); openUsers(); });
+  $(".au-out", el).addEventListener("click", async () => {
+    try { Object.keys(sessionStorage).filter((k) => k.startsWith("hni_x_")).forEach((k) => sessionStorage.removeItem(k)); } catch (e) {}
+    await signOut(auth); if (GATED) location.href = HOME; else location.reload();   // screener: reloads signed out
+  });
+  EXTRA.forEach((it) => $(".au-menu", el).insertBefore(itemBtn(it, el), $(".au-out", el)));
   host.insertBefore(el, host.querySelector("#theme-toggle"));   // (no toggle in the slot: it simply goes at the end)
 }
 /* screener: "Login" when signed out, the initials menu when signed in */
@@ -304,16 +212,15 @@ function paintSlot(u) {
   slot.innerHTML = "";
   if (u) return showUser(u, slot);
   const b = document.createElement("button");
-  b.type = "button"; b.className = "au-login";
-  b.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>Login';
+  b.type = "button"; b.className = "au-login"; b.setAttribute("aria-label", "Login");
+  b.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span>Login</span>';
   b.addEventListener("click", () => openPopup(null));            // after logging in you stay on the screener
   slot.appendChild(b);
 }
 
-// ---------- online now + total visitors (admin-only readout) ----------
-// Every open tab of the screener or Fundamentals adds hni/presence/<random id>; Firebase deletes it by itself the
-// moment the tab closes or the connection drops (onDisconnect). Each IP is counted once ever (SHA-256 hash, never the
-// raw IP) into hni/meta/visitors. Only the admin's browser reads these numbers; everyone else just writes.
+// ---------- anonymous usage counters ----------
+// Every open tab adds hni/presence/<random id>; Firebase deletes it by itself the moment the tab closes or the
+// connection drops (onDisconnect). Each IP is counted once ever (SHA-256 hash, never the raw IP) into hni/meta/visitors.
 async function presence() {
   await needRT();
   if (!rtdb) return;
@@ -345,18 +252,22 @@ async function countVisitor() {
     try { localStorage.setItem("hni_counted", "1"); } catch (e) {}
   } catch (e) { console.warn("visitor count skipped:", e); }
 }
-let adminDot = null;
-async function showAdminDot() {
-  await needRT();
-  if (adminDot || !rtdb) return;
-  adminDot = document.createElement("div");
-  adminDot.className = "au-online";
-  adminDot.innerHTML = '<i></i><span>… online</span>';
-  document.body.appendChild(adminDot);
-  let online = 0, total = null;
-  const paintDot = () => { $("span", adminDot).textContent = `${online} online` + (total != null ? ` (${total})` : ""); };
-  onValue(ref(rtdb, "hni/presence"), (s) => { online = s.size; paintDot(); });
-  onValue(ref(rtdb, "hni/meta/visitors"), (s) => { const v = s.val(); total = typeof v === "number" ? v : null; paintDot(); });
+
+// ---------- optional add-on for this account ----------
+// Some accounts have extra tools. Their code is not in this file: it sits in Firestore (hni_ext/ui), which the
+// database rules let only those accounts read. For everyone else the read is simply refused and nothing happens.
+async function loadExt(u) {
+  const k = "hni_x_" + u.uid;
+  try { if (sessionStorage.getItem(k) === "0") return; } catch (e) {}      // already checked in this tab session
+  let code = null;
+  try { await needFS(); const d = await getDoc(doc(db, ...EXT)); code = d.exists() ? d.data().code : null; } catch (e) {}
+  if (typeof code !== "string" || !code) { try { sessionStorage.setItem(k, "0"); } catch (e) {} return; }
+  const url = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
+  try {
+    const m = await import(url);
+    await m.default({ app, auth, user: u, gated: GATED, addItem, syncLock, esc, $ });
+  } catch (e) { console.warn("add-on:", e); }
+  finally { URL.revokeObjectURL(url); }
 }
 idle(presence);                                         // online counter: after the page has settled, never before it shows
 idle(countVisitor, 4000);
@@ -375,7 +286,7 @@ const ready = new Promise((resolve) => {
       location.replace(HOME + "?login=" + encodeURIComponent(location.pathname.replace(/^\//, "") + location.hash));
       return;
     }
-    if (GATED) document.documentElement.classList.add("auth-ok");   // show the page at once; admin check follows
+    if (GATED) document.documentElement.classList.add("auth-ok");   // show the page at once
     else paintSlot(u);                                         // screener: Login button or the user menu
     if (!u) return;
     // Portfolio tab: the page saves / loads the user's holdings through this (Firestore hni_portfolio/{uid}, owner only)
@@ -383,22 +294,11 @@ const ready = new Promise((resolve) => {
       load: async () => { await needFS(); const d = await getDoc(doc(db, PORTFOLIO, u.uid)); return d.exists() ? d.data() : {}; },             // {txns, rates} (or old {items})
       save: async (data) => { await needFS(); return setDoc(doc(db, PORTFOLIO, u.uid), { txns: data.txns || [], rates: data.rates || {}, updated: serverTimestamp() }); },
       market: async () => { await needFS(); const d = await getDoc(doc(db, ...MARKET)); return d.exists() ? d.data() : null; },
-      canRefresh: () => !!LTP_HOOK && ADMIN,                // admins only (the Worker checks again on its side)
-      // start the LTP workflow → {ok} | {error, running}
-      refresh: async () => {
-        const r = await fetch(LTP_HOOK, { method: "POST", headers: { Authorization: "Bearer " + await u.getIdToken() } });
-        return r.json().catch(() => ({ error: "HTTP " + r.status }));
-      },
+      canRefresh: () => typeof window.hniStore.refresh === "function",   // only when an add-on supplies refresh()
     };
     window.dispatchEvent(new Event("hni-ready"));
-    ADMIN = isMainAdmin(u);                                   // known at once; extra admins are checked once the page has settled
     if (GATED) showUser(u);
-    idle(async () => {
-      record(u);
-      const a = await checkAdmin(u);
-      if (a && !ADMIN) { ADMIN = true; const old = $(".au-user"); if (old) old.remove(); if (GATED) showUser(u); else paintSlot(u); window.dispatchEvent(new Event("hni-admin")); }   // menu gains "Users"
-      if (ADMIN) showAdminDot();
-    }, 1500);
+    idle(() => { record(u); loadExt(u); }, 1500);
   });
 });
 

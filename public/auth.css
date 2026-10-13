@@ -64,7 +64,7 @@ html.auth-ok .au-wait{display:none}
 .au-google:hover{border-color:var(--au-acc)}
 .au-foot{font-size:11px;color:var(--au-faint);margin-top:12px;text-align:center;line-height:1.5}
 
-/* signed-in avatar (initials) on the Fundamentals header; click → name, Users (admins), Logout */
+/* signed-in avatar (initials) in the header; click → name, any extra items, Logout */
 .au-user{position:relative;display:inline-flex;flex-shrink:0}
 .au-av{width:32px;height:32px;border-radius:50%;border:1px solid var(--au-acc);background:var(--au-acc);color:var(--au-field);
   font:700 12px var(--au-mono);letter-spacing:.5px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
@@ -78,7 +78,7 @@ html.auth-ok .au-wait{display:none}
 .au-menu button{display:block;width:100%;text-align:left;border:0;background:transparent;color:var(--au-mute);font:600 12.5px var(--au-mono);
   padding:8px 10px;border-radius:6px;cursor:pointer}
 .au-menu button:hover{background:var(--au-field);color:var(--au-ink)}
-.au-menu .au-adm{color:var(--au-acc)}
+.au-menu .au-ext{color:var(--au-acc)}
 .au-menu .au-out:hover{color:var(--au-bad)}
 @media (max-width:700px){
   .au-av{width:30px;height:30px;font-size:11px}
@@ -86,55 +86,7 @@ html.auth-ok .au-wait{display:none}
   .au-back{align-items:flex-start;padding-top:56px}                         /* phone: popup near the top, clear of the keyboard */
 }
 
-/* admin: users list */
-.au-wide{width:min(860px,100%);max-height:86vh;display:flex;flex-direction:column}
-.au-q{height:34px;padding:0 12px;margin:8px 0 10px;border:1px solid var(--au-line);border-radius:8px;background:var(--au-field);
-  color:var(--au-ink);font:13px var(--au-sans);outline:none}
-.au-q:focus{border-color:var(--au-acc)}
-.au-count{color:var(--au-faint);font-weight:500}
-.au-tbl{overflow:auto;border:1px solid var(--au-line);border-radius:8px}
-.au-tbl table{width:100%;border-collapse:collapse;font:12.5px var(--au-sans)}
-.au-tbl th{position:sticky;top:0;background:var(--au-field);color:var(--au-faint);font:600 11px var(--au-mono);text-align:left;padding:8px 10px;border-bottom:1px solid var(--au-line)}
-.au-tbl td{background:transparent;text-align:left;font:12.5px var(--au-sans);padding:7px 10px;border-bottom:1px solid var(--au-line);color:var(--au-ink);white-space:nowrap}
-.au-tbl tr:last-child td{border-bottom:0}
-.au-user .au-adm{color:var(--au-acc)}
-
-/* admin only: live "N online (total visitors)" in the bottom-left corner, same look as RollbackCAS */
-.au-online{position:fixed;left:14px;bottom:10px;z-index:250;display:flex;flex-direction:column;align-items:flex-start;gap:3px;
-  pointer-events:none;user-select:none}
-.au-online i{width:6px;height:6px;border-radius:50%;background:#2fbf6a;box-shadow:0 0 3px 1px rgba(47,191,106,.45);animation:au-pulse 2.6s ease-in-out infinite}
-.au-online span{font:9.5px var(--au-mono);letter-spacing:.02em;color:var(--au-faint)}
-@keyframes au-pulse{0%,100%{opacity:.75}50%{opacity:1}}
-.au-mk{border:1px solid var(--au-line);background:var(--au-field);color:var(--au-mute);font:600 11px var(--au-mono);padding:4px 9px;border-radius:6px;cursor:pointer;white-space:nowrap}
-.au-mk:hover{border-color:var(--au-acc);color:var(--au-ink)}
-.au-mk.on{border-color:var(--au-acc);color:var(--au-acc)}
-.au-tag{font:600 11px var(--au-mono);color:var(--au-faint)}
-/* Users list rows: hover = faint tint of the text colour, text stays readable in day and night */
-.au-tbl tbody tr:hover td{background:color-mix(in srgb, var(--au-ink) 8%, transparent);color:var(--au-ink)}
-.au-tbl tbody tr:hover td:first-child{box-shadow:inset 2px 0 0 var(--au-acc)}
-.au-tbl tbody tr td{color:var(--au-ink)}
-.au-up{color:var(--good, #3fae6a)} .au-dn{color:var(--bad, #e06666)}
-/* admin: one user's portfolio. The box never grows past the screen; its body is the ONE scroll area,
-   so every row is reachable and the page underneath stays still */
-.au-pfv{z-index:310;align-items:center}
-.au-pfv .au-box{width:min(960px,100%);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);padding:16px 16px 12px}
-.au-pfv .au-title{padding-right:36px;flex:none}
-.au-pfbody{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;margin:8px -4px 0;padding:0 4px 4px}
-.au-pfv .au-tbl{overflow-x:auto;overflow-y:hidden;max-height:none}   /* wide tables slide sideways; no scroll box inside the scroll box */
-.au-pfv .au-tbl th{position:static}
-.au-pfv .au-tbl tbody tr:hover td{background:transparent}           /* no hover repaint on hundreds of rows */
-.au-pfv .au-tbl tbody tr:hover td:first-child{box-shadow:none}
-.au-pfv .au-tbl td.r,.au-pfv .au-tbl th.r{text-align:right}
-.au-pfv .pf-sum{margin-bottom:12px}
-.au-pfh{display:flex;align-items:baseline;gap:8px;font:600 12px var(--au-mono);color:var(--au-mute);margin:14px 0 6px}
-.au-pfh small{font-weight:500;color:var(--au-faint)}
-.au-pfwarn{font-size:12px;color:var(--au-bad);margin:0 0 10px}
 html.au-lock,html.au-lock body{overflow:hidden}                     /* page behind a popup doesn't scroll */
-@media (max-width:700px){
-  .au-pfv{align-items:stretch;padding:8px}
-  .au-pfv .au-box{max-height:none;height:100%;border-radius:12px}    /* phone: the whole screen, one scroll */
-  .au-pfv .au-tbl td,.au-pfv .au-tbl th{padding:6px 8px}
-}
 
 /* Fundamentals button: disabled (dimmed) from the first tap until the next page or the login box shows */
 [data-auth-link].au-busy{opacity:.45;pointer-events:none}
