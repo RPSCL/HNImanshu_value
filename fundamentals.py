@@ -1096,13 +1096,20 @@ body.day .toggle-thumb{transform:translateX(16px)}
   .pchips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch;scrollbar-width:none}   /* one swipeable row */
   .pchips::-webkit-scrollbar{display:none}
   .btn.fbtn{padding:0 10px}
-  /* phone: Filters is a bottom sheet like the other menus: fixed to the bottom, page dimmed behind, scrolls inside */
-  .fback{position:fixed;inset:0;z-index:300;background:rgba(8,8,10,.6)}   /* tap it to close */
+  /* phone: Filters is a bottom sheet like the other menus (see sheetScroll): the .fdrop is a see-through full-screen
+     scroller with an empty screen-high gap on top, .fdin is the sheet. Opens at half; scrolling lifts it to full
+     height, then the body scrolls under the sticky Filters / Done bar; pulling down closes it. */
+  .fback{position:fixed;inset:0;z-index:300;background:rgba(8,8,10,.6)}
   .fbox.dopen .fback{display:block}
-  .fdrop{position:fixed;left:0;right:0;bottom:0;top:auto!important;width:auto;z-index:301;max-height:50vh;max-height:50dvh;transition:max-height .22s ease;padding:0 16px 22px;
-         border-radius:16px 16px 0 0;border-bottom:0;overscroll-behavior:contain;animation:fdUp .22s cubic-bezier(.2,.8,.2,1)}
-  .fdrop::before{content:"";display:block;width:38px;height:4px;border-radius:2px;background:var(--line);margin:8px auto 2px}
-  .fdrop .fdhead{top:0;padding-top:10px}
+  .fdrop,:root[data-theme=day] .fdrop{position:fixed;inset:0;top:0!important;width:auto;max-height:none;z-index:301;padding:0;border:0;border-radius:0;
+         background:transparent;box-shadow:none;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none}
+  .fdrop::-webkit-scrollbar{display:none}
+  .fdrop::before{content:"";display:block;height:100vh;height:100dvh}       /* the gap: tap it to close */
+  .fdin{background:var(--panel);border:1px solid rgba(212,180,122,.45);border-bottom:0;border-radius:16px 16px 0 0;padding:0 16px 22px;
+        box-shadow:0 -10px 30px rgba(0,0,0,.35);animation:fdUp .22s cubic-bezier(.2,.8,.2,1)}
+  :root[data-theme=day] .fdin{border-color:rgba(76,46,10,.45)}
+  .fdin::before{content:"";display:block;width:38px;height:4px;border-radius:2px;background:var(--line);margin:0 auto;position:relative;top:8px}
+  .fdrop .fdhead{top:0;padding-top:16px}
   @keyframes fdUp{from{transform:translateY(40%)}}
   body.fmodal{overflow:hidden}
   .fgrid{grid-template-columns:1fr 1fr;gap:10px}
@@ -1246,7 +1253,7 @@ body.pf-mode #saveHtml,body.pf-mode #nav,body.pf-mode #meta{display:none!importa
 .bag.held{opacity:1;color:var(--brass)}
 .bag.held svg{fill:var(--brassbg)}
 .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);z-index:400;opacity:0;transition:opacity .25s,transform .25s;
-  background:var(--ink);color:var(--bg);font:600 12.5px var(--sans);padding:10px 16px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.3);max-width:calc(100vw - 32px)}
+  background:var(--ink);color:var(--bg);font:600 12.5px var(--sans);padding:10px 16px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.3);width:max-content;max-width:calc(100vw - 32px);text-align:center;pointer-events:none}   /* sized to its text: one line, centred */
 .toast.on{opacity:1;transform:translate(-50%,0)}
 /* forms */
 .pf-form{display:flex;flex-direction:column;gap:10px;margin-top:6px}
@@ -1425,11 +1432,16 @@ body.night{--pxline:#ece6da} body.day{--pxline:#36332e}           /* price line:
 .pf-zt .pf-acts2,.pf-zt .pf-rm,.pf-zt .pf-lock{flex:none}
 .pf-zempty{padding:14px;margin:0;font-size:13px}
 @media (max-width:700px){
-  .wip-back.sheet{align-items:flex-end;padding:0}
-  .wip-back.sheet .wip-box{width:100%;max-height:50vh;max-height:50dvh;transition:max-height .22s ease;border-radius:16px 16px 0 0;border-bottom:0;padding:18px 16px 22px;animation:noUp .24s cubic-bezier(.2,.8,.2,1)}
-  .wip-back.sheet .wip-box::before{content:"";display:block;width:38px;height:4px;border-radius:2px;background:var(--line);margin:-8px auto 10px}
+  /* bottom sheets (menus, stock overlay): the dimmed back is the scroller, an empty screen-high gap on top, then the sheet */
+  .wip-back.sheet.open{display:block;padding:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none}
+  .wip-back.sheet::-webkit-scrollbar{display:none}
+  .wip-back.sheet::before{content:"";display:block;height:100vh;height:100dvh}   /* the gap: tap it to close */
+  .wip-back.sheet .wip-box{width:100%;max-height:none;overflow:visible;border-radius:16px 16px 0 0;border-bottom:0;padding:0 16px 22px;animation:noUp .24s cubic-bezier(.2,.8,.2,1)}
+  .wip-back.sheet .wip-box::before{content:"";display:block;width:38px;height:4px;border-radius:2px;background:var(--line);margin:0 auto;position:relative;top:8px}
+  .wip-back.sheet .wip-box > h3{position:sticky;top:0;z-index:3;background:var(--panel);margin:0 -16px 8px;padding:16px 46px 8px 16px}   /* title + × stay on top */
+  .wip-back.sheet .wip-box.no-box > h3{padding-right:200px}
+  .wip-back.sheet h3 > .wip-x{top:8px;right:6px}
   .wip-back.sheet .no-list{max-height:none;overflow:visible}            /* one scroll: the sheet itself */
-  .wip-back.sheet .wip-box.sh-full,.fdrop.sh-full{max-height:92vh;max-height:92dvh}   /* top bar dragged up: full height */
   @keyframes noUp{from{transform:translateY(40%)}}
 }
 
@@ -1504,7 +1516,7 @@ nav .hgrp .chip{height:30px}
 .btn.back .arr{display:none}
 #pfBackV{gap:6px} #pfBackV .arr{display:inline-block}   /* Portfolio page: the return icon shows on computers too */
 .gsep{display:none;width:1px;height:20px;background:var(--line);margin:0 2px;flex-shrink:0}
-#backChip{justify-content:center}
+#backChip{justify-content:center;min-width:max-content;flex-shrink:0}   /* never narrower than its text, whatever width JS set */
 .chip:has(input:focus-visible){outline:2px solid var(--brass);outline-offset:2px}
 .chip select{border:0;background:transparent;padding:0 2px;color:var(--ink);font-size:12.5px}
 .banner{display:flex;gap:10px 18px;flex-wrap:wrap;align-items:baseline;background:var(--brassbg);border:1px solid var(--brass);border-radius:10px;padding:12px 16px;margin-bottom:16px;color:var(--ink)}
@@ -2365,7 +2377,7 @@ function filterBox(o, rerender) {
       + `<button type="button" class="btn fbtn" aria-expanded="${D0.open}" title="All filters, scoring and reset">`
       + `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 3.5h12M4.5 8h7M7 12.5h2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`
       + `Filters${nOn ? ` <b class="cnt">${nOn}</b>` : ''}</button></div>`
-    + `<div class="fback"></div><div class="fdrop" role="dialog" aria-label="Filters">`
+    + `<div class="fback"></div><div class="fdrop" role="dialog" aria-label="Filters"><div class="fdin">`
     + `<div class="fdhead"><span class="t">Filters</span><span class="fbtns">`
     + (o.extra ? `<button type="button" class="btn ghost" data-tog="extra">${o.extra.label} <span class="car">▾</span></button>` : '')
     + (M ? `<button type="button" class="btn ghost${dirty ? ' save-on' : ''}" data-save ${dirty ? '' : 'disabled'} title="Remember these filters on this device">Save</button>`
@@ -2375,19 +2387,19 @@ function filterBox(o, rerender) {
     + (o.extra ? `<div class="fpanel" data-panel="extra"></div>` : '')
     + `<div class="fgrid">${o.main(st)}</div>`
     + (moreHtml ? `<div class="fsub">More filters</div><div class="fgrid">${moreHtml}</div>` : '')
-    + `</div>`;
+    + `</div></div>`;
   if (o.extra) o.extra.build($('[data-panel="extra"]', f));
   const drop = $('.fdrop', f);
   const setOpen = v => {
-    if (v) { closeDrops(); D0.full = false; drop.classList.remove('sh-full'); }   // opens at half height
+    if (v) { closeDrops(); D0.top = null; }                         // opens at half height
     D0.open = v; f.classList.toggle('dopen', v); $('.fbtn', f).setAttribute('aria-expanded', v);
-    if (v) placeDrop(f);
+    if (v) { placeDrop(f); sheetScroll(drop, $('.fdin', f), () => setOpen(false), D0); }
     document.body.classList.toggle('fmodal', v && isPhone());   // phone: floating window, page locked
   };
   $('.fbtn', f).addEventListener('click', () => setOpen(!D0.open));
   $('[data-close]', f).addEventListener('click', () => setOpen(false));
   drop.addEventListener('scroll', () => { D0.top = drop.scrollTop; });
-  sheetDrag(drop, () => setOpen(false), D0);                         // phone: half height, drag up / pull down to close
+  drop.addEventListener('click', e => { if (e.target === drop && isPhone()) setOpen(false); });   // phone: tap above the sheet
   f.querySelectorAll('[data-panel]').forEach(p => p.classList.toggle('open', !!PANEL_OPEN[key + p.dataset.panel]));
   f.querySelectorAll('[data-tog]').forEach(b => {
     const name = b.dataset.tog; b.classList.toggle('open', !!PANEL_OPEN[key + name]);
@@ -2419,7 +2431,7 @@ function filterBox(o, rerender) {
   const on = $('.preset.on', f), pc = $('.pchips', f);               // phone: swipe row starts at the active screen
   if (on && pc.scrollWidth > pc.clientWidth) pc.scrollLeft = on.offsetLeft - pc.offsetLeft - 8;
   if (D0.open) {                                          // re-rendered while open: same place, same scroll
-    (window.requestAnimationFrame || setTimeout)(() => { placeDrop(f); drop.scrollTop = D0.top; });   // stats strip is added after this box
+    (window.requestAnimationFrame || setTimeout)(() => { placeDrop(f); if (isPhone()) sheetScroll(drop, $('.fdin', f), () => setOpen(false), D0); else drop.scrollTop = D0.top; });   // stats strip is added after this box
     if (isPhone()) document.body.classList.add('fmodal');
   }
   return st;
@@ -3535,37 +3547,30 @@ function newsOverlay(sym) {
       : '<p class="na">No news in the last 7 days.</p>';
   });
 }
-/* phone bottom sheets (menus, stock overlay, Filters): open at half the screen and scroll inside.
-   Drag the top bar up = full height. Pull down (on the top bar, or anywhere once scrolled to the top) = close;
-   from full height a short pull goes back to half. st keeps "full" across re-renders (Filters). */
-function sheetDrag(box, close, st = {}) {
-  if (!isPhone()) return;
-  box.classList.toggle('sh-full', !!st.full);
-  let y0 = null, dy = 0, t0 = 0, bar = false;
-  const reset = () => { box.style.transition = ''; box.style.transform = ''; };
-  box.addEventListener('touchstart', e => {
-    if (e.touches.length !== 1) { y0 = null; return; }
-    const t = e.touches[0];
-    bar = t.clientY - box.getBoundingClientRect().top < 40;
-    if (!bar && box.scrollTop > 0) { y0 = null; return; }        // inside the list, scrolled down: normal scrolling
-    y0 = t.clientY; dy = 0; t0 = Date.now();
-  }, {passive: true});
-  box.addEventListener('touchmove', e => {
-    if (y0 == null) return;
-    dy = e.touches[0].clientY - y0;
-    if (dy > 0) { if (e.cancelable) e.preventDefault(); box.style.transition = 'none'; box.style.transform = `translateY(${dy}px)`; }
-    else if (!bar) y0 = null;                                     // pushing up on the list = scroll it
-  }, {passive: false});
-  const end = () => {
-    if (y0 == null) return;
-    y0 = null; box.style.transition = 'transform .18s ease';
-    const fling = dy > 40 && Date.now() - t0 < 250;
-    if (st.full && dy > 60 && dy < 260 && !fling) { st.full = false; box.classList.remove('sh-full'); box.style.transform = ''; return; }
-    if (dy > 110 || fling) { box.style.transform = 'translateY(100%)'; setTimeout(() => { reset(); close(); }, 170); return; }
-    box.style.transform = '';
-    if (bar && dy < -30) { st.full = true; box.classList.add('sh-full'); }
+/* phone bottom sheets (menus, stock overlay, Filters), like a broker app. sc = a full-screen scroller with an empty
+   screen-high gap on top, box = the sheet under it. Opens at half the screen (a short menu at its own height).
+   Scrolling up lifts the sheet to full height, then its body scrolls under the sticky title / Done bar.
+   Pulling down brings it back down; let go well below where it opened and it closes. st keeps the place across
+   re-renders (Filters re-draws on every change). */
+function sheetScroll(sc, box, close, st = {}) {
+  if (!isPhone() || !box) return;
+  const H = sc.clientHeight, tall = box.scrollHeight > H * 0.5;
+  box.style.minHeight = tall ? Math.round(H * 0.94) + 'px' : '';         // tall: can reach the top of the screen
+  const start = tall ? Math.round(H * 0.5) : box.offsetHeight;
+  sc.scrollTop = st.top != null ? st.top : start;
+  if (sc._sheet) { sc._sheet.start = start; return; }                      // listeners already on this scroller
+  const S = sc._sheet = {start, touching: false, tm: 0, shut: false};
+  const settle = () => {
+    if (S.shut || S.touching || !sc.isConnected) return;
+    const y = sc.scrollTop;
+    if (y < S.start - 70) { S.shut = true; sc.scrollTo({top: 0, behavior: 'smooth'}); setTimeout(() => { S.shut = false; close(); }, 180); }
+    else if (y < S.start) sc.scrollTo({top: S.start, behavior: 'smooth'});   // a small pull: back to where it opened
   };
-  box.addEventListener('touchend', end); box.addEventListener('touchcancel', end);
+  const later = () => { clearTimeout(S.tm); S.tm = setTimeout(settle, 130); };
+  sc.addEventListener('touchstart', () => { S.touching = true; clearTimeout(S.tm); }, {passive: true});
+  sc.addEventListener('touchend', () => { S.touching = false; later(); }, {passive: true});
+  sc.addEventListener('touchcancel', () => { S.touching = false; later(); }, {passive: true});
+  sc.addEventListener('scroll', () => { st.top = sc.scrollTop; if (!S.touching) later(); }, {passive: true});
 }
 /* small dialog: × , Esc or a click outside closes it; returns the box */
 function modal(title, html, opt = {}) {
@@ -3581,7 +3586,10 @@ function modal(title, html, opt = {}) {
   $('.wip-x', w).addEventListener('click', close);
   w.addEventListener('mousedown', e => { if (e.target === w) close(); });
   w._close = close;
-  if (opt.sheet) sheetDrag($('.wip-box', w), close);
+  if (opt.sheet && isPhone()) {                                           // phone: × sits in the sticky title
+    const bx = $('.wip-box', w); bx.querySelector('h3').appendChild($('.wip-x', w));
+    sheetScroll(w, bx, close);
+  }
   const first = w.querySelector(opt.noFocus ? '.wip-x' : 'input:not([type=hidden]), .wip-x'); if (first) setTimeout(() => first.focus({preventScroll: true}), 30);
   return w;
 }
@@ -3781,6 +3789,7 @@ document.addEventListener('click', async e => {
   pfTradeForm({sym: b.dataset.bag});
 }, true);
 function toast(msg) {
+  document.querySelectorAll('.toast').forEach(o => o.remove());          // one at a time
   const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t);
   requestAnimationFrame(() => t.classList.add('on'));
   setTimeout(() => { t.classList.remove('on'); setTimeout(() => t.remove(), 300); }, 2600);

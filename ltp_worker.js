@@ -5,8 +5,8 @@
 //
 // What it does on POST /run (Authorization: Bearer <Firebase ID token>):
 //   1. Google checks the login token (Identity Toolkit accounts:lookup) → uid + email. A fake token stops here.
-//   2. Admin only: the main "admin" account, or a user with a document in Firestore hni_admins/{uid}
-//      (read with the user's own token, so the Firestore rules decide, exactly as on the website).
+//   2. Who may press it: every signed-in user (ALLOW_ALL_USERS = true). Set it to false for admins only
+//      (the main "admin" account, or a user with a document in Firestore hni_admins/{uid}).
 //   3. Not more than once every COOLDOWN_MIN minutes (asks GitHub when the last run started).
 //   4. Starts .github/workflows/ltp.yml on main (workflow_dispatch). The run takes about 1–2 minutes.
 //
@@ -24,7 +24,7 @@ const BRANCH = "main";
 const FIREBASE_KEY = "AIzaSyD1oA953pXZxBAuOR9ObSk6vAmKf1gyVbE";
 const PROJECT = "hnimanshu";
 const MAIN_ADMIN = "admin@users.hnimanshu.app";
-const ALLOW_ALL_USERS = false;     // true = any signed-in user may press the button (cooldown still applies)
+const ALLOW_ALL_USERS = true;      // true = any signed-in user may press the button (cooldown still applies)
 const COOLDOWN_MIN = 3;
 const ORIGINS = ["https://hnimanshu-value.web.app", "https://hnimanshu-value.firebaseapp.com"];
 const AUTO_FROM = 9 * 60, AUTO_TILL = 15 * 60 + 40;   // automatic runs: 09:00–15:40 IST, Mon–Fri
