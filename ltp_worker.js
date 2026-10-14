@@ -27,7 +27,12 @@ const MAIN_ADMIN = "admin@users.hnimanshu.app";
 const ALLOW_ALL_USERS = true;      // true = any signed-in user may press the button (cooldown still applies)
 const COOLDOWN_MIN = 3;
 const ORIGINS = ["https://hnimanshu-value.web.app", "https://hnimanshu-value.firebaseapp.com"];
-const AUTO_FROM = 9 * 60, AUTO_TILL = 15 * 60 + 40;   // automatic runs: 09:00–15:40 IST, Mon–Fri
+const AUTO_FROM = 9 * 60, AUTO_TILL = 15 * 60 + 40;   // live prices only 09:00–15:40 IST, Mon–Fri (timer AND button)
+const inHours = (ms) => {                              // ms = a UTC timestamp
+	const ist = new Date(ms + 5.5 * 3600 * 1000);
+	const day = ist.getUTCDay(), min = ist.getUTCHours() * 60 + ist.getUTCMinutes();
+	return day !== 0 && day !== 6 && min >= AUTO_FROM && min <= AUTO_TILL;
+};
 
 const gh = (env, path, init = {}) => fetch(`https://api.github.com/repos/${REPO}${path}`, {...init, headers: {
 	Authorization: `Bearer ${env.GH_TOKEN}`, Accept: "application/vnd.github+json",
@@ -49,9 +54,7 @@ const dispatch = (env) => gh(env, `/actions/workflows/${WORKFLOW}/dispatches`, {
 export default {
 	// every 10 min from the Cron Trigger: start ltp.yml inside market hours (IST), unless one is still running
 	async scheduled(event, env, ctx) {
-		const ist = new Date(event.scheduledTime + 5.5 * 3600 * 1000);   // UTC → IST
-		const day = ist.getUTCDay(), min = ist.getUTCHours() * 60 + ist.getUTCMinutes();
-		if (day === 0 || day === 6 || min < AUTO_FROM || min > AUTO_TILL) return;
+		if (!inHours(event.scheduledTime)) return;
 		ctx.waitUntil((async () => { if (!(await busy(env, 5))) await dispatch(env); })());
 	},
 
@@ -68,6 +71,7 @@ export default {
 		if (req.method === "OPTIONS") return new Response(null, {status: 204, headers: cors});
 		if (req.method !== "POST" || new URL(req.url).pathname !== "/run") return reply(404, {error: "not found"});
 		if (!ORIGINS.includes(origin)) return reply(403, {error: "wrong site"});
+		if (!inHours(Date.now())) return reply(403, {error: "market closed, live prices run 09:00–15:40 IST, Mon–Fri"});
 
 		// 1. who is this? (Google verifies the token)
 		const idToken = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");

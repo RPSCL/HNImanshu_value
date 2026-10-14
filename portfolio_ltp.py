@@ -139,6 +139,7 @@ def nse_renames():
 def main():
 	ap = argparse.ArgumentParser()
 	ap.add_argument("--dry", action="store_true", help="print, don't write to Firestore")
+	ap.add_argument("--any-time", action="store_true", help="run outside market hours too (testing)")
 	a = ap.parse_args()
 
 	import firebase_admin
@@ -151,6 +152,14 @@ def main():
 		account_deletes.process(db, log)
 	except Exception as e:
 		log(f"Account deletes skipped: {e}")
+
+	# live prices only in market hours: 09:00–15:40 IST, Mon–Fri. The last run the Worker starts (15:40) can
+	# begin a few minutes later on GitHub, so runs are accepted until 15:50 IST.
+	now = datetime.now(IST)
+	mins = now.hour * 60 + now.minute
+	if not a.any_time and (now.weekday() >= 5 or mins < 9 * 60 or mins > 15 * 60 + 50):
+		log(f"Market closed ({now:%a %H:%M} IST): live prices run 09:00–15:40 IST, Mon–Fri. Nothing fetched.")
+		return 0
 
 	syms = held_symbols(db)
 	if not syms:
