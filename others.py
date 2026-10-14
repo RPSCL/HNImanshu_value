@@ -9,7 +9,11 @@ Two jobs:
       The website uses it for the Portfolio's symbol hints (any NSE stock can be added), and the full run below
       uses it to know which stocks are "others". If NSE can't be reached, the existing file is kept.
 
-  python others.py            (others.yml, weekly)
+  python others.py --half 1   (others.yml, Sunday 00:00 IST)   first half of the others (A…, by symbol)
+  python others.py --half 2   (others.yml, Monday 00:00 IST)   second half
+  python others.py            all of them in one go (by hand)
+      Two halves on two nights because screener.in slows down to minutes per stock after ~1,000 stocks from
+      one machine. Each half updates only its own rows; the other half's rows stay as they are.
       1. refreshes EQUITY_L.csv as above
       2. others = every symbol in EQUITY_L.csv that is in none of nifty500_valuation.csv,
          niftysmallcap500_valuation.csv, niftymicrocap250_valuation.csv
@@ -23,10 +27,9 @@ Two jobs:
   (name only, or price only) and the website shows N/A for whatever is missing. The build drops rows
   with neither a price nor a market cap.
 
-  Extra options are passed to n500.py's runner: --limit 20 (test), --skip-fetch (re-score only),
-  --force-refresh, --delay 2.
+  Other options: --limit 20 (test: only the first 20 of the half), --delay 2 (seconds between stocks).
 """
-import io
+import argparse
 import sys
 from pathlib import Path
 
@@ -97,8 +100,13 @@ def in_three_lists():
 
 
 def main():
-	argv = sys.argv[1:]
-	if "--list-only" in argv:
+	ap = argparse.ArgumentParser()
+	ap.add_argument("--list-only", action="store_true", help="only refresh EQUITY_L.csv")
+	ap.add_argument("--half", type=int, choices=(1, 2), default=None, help="scrape only this half (by symbol)")
+	ap.add_argument("--limit", type=int, default=None, help="test: only this many stocks")
+	ap.add_argument("--delay", type=float, default=None, help="seconds between stocks")
+	a = ap.parse_args()
+	if a.list_only:
 		refresh_equity_list()
 		return 0
 
@@ -113,8 +121,14 @@ def main():
 
 	allx = equity_list()
 	taken = in_three_lists()
-	others = allx[~allx["SYMBOL"].isin(taken)].reset_index(drop=True)
-	say(f"NSE lists {len(allx)} companies; {len(taken)} are in the 3 lists; {len(others)} others to scrape")
+	others = allx[~allx["SYMBOL"].isin(taken)].sort_values("SYMBOL").reset_index(drop=True)
+	all_syms = others["SYMBOL"].tolist()
+	cut = (len(all_syms) + 1) // 2
+	todo = all_syms[:cut] if a.half == 1 else all_syms[cut:] if a.half == 2 else all_syms
+	if a.limit:
+		todo = todo[:a.limit]
+	say(f"NSE lists {len(allx)} companies; {len(taken)} are in the 3 lists; {len(all_syms)} others"
+	    + (f"; half {a.half}: {len(todo)} stocks ({todo[0] if todo else '-'} … {todo[-1] if todo else '-'})" if a.half else f"; scraping {len(todo)}"))
 
 	# point n500.py's engine at this list and this file
 	base.INDEX = "others"
@@ -147,11 +161,16 @@ def main():
 		except Exception:
 			pass
 
-	sys.argv = [sys.argv[0], "--output", str(OTHERS_CSV)] + argv
-	base.main()
+	# scrape this half; rows of the other half are carried over unchanged (n500.py's master upsert:
+	# "not scraped this run → old row kept"), then the whole file is re-scored
+	master = base.build_master_csv(others, todo, str(OTHERS_CSV), delay=a.delay if a.delay is not None else base.REQUEST_DELAY,
+	                               force_refresh=False, index_symbols=all_syms)
+	if master is None or master.empty:
+		say("Nothing scraped and no earlier file: stopping.")
+		return 0
+	d = base.compute_final_score(base.compute_fair_values(base.compute_scores(master.copy())))
 
 	# INDUSTRY: screener's sector, else last week's, else "Others"
-	d = pd.read_csv(OTHERS_CSV, low_memory=False)
 	sec = d["SECTOR"] if "SECTOR" in d.columns else pd.Series(index=d.index, dtype=object)
 	prev = d["SYMBOL"].astype(str).map(old_ind)
 	d = d.assign(INDUSTRY=sec.where(sec.notna() & sec.astype(str).str.strip().ne(""), prev).fillna("Others"))

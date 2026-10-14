@@ -247,7 +247,8 @@ def load_stocks(paths=None):
         if ANNUAL_RE.match(c) or QTR_RE.match(c) or SH_RE.match(c):
             df[c] = pd.to_numeric(df[c], errors="coerce")
     df.loc[~(df["PE"] > 0), "PE"] = float("nan")       # loss-making / missing PE -> N/A
-    asof = pd.to_datetime(df["DATE_DOWNLOADED"], errors="coerce").max()
+    main = df["_UNIS"].map(lambda u: any(x != OTHERS_LABEL for x in u))   # data date = the 3 lists' (Others is scraped on other days)
+    asof = pd.to_datetime(df.loc[main if main.any() else df.index, "DATE_DOWNLOADED"], errors="coerce").max()
     if pd.isna(asof):
         asof = pd.Timestamp.today().normalize()
     return df.reset_index(drop=True), asof
@@ -2587,7 +2588,7 @@ function passVF(s, f) {
   return (NOPRICE || (max('maxPE', s.pe) && max('maxPB', s.pb) && max('maxPrem', prem(s)) && max('maxPeg', peg(s))
           && min('minDy', s.dy) && (s.fin || min('minFcf', s.fcfy)) && max('maxPta', s.pta)
           && (!has('pfa') || max('maxPfa', s.pfa)) && (!has('invp') || min('minInv', s.invp))
-          && (!HAS_MOM || min('minMom', s.momS)) && (!f.graham || grahamPass(s))))
+          && (!HAS_MOM || (s.momS == null && othOnly(s)) || min('minMom', s.momS)) && (!f.graham || grahamPass(s))))   // Others without prices yet: momentum not checked
     && min('minQ', qual(s)) && (s.fin || min('minCc', s.cc)) && min('minScore', s.score)
     && safeOk(s, f) && mcapOk(s, f) && (!f.trap || !trapReasons(s).length) && trendOk(s, f.minTrend);
 }
@@ -2941,7 +2942,9 @@ function momentumView() {
   view.appendChild(makeTable('mom',
     [C.sym, C.ind, C.mom, C.name, C.score, C.trend, C.cmp, C.from52, C.pe, C.pb, C.q, C.cagr, C.dy, C.mcap, C.flags],
     rows, {sortKey:'mom', sortDir:-1, search:true, csv:() => csvName('Momentum', mf, MOM_DEF, VF_CSV_KEYS().concat('maxMom'))}));
-  if (!V().some(s => ok(s.momS))) view.insertAdjacentHTML('beforeend', '<p class="hint">No momentum for this date yet (it needs prices.csv), so nothing to list.</p>');
+  if (!V().some(s => ok(s.momS))) view.insertAdjacentHTML('beforeend', GF.uni === OTH
+    ? '<p class="hint">No momentum for the Others list yet: it needs their prices, which the next weekly price update (Saturday) adds.</p>'
+    : '<p class="hint">No momentum for this date yet (it needs prices.csv), so nothing to list.</p>');
 }
 
 /* ---------- PORTFOLIO: a small portfolio manager, built from one list of transactions ----------
