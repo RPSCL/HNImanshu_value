@@ -126,6 +126,11 @@ SH_KEY = {"PROMOTER": "pro", "PUBLIC": "pub", "FII": "fii", "DII": "dii"}
 SCALARS = ["MARKET_CAP_CR", "CMP", "HIGH_52W", "PE", "BOOK_VALUE", "ROE_PCT", "ROCE_PCT", "DIV_YIELD_PCT",
            "TTM_PAT_CR", "SHARES_CR", "BS_RESERVES_CR", "OTHER_INCOME_TO_PBT_PCT", "INTEREST_COVERAGE",
            "OPM_CALC_PCT", "PL_OPM_PCT", "OPM_AVG_5YR_PCT", "DIVIDEND_CONSECUTIVE_YRS", "F_SCORE"]
+# every CSV column read by name anywhere in this file (plus SCALARS and the dated series matched by the regexes above)
+USED_COLS = set(SCALARS) | {"SYMBOL", "SCREENER_URL", "COMPANY_NAME", "INDUSTRY", "DATE_DOWNLOADED", "BOOK_VALUE",
+             "BS_RESERVES_CR", "CMP", "DIVIDEND_CONSECUTIVE_YRS", "DIV_YIELD_PCT", "F_SCORE", "HIGH_52W", "INTEREST_COVERAGE",
+             "MARKET_CAP_CR", "OPM_AVG_5YR_PCT", "OPM_CALC_PCT", "OTHER_INCOME_TO_PBT_PCT", "PE", "PL_OPM_PCT", "ROCE_PCT",
+             "ROE_PCT", "SHARES_CR", "TTM_PAT_CR"}
 
 # ----------------------------------------------------------------------------
 # LOAD ALL VALUATION CSVs, REMOVE OVERLAPS
@@ -237,6 +242,11 @@ def load_stocks(paths=None):
         if c not in df.columns:
             df[c] = float("nan")
     df = df[df["CMP"].notna() | df["MARKET_CAP_CR"].notna() | df["COMPANY_NAME"].notna()].copy()   # drop empty placeholders
+    # keep only the columns this file reads (named ones + the dated yearly / quarterly / holding series): the CSVs carry
+    # ~3,000–4,000 columns, mostly unused, and every per-stock loop below copies whole rows, so this cuts build time a lot
+    keep = [c for c in df.columns if c in USED_COLS or c.startswith("_")
+            or ANNUAL_RE.match(c) or QTR_RE.match(c) or SH_RE.match(c)]
+    df = df[keep].copy()
     miss = int(df["CMP"].isna().sum())
     if miss:
         print("Note: %d stocks have no price in the CSVs - shown with N/A" % miss)
@@ -361,7 +371,17 @@ def safety(r, F, acut, ref, fin):
 
 
 def series(row, cols, until=None):
-    return [(dt, lab, float(row[c])) for dt, lab, c in cols if pd.notna(row[c]) and (until is None or dt <= until)]
+    """[(date, label, value)] oldest → newest, values known by `until`. Called ~1,000 times per stock: kept to plain
+    Python (row is a dict, NaN test v != v), which is ~20× faster than pandas' per-cell lookups."""
+    out = []
+    for dt, lab, c in cols:
+        if until is not None and dt > until:
+            break                                           # cols are oldest → newest: the rest are later still
+        v = row[c]
+        if v is None or v != v:
+            continue
+        out.append((dt, lab, float(v)))
+    return out
 
 
 def latest_run(pts, ref):
@@ -867,7 +887,7 @@ def build_all(df, asof, prices=None, bench=None):
         return pd.notna(d) and abs(d - target) <= tol
     n_farL = 0
     now, smnow, ltps = [], [], {}
-    for _, r in df.iterrows():
+    for r in df.to_dict("records"):                       # plain dicts: much faster than pandas rows
         fin = bool(FIN_RE.search(str(r["INDUSTRY"])))
         sym = str(r["SYMBOL"]).upper()
         px = prices.get(sym, {})
@@ -909,7 +929,7 @@ def build_back(df, F, asof, key, prices, bench, ltps):
     tol = pd.Timedelta(days=PRICE_TOL_DAYS)
     near = lambda d, t: pd.notna(pd.to_datetime(d, errors="coerce")) and abs(pd.to_datetime(d) - t) <= tol
     then, n_far = [], 0
-    for _, r in df.iterrows():
+    for r in df.to_dict("records"):                       # plain dicts: much faster than pandas rows
         fin = bool(FIN_RE.search(str(r["INDUSTRY"])))
         sym = str(r["SYMBOL"]).upper()
         px = prices.get(sym, {})
@@ -2622,7 +2642,7 @@ function passVF(s, f) {
   return (NOPRICE || (max('maxPE', s.pe) && max('maxPB', s.pb) && max('maxPrem', prem(s)) && max('maxPeg', peg(s))
           && min('minDy', s.dy) && (s.fin || min('minFcf', s.fcfy)) && max('maxPta', s.pta)
           && (!has('pfa') || max('maxPfa', s.pfa)) && (!has('invp') || min('minInv', s.invp))
-          && (!HAS_MOM || (s.momS == null && othOnly(s)) || min('minMom', s.momS)) && (!f.graham || grahamPass(s))))   // Others without prices yet: momentum not checked
+          && (!HAS_MOM || min('minMom', s.momS)) && (!f.graham || grahamPass(s))))   // a momentum filter set: no momentum ("–") never passes
     && min('minQ', qual(s)) && (s.fin || min('minCc', s.cc)) && min('minScore', s.score)
     && safeOk(s, f) && mcapOk(s, f) && (!f.trap || !trapReasons(s).length) && trendOk(s, f.minTrend);
 }

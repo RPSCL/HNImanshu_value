@@ -12,8 +12,9 @@ What it does
                Same name already in the zip → skipped, so re-running is harmless.
   2. SWEEP     any loose CSV in this folder with a date in its name
                (021026_x.csv, x_2026-10-02.csv, x_20261002.csv …) is moved into the zip.
-  3. RETENTION keeps the newest KEEP_PER_INDEX snapshots per index so the zip stays
-               well under GitHub's 100 MB file limit (~1.1 MB per weekly set of 3).
+  3. RETENTION keeps the newest KEEP_PER_INDEX (5) snapshots of each file — the 3 lists, the Others list and
+               prices.csv — and runs after EVERY snapshot (the scrapers, others.py and fetch_prices.py call
+               snapshot() directly), so the zip never grows past ~5 weeks of data.
 
 The scrapers (n500.py / ns500.py / nm250.py) call snapshot() themselves before they
 touch their CSV, and the workflow also runs this file once before a full run.
@@ -32,7 +33,7 @@ import pandas as pd
 
 BASE           = Path(__file__).resolve().parent
 ZIP_PATH       = BASE / "old_csv.zip"
-KEEP_PER_INDEX = 40          # ≈ 40 weeks per index  (~45 MB zip). Set 0 to keep everything.
+KEEP_PER_INDEX = 5           # last 5 snapshots of each file (≈ 5 weeks): the zip stays around 10–15 MB. 0 = keep all.
 CSV_FILES      = ["nifty500_valuation.csv",
                   "niftysmallcap500_valuation.csv",
                   "niftymicrocap250_valuation.csv"]
@@ -91,7 +92,8 @@ def snapshot(csv_path) -> str | None:
         print(f"  - {p.name}: nothing to snapshot")
         return None
     arc = f"{data_date(p):%d%m%y}_{p.name}"
-    _add(p, arc)
+    if _add(p, arc):
+        apply_retention()                                     # keep only the newest KEEP_PER_INDEX of each file
     return arc
 
 
