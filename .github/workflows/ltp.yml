@@ -1,17 +1,22 @@
 # ltp.yml — live LTP (+ previous close) for the stocks held in users' portfolios → Firestore hni_market/ltp
 #
-# Runs: every 30 min in market hours (Mon–Fri 09:00–15:30 IST), once after the close, by hand from the
-#       Actions tab, or from the website's "⟳ Live prices" button (through the Cloudflare Worker, ltp_worker.js).
+# Runs: only 09:00–15:40 IST, Mon–Fri — every 10 min from the Cloudflare Worker's timer, and the website's
+#       "⟳" button (also through the Worker, ltp_worker.js, which refuses it outside those hours).
+#       portfolio_ltp.py checks the time again and fetches nothing outside the market window, unless a manual
+#       run from the Actions tab ticks "any time" (for testing).
 # Once a day: Angel's scrip master and NSE's master lists (EQUITY_L, SME_EQUITY_L, symbol changes) are
 #       downloaded on the first run of the Indian day and kept in .cache/ ; every later run that day restores
 #       them from the GitHub cache in a second instead of downloading again.
 name: Portfolio LTP
 
 on:
-  schedule:
-    - cron: "*/30 3-9 * * 1-5"     # 03:00–09:30 UTC = 08:30–15:00 IST, every 30 min
-    - cron: "20 10 * * 1-5"        # 15:50 IST: closing prices
-  workflow_dispatch:               # Actions tab "Run workflow", and the website button (via the Worker)
+  workflow_dispatch:               # Actions tab "Run workflow", and the Worker (timer + website button)
+    inputs:
+      any_time:
+        description: "Test: fetch even outside 09:00–15:40 IST"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: portfolio-ltp
@@ -66,7 +71,7 @@ jobs:
           ANGEL_CLIENT_CODE: ${{ secrets.ANGEL_CLIENT_CODE }}
           ANGEL_PIN: ${{ secrets.ANGEL_PIN }}
           ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
-        run: python -u portfolio_ltp.py
+        run: python -u portfolio_ltp.py ${{ github.event.inputs.any_time == 'true' && '--any-time' || '' }}
 
       - name: Clean up
         if: always()
