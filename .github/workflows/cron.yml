@@ -10,28 +10,27 @@ concurrency:
 
 on:
   schedule:
-    # ðŸš€ FULL â€” once a week, Saturday 00:00 IST  (= Friday 18:30 UTC)
+    # 🚀 FULL — once a week, Saturday 00:00 IST  (= Friday 18:30 UTC)
     - cron: "30 18 * * 5"
 
-    # ðŸ“° Light â€” 00:00 IST every other night  (Sunâ€“Thu + Sat UTC = Monâ€“Fri + Sun IST)
+    # 📰 Light — 00:00 IST every other night  (Sun–Thu + Sat UTC = Mon–Fri + Sun IST)
     - cron: "30 18 * * 0-4,6"
 
-    # ðŸ“Š Light â€” trading day runs (Monâ€“Fri)
+    # 📊 Light — trading day runs (Mon–Fri)
     - cron: "45 3 * * 1-5"   # 09:15 IST
     - cron: "45 4 * * 1-5"   # 10:15 IST
     - cron: "45 7 * * 1-5"   # 13:15 IST
     - cron: "00 8 * * 1-5"   # 13:30 IST
 
-    # ðŸ“ˆ LTP / price action â€” Sunday, 3 separate triggers 2 h apart. Each one skips everything
-    #    except the Angel price fetch for its third of the symbol list.
-    - cron: "30 9 * * 0"     # 15:00 IST â†’ part 1/3
-    - cron: "30 11 * * 0"    # 17:00 IST â†’ part 2/3
-    - cron: "30 13 * * 0"    # 19:00 IST â†’ part 3/3
+    # 📈 Angel prices only, in thirds — Saturday, after the 00:00 full scrape (nothing else runs in these)
+    - cron: "30 20 * * 5"    # Saturday 02:00 IST (Fri 20:30 UTC) → prices part 1 (first third)
+    - cron: "30 22 * * 5"    # Saturday 04:00 IST (Fri 22:30 UTC) → prices part 2 (middle third)
+    - cron: "30 0 * * 6"     # Saturday 06:00 IST (Sat 00:30 UTC) → prices part 3 (last third)
 
   workflow_dispatch:
     inputs:
       force_full:
-        description: "Run mode:  0 = light  |  1 = FULL run  |  -1 = build + push only  |  2 = Angel prices only (one third, see price_part)"
+        description: "Run mode:  0 = light  |  1 = FULL scrape (no prices)  |  -1 = build + push only  |  2 = Angel prices only"
         required: false
         type: choice
         default: "0"
@@ -41,7 +40,7 @@ on:
           - "-1"
           - "2"
       price_part:
-        description: "Only used when run mode = 2:  which third of the prices to fetch (1/3, 2/3 or 3/3)"
+        description: "Only for mode 2 — which third of the stocks:  1 = first  |  2 = middle  |  3 = last"
         required: false
         type: choice
         default: "1"
@@ -53,18 +52,22 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to Ubuntu 26 from 19 Oct 2026
-    timeout-minutes: 330          # full run â‰ˆ 1â€“1.5 h (â‰ˆ1,250 stocks Ã— 2 pages); GitHub max is 360
+    timeout-minutes: 330          # full run ≈ 1–1.5 h (≈1,250 stocks × 2 pages); GitHub max is 360
     env:
-      # Telegram creds come from Settings â†’ Secrets and variables â†’ Actions (never written in this file)
+      # Telegram creds come from Settings → Secrets and variables → Actions (never written in this file)
       TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || vars.TELEGRAM_BOT_TOKEN }}   # Secrets tab first, falls back to Variables tab
       TG_CHAT:  ${{ secrets.TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID }}
 
     steps:
-      # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      # ───────────────────────────────────────────
       # 1. SETUP
-      # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      # ───────────────────────────────────────────
+      # ref: main = the newest commit when this job STARTS. A price part queued behind the 00:00 full run
+      # (same concurrency group) then sees that run's fresh CSVs and data date, not last week's.
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: main
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v6
@@ -76,70 +79,68 @@ jobs:
           pip install -r requirements.txt
           pip install requests pandas numpy beautifulsoup4 lxml tqdm gnews
 
-      # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      # ───────────────────────────────────────────
       # 2. DECIDE MODE
       #    Manual run (force_full):
-      #       1  â†’ full   (archive + scrape all 3 + build; no news, NO prices)
-      #       0  â†’ light  (news + build; no prices)
-      #      -1  â†’ build  (build only, no news, no scrape)
-      #       2  â†’ prices (Angel prices only, one third chosen in price_part: 1, 2 or 3)
+      #       1  → full   (archive + scrape the 3 lists + build; no news, NO Angel prices)
+      #       0  → light  (news + build)
+      #      -1  → build  (build only, no news, no scrape)
+      #       2  → prices (Angel prices for one third, picked in price_part; nothing else: no build, no deploy)
       #    Schedule:
-      #       Saturday 00:00 IST cron â†’ full
-      #       Sunday 15:00 / 17:00 / 19:00 IST crons â†’ prices part 1 / 2 / 3
-      #       every other cron â†’ light
+      #       Saturday 00:00 IST → full · Saturday 02:00 / 04:00 / 06:00 IST → prices part 1 / 2 / 3 · every other → light
       #    github.event.schedule = the exact cron string that fired, so a late
-      #    GitHub start (they are often 10â€“30 min late) still picks the right mode.
-      # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      #    GitHub start (they are often 10–30 min late) still picks the right mode.
+      # ───────────────────────────────────────────
       - name: Decide run mode
         id: mode
         run: |
           FORCE="${{ github.event.inputs.force_full }}"
-          PART_IN="${{ github.event.inputs.price_part }}"
           EVENT="${{ github.event_name }}"
           SCHED="${{ github.event.schedule }}"
-          echo "event=$EVENT schedule='$SCHED' force=$FORCE part=$PART_IN  IST now: $(TZ=Asia/Kolkata date '+%a %d %b %H:%M')"
+          echo "event=$EVENT schedule='$SCHED' force=$FORCE  IST now: $(TZ=Asia/Kolkata date '+%a %d %b %H:%M')"
+
+          PART="${{ github.event.inputs.price_part }}"
+          case "$SCHED" in
+            "30 20 * * 5") echo "mode=prices" >> $GITHUB_OUTPUT; echo "part=1" >> $GITHUB_OUTPUT; exit 0 ;;
+            "30 22 * * 5") echo "mode=prices" >> $GITHUB_OUTPUT; echo "part=2" >> $GITHUB_OUTPUT; exit 0 ;;
+            "30 0 * * 6")  echo "mode=prices" >> $GITHUB_OUTPUT; echo "part=3" >> $GITHUB_OUTPUT; exit 0 ;;
+          esac
+          echo "part=${PART:-1}" >> $GITHUB_OUTPUT
 
           if [ "$EVENT" = "workflow_dispatch" ]; then
             case "$FORCE" in
               1)  echo "mode=full"  >> $GITHUB_OUTPUT ;;
               -1) echo "mode=build" >> $GITHUB_OUTPUT ;;
-              2)  echo "mode=prices" >> $GITHUB_OUTPUT           # Angel prices only: one third, no scrape / build / deploy
-                  echo "part=${PART_IN:-1}" >> $GITHUB_OUTPUT ;;
+              2)  echo "mode=prices" >> $GITHUB_OUTPUT ;;       # Angel prices only: fetch + commit prices.csv, no scrape / build / deploy
               *)  echo "mode=light" >> $GITHUB_OUTPUT ;;
             esac
             exit 0
           fi
 
-          if [ "$EVENT" = "schedule" ]; then
-            case "$SCHED" in
-              "30 18 * * 5") echo "mode=full" >> $GITHUB_OUTPUT; exit 0 ;;
-              "30 9 * * 0")  echo "mode=prices" >> $GITHUB_OUTPUT; echo "part=1" >> $GITHUB_OUTPUT; exit 0 ;;
-              "30 11 * * 0") echo "mode=prices" >> $GITHUB_OUTPUT; echo "part=2" >> $GITHUB_OUTPUT; exit 0 ;;
-              "30 13 * * 0") echo "mode=prices" >> $GITHUB_OUTPUT; echo "part=3" >> $GITHUB_OUTPUT; exit 0 ;;
-            esac
+          if [ "$EVENT" = "schedule" ] && [ "$SCHED" = "30 18 * * 5" ]; then
+            echo "mode=full" >> $GITHUB_OUTPUT; exit 0
           fi
 
           echo "mode=light" >> $GITHUB_OUTPUT
 
-      # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      # ───────────────────────────────────────────
       # 3. RUN SCRIPTS
-      #    archive_csv.py â†’ snapshots the 3 CSVs into old_csv.zip as DDMMYY_<name>.csv
+      #    archive_csv.py → snapshots the 3 CSVs into old_csv.zip as DDMMYY_<name>.csv
       #                     and moves any loose dated CSV into the zip
-      #    n500 / nm250 / ns500 â†’ scrape standalone + consolidated (parallel), merge,
+      #    n500 / nm250 / ns500 → scrape standalone + consolidated (parallel), merge,
       #                     upsert into the master CSV (each also snapshots its own CSV first)
-      #    fetch_prices.py --part N --of 3 â†’ Angel One prices for one third of the symbols
-      #                     (latest close, close 1 year back, 52W highs, splits), upserted into prices.csv
-      #    build.py â†’ public/index.html + public/fundamentals.html
-      # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      #    fetch_prices.py → prices.csv (Angel One: latest close, close 1 year back, 52W highs, splits)
+      #    build.py → public/index.html + public/fundamentals.html
+      # ───────────────────────────────────────────
       # NSE's list of every listed company (EQUITY_L.csv, repo root): the Portfolio's symbol hints for stocks
       # outside the 3 lists, and the "Others" list scraped by others.yml. Best effort: on failure the old file stays.
-      - name: "ðŸ“ƒ NSE equity list (EQUITY_L.csv)"
+      - name: "📃 NSE equity list (EQUITY_L.csv)"
         if: steps.mode.outputs.mode != 'prices'
         continue-on-error: true
         timeout-minutes: 3
         run: python others.py --list-only
 
-      - name: "ðŸš€ Full run (1) â€” scrape"
+      - name: "🚀 Full run (1) — scrape"
         if: steps.mode.outputs.mode == 'full'
         run: |
           python archive_csv.py
@@ -147,37 +148,33 @@ jobs:
           python nm250.py
           python ns500.py
 
-      # Angel prices (LTP) â€” ONLY in prices mode (Sunday 15:00 / 17:00 / 19:00 IST triggers, or manual mode 2).
-      # Full and light runs never fetch prices.
-      # Each run handles one third of the symbol list (~2,200 symbols â‰ˆ 15 min per third) and upserts its
-      # rows into prices.csv by SYMBOL, so the three parts together rebuild the whole file.
-      # Part 1 also archives first (old_csv.zip snapshot of the old prices.csv) and writes the ^NIFTY500 benchmark row.
+      # Angel prices (fetch_prices.py → prices.csv): ONLY in prices mode (2), one third of the stocks per run:
+      #   Saturday 02:00 / 04:00 / 06:00 IST → part 1 / 2 / 3 (after the 00:00 full scrape), or by hand with mode 2 + price_part.
+      #   Each part updates its own rows in prices.csv; the other thirds' rows stay. The full run (1) no longer fetches prices.
+      #   The site picks the new prices up at the next build (the light run at Sunday 00:00 IST).
       # Broker credentials go ONLY to this step (not job-wide), so npm / firebase never see them.
-      # continue-on-error: if Angel fails, the rows from the previous week stay in prices.csv.
-      - name: "ðŸ“ˆ Fetch prices (Angel, part ${{ steps.mode.outputs.part }}/3)"
+      - name: "📈 Fetch prices (Angel) — part ${{ steps.mode.outputs.part }} of 3"
         id: fetchpx
         if: steps.mode.outputs.mode == 'prices' && hashFiles('fetch_prices.py') != ''
         continue-on-error: true
-        timeout-minutes: 45
+        timeout-minutes: 60         # ≈ 1.2 s per symbol: ~600 symbols per third ≈ 12–15 min
         env:
           ANGEL_API_KEY:     ${{ secrets.ANGEL_API_KEY }}
           ANGEL_CLIENT_CODE: ${{ secrets.ANGEL_CLIENT_CODE }}
           ANGEL_PIN:         ${{ secrets.ANGEL_PIN }}
           ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
         run: |
-          PART="${{ steps.mode.outputs.part }}"
           pip install smartapi-python pyotp logzero websocket-client
-          # archive only once per week, before part 1 overwrites anything
-          if [ "$PART" = "1" ]; then python archive_csv.py; fi
-          python -u fetch_prices.py --force --part "$PART" --of 3
+          python archive_csv.py
+          python -u fetch_prices.py --part ${{ steps.mode.outputs.part }}
 
       # summary of prices.csv (counts + first rows) in the log, and a one-line result for Telegram
-      - name: "ðŸ“Š prices.csv summary"
+      - name: "📊 prices.csv summary"
         id: psum
         if: steps.mode.outputs.mode == 'prices'
         continue-on-error: true
         run: |
-          if [ ! -f prices.csv ]; then echo "prices.csv was NOT written"; echo "msg=prices.csv was NOT written â€” check the Fetch prices step log" >> $GITHUB_OUTPUT; exit 0; fi
+          if [ ! -f prices.csv ]; then echo "prices.csv was NOT written"; echo "msg=prices.csv was NOT written — check the Fetch prices step log" >> $GITHUB_OUTPUT; exit 0; fi
           python - <<'EOF'
           import os, pandas as pd
           d = pd.read_csv("prices.csv")
@@ -194,25 +191,25 @@ jobs:
           open(os.environ["GITHUB_OUTPUT"], "a").write(f"msg={msg}\n")
           EOF
 
-      - name: "ðŸ— Full run (1) â€” build"
+      - name: "🏗 Full run (1) — build"
         if: steps.mode.outputs.mode == 'full'
         run: |
           python build.py
 
-      - name: "âš¡ Light run â€” news + build (0)"
+      - name: "⚡ Light run — news + build (0)"
         if: steps.mode.outputs.mode == 'light'
         run: |
           python -u fetch_news.py
           python build.py
 
-      - name: "ðŸ”¨ Build only (-1)"
+      - name: "🔨 Build only (-1)"
         if: steps.mode.outputs.mode == 'build'
         run: |
           python build.py
 
-      # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      # ───────────────────────────────────────────
       # 4. COMMIT & PUSH (all modes)
-      # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      # ───────────────────────────────────────────
       - name: Commit & push changes
         if: always()
         continue-on-error: true
@@ -229,13 +226,13 @@ jobs:
             public/ || true
           [ -f EQUITY_L.csv ] && git add EQUITY_L.csv                         # NSE's list of every listed company
           [ -f Nifty_Others_Fundamentals.csv ] && git add Nifty_Others_Fundamentals.csv   # written by others.yml
-          [ -f prices.csv ] && git add prices.csv          # weekly Angel prices (1Y back + same-method view)
+          [ -f prices.csv ] && git add prices.csv          # Angel prices (Saturday, in thirds)
           [ -f old_csv.zip ] && git add old_csv.zip
-          # dated CSVs now live inside old_csv.zip â†’ remove any loose ones from git
+          # dated CSVs now live inside old_csv.zip → remove any loose ones from git
           git add -u -- '*.csv' || true
 
           git diff --cached --quiet && { echo "Nothing new to commit"; exit 0; }
-          git commit -m "Auto update (${{ steps.mode.outputs.mode }}${{ steps.mode.outputs.part && format(' {0}/3', steps.mode.outputs.part) || '' }}) [skip ci]"
+          git commit -m "Auto update (${{ steps.mode.outputs.mode }}) [skip ci]"
 
           # Commit FIRST, then rebase onto whatever was pushed meanwhile (e.g. files you uploaded during the run).
           # -X theirs = in a clash, this run's freshly built files win. A rebase either finishes cleanly or is
@@ -256,9 +253,9 @@ jobs:
           fi
           echo "public/ is clean"
 
-      # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-      # 5. FIREBASE DEPLOY (all modes except prices, always silent)
-      # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      # ───────────────────────────────────────────
+      # 5. FIREBASE DEPLOY (all modes, always silent)
+      # ───────────────────────────────────────────
       - name: Setup Firebase
         if: steps.mode.outputs.mode != 'prices'
         run: |
@@ -266,7 +263,7 @@ jobs:
           npm install -g firebase-tools
 
       # "Delete user" from the website's Users list: removes the login accounts noted in hni_deletes
-      - name: "ðŸ—‘ Finish account deletions"
+      - name: "🗑 Finish account deletions"
         if: steps.mode.outputs.mode != 'prices'
         continue-on-error: true
         env:
@@ -281,36 +278,35 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: serviceAccount.json
         run: firebase deploy --project hnimanshu --only hosting --non-interactive 2>/dev/null
 
-      # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      # ───────────────────────────────────────────
       # 6. TELEGRAM  (token + channel id from repo secrets TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)
-      #    full   â†’ success message / failure message
-      #    light  â†’ one-liner
-      #    build  â†’ "test run completed" one-liner
-      #    prices â†’ part n/3 result one-liner
+      #    full  → success message / failure message
+      #    light → one-liner
+      #    build → "test run completed" one-liner
       #    continue-on-error: a Telegram hiccup never fails the run
-      # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-      - name: "ðŸ“© Telegram â€” full run success"
+      # ───────────────────────────────────────────
+      - name: "📩 Telegram — full run success"
         if: steps.mode.outputs.mode == 'full' && success()
         continue-on-error: true
         run: |
           curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT}" \
-            -d text="https://hnimanshu-value.web.app/ %0A%0AWeekly full update completed ðŸš€ (standalone + consolidated merged)"
+            -d text="https://hnimanshu-value.web.app/ %0A%0AWeekly full update completed 🚀 (standalone + consolidated merged)"
 
-      - name: "ðŸ“© Telegram â€” full run success (details)"
+      - name: "📩 Telegram — full run success (details)"
         if: steps.mode.outputs.mode == 'full' && success()
         continue-on-error: true
         run: |
           IST_NOW=$(TZ=Asia/Kolkata date '+%d %b %Y %I:%M %p IST')
           curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             --data-urlencode chat_id="${TG_CHAT}" \
-            --data-urlencode text="âœ… Full run completed successfully
+            --data-urlencode text="✅ Full run completed successfully
           Repo: https://github.com/RPSCL/HNImanshu_value
           Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           Time: ${IST_NOW}
           Site: https://hnimanshu-value.web.app/"
 
-      - name: "ðŸ“© Telegram â€” light run"
+      - name: "📩 Telegram — light run"
         if: steps.mode.outputs.mode == 'light' && success()
         continue-on-error: true
         run: |
@@ -318,27 +314,27 @@ jobs:
             --data-urlencode chat_id="${TG_CHAT}" \
             --data-urlencode text="https://hnimanshu-value.web.app/ website updated from github."
 
-      - name: "ðŸ“© Telegram â€” test run (-1)"
+      - name: "📩 Telegram — test run (-1)"
         if: steps.mode.outputs.mode == 'build' && success()
         continue-on-error: true
         run: |
           curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             --data-urlencode chat_id="${TG_CHAT}" \
-            --data-urlencode text="ðŸ§ª Test run for https://hnimanshu-value.web.app/ completed"
+            --data-urlencode text="🧪 Test run for https://hnimanshu-value.web.app/ completed"
 
-      - name: "ðŸ“© Telegram â€” prices (part n/3)"
+      - name: "📩 Telegram — prices (2)"
         if: steps.mode.outputs.mode == 'prices' && always()
         continue-on-error: true
         run: |
           curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             --data-urlencode chat_id="${TG_CHAT}" \
-            --data-urlencode text="ðŸ“ˆ Angel prices ${{ steps.mode.outputs.part }}/3: ${{ steps.psum.outputs.msg || 'no summary â€” check the run log' }}
+            --data-urlencode text="📈 Angel prices, part ${{ steps.mode.outputs.part }} of 3: ${{ steps.psum.outputs.msg || 'no summary — check the run log' }}
           Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-      - name: "ðŸ“© Telegram â€” full run failed"
+      - name: "📩 Telegram — full run failed"
         if: steps.mode.outputs.mode == 'full' && failure()
         continue-on-error: true
         run: |
           curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             -d chat_id="${TG_CHAT}" \
-            -d text="âš ï¸ Weekly full run FAILED â€” ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            -d text="⚠️ Weekly full run FAILED — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
