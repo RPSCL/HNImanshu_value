@@ -16,8 +16,11 @@ What it does
   3. Logs in to Angel One (same secrets / login as fetch_prices.py) and asks for LTP + previous close,
      50 symbols per call (Angel's limit), about 1 call a second.
   4. Writes ONE Firestore document, hni_market/ltp:
-        {asOf, prices: {SYMBOL: {ltp, prev}}, renames: {OLD: NEW}, missing: [symbols Angel doesn't know],
+        {asOf, prices: {SYMBOL: {ltp, prev}}, idx: {NIFTY: {ltp, prev}, BANKNIFTY: {ltp, prev}},
+         renames: {OLD: NEW}, missing: [symbols Angel doesn't know],
          notListed: [held symbols on no NSE list], names: {SYMBOL: company name}, checked: "YYYY-MM-DD"}
+     Any NSE stock works (Angel's scrip master has every listed symbol), not only the screener's lists.
+  5. Finishes any "Delete user" from the website's Users list (account_deletes.py).
      The Portfolio page reads it: Value, P&L and Day gain use these prices; renames are applied automatically.
 
 Run
@@ -43,6 +46,7 @@ from fetch_prices import Angel, scrip_master, build_token_map, log, IST, CACHE_D
 PORTFOLIOS = "hni_portfolio"
 OUT_COLL, OUT_DOC = "hni_market", "ltp"
 BATCH = 50                                   # Angel getMarketData: max 50 tokens per request
+INDEX_TOKENS = {"99926000": "NIFTY", "99926009": "BANKNIFTY"}   # Angel tokens of the NIFTY 50 and NIFTY BANK indices
 SYMBOL_CHANGE_URL = "https://nsearchives.nseindia.com/content/equities/symbolchange.csv"
 EQUITY_URLS = ["https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv",          # main board
                "https://nsearchives.nseindia.com/emerge/corporates/content/SME_EQUITY_L.csv"]   # SME (Emerge)
@@ -142,10 +146,15 @@ def main():
 	firebase_admin.initialize_app()                        # uses GOOGLE_APPLICATION_CREDENTIALS
 	db = firestore.client()
 
+	try:
+		import account_deletes
+		account_deletes.process(db, log)
+	except Exception as e:
+		log(f"Account deletes skipped: {e}")
+
 	syms = held_symbols(db)
 	if not syms:
-		log("Nobody holds anything yet; nothing to price.")
-		return 0
+		log("Nobody holds anything yet; only the indices are priced.")
 
 	ren_all = nse_renames()
 	renames = {s: ren_all[s] for s in syms if s in ren_all}    # only renames that touch a held stock
@@ -180,7 +189,17 @@ def main():
 		log(f"Not on Angel (unlisted / suspended / typo): {', '.join(missing)}")
 
 	angel = Angel()                                        # logs in (same as fetch_prices.py)
-	prices = {}
+	prices, idx = {}, {}
+	try:                                                   # NIFTY 50 + NIFTY BANK for the Portfolio header
+		res = angel.api.getMarketData("OHLC", {"NSE": list(INDEX_TOKENS)})
+		for f in ((res or {}).get("data") or {}).get("fetched", []) or []:
+			k = INDEX_TOKENS.get(str(f.get("symbolToken")))
+			if k and f.get("ltp"):
+				idx[k] = {"ltp": round(float(f["ltp"]), 2), "prev": round(float(f.get("close") or 0), 2) or None}
+		log("Indices: " + ", ".join(f"{k} {v['ltp']}" for k, v in idx.items()))
+	except Exception as e:
+		log(f"Indices not priced: {e}")
+	time.sleep(1.1)
 	tokens = list(want)
 	for i in range(0, len(tokens), BATCH):
 		chunk = tokens[i:i + BATCH]
@@ -201,7 +220,7 @@ def main():
 			prices[old] = prices[new]
 	log(f"Priced {len(prices)} of {len(syms)} held symbols")
 
-	doc = {"asOf": datetime.now(IST).strftime("%Y-%m-%d %H:%M"), "prices": prices, "renames": renames, "missing": missing,
+	doc = {"asOf": datetime.now(IST).strftime("%Y-%m-%d %H:%M"), "prices": prices, "idx": idx, "renames": renames, "missing": missing,
 	       "notListed": not_listed, "names": names, "checked": datetime.now(IST).strftime("%Y-%m-%d")}
 	if a.dry:
 		print(doc)

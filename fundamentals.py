@@ -49,6 +49,8 @@ OPEN_BROWSER = True
 
 # file name (without leading digits and "_valuation.csv")  ->  label shown on the dashboard
 UNIVERSES = {"nifty500": "NIFTY 500", "niftysmallcap500": "Smallcap 500", "niftymicrocap250": "Microcap 250"}
+OTHERS_KEY, OTHERS_LABEL = "others", "Others"   # every other NSE stock (Nifty_Others_Fundamentals.csv, others.py):
+                                                # its own list, NOT part of "All lists"
 
 GROWTH_YEARS = 5          # EPS / PAT / reserves CAGR window (uses fewer years if that is all there is)
 CASH_YEARS = 5            # cash conversion and FCF are averaged over this many financial years
@@ -139,6 +141,8 @@ def universe_key(path):
         return "niftysmallcap500"
     if "microcap" in flat:
         return "niftymicrocap250"
+    if "others" in flat:
+        return OTHERS_KEY
     stem = re.sub(r"\s*(\(\d+\)|- copy.*|copy)$", "", stem).strip()
     stem = re.sub(r"^\d+_", "", stem)
     return re.sub(r"[_ -]*valuation.*$", "", stem) or stem
@@ -195,7 +199,13 @@ def load_stocks(paths=None):
             if best is None or score > best[0]:
                 best = (score, d, p)
         _, d, p = best
-        label = UNIVERSES.get(key, key)
+        label = UNIVERSES.get(key, OTHERS_LABEL if key == OTHERS_KEY else key)
+        if key == OTHERS_KEY:                           # small companies: keep only those screener had a price / mcap for
+            has = pd.Series(False, index=d.index)
+            for c in ("CMP", "MARKET_CAP_CR"):
+                if c in d.columns:
+                    has |= pd.to_numeric(d[c], errors="coerce").notna()
+            d = d[has]
         d = d.assign(_UNI=label, _RANK=rank)
         frames.append(d)
         extra = "" if len(groups[key]) == 1 else "  (newest of %d copies)" % len(groups[key])
@@ -1217,6 +1227,13 @@ body.pf-mode #saveHtml,body.pf-mode #nav,body.pf-mode #meta{display:none!importa
 @media (max-width:700px){.btn.hweek{padding:0 9px}}
 /* icon-only buttons (charges, refresh); refresh spins while live prices are being fetched */
 .pf-acts .btn.ico{width:38px;padding:0;justify-content:center}
+.pf-acts .btn.ico.ltp{width:auto;padding:0 10px;gap:6px}                 /* ⟳ + the time of the latest prices */
+.pf-asof{font:600 11px var(--mono);color:var(--mute)}
+/* NIFTY 50 / BANK NIFTY on the Portfolio page (from the same live-price job) */
+.pf-idx{display:flex;gap:6px 20px;flex-wrap:wrap;align-items:baseline;font:600 13px var(--mono);color:var(--ink)}
+.pf-ix{white-space:nowrap}
+.pf-ix b{font:600 10.5px var(--mono);color:var(--faint);letter-spacing:.4px;margin-right:6px}
+.pf-ix em{font-style:normal;font-size:12px;margin-left:6px}
 .pf-acts .btn.ico svg{display:block}
 .pf-acts .btn.spin svg{animation:pfSpin 1s linear infinite}
 @keyframes pfSpin{to{transform:rotate(360deg)}}
@@ -1375,6 +1392,13 @@ body.night{--pxline:#ece6da} body.day{--pxline:#36332e}           /* price line:
 @media (max-width:700px){
   .pf-top{gap:6px}
   .pf-acts{width:100%;display:grid;grid-template-columns:1.25fr 1fr auto auto;gap:6px}   /* one row: Buy / Sell, Pay in / out, ₹, ⟳ */
+  .pf-idx{order:-1;width:100%;justify-content:space-between;gap:4px 8px;font-size:11px;padding:2px 2px 4px}   /* phone: indices on top, one line */
+  .pf-ix b{font-size:10px;margin-right:4px}
+  .pf-ix em{font-size:11px;margin-left:4px}
+  .pf-ix .abs{display:none}                                          /* phone: just ▲ +0.49%, both indices on one line */
+  .pf-acts .btn{white-space:nowrap}
+  .pf-acts .btn.ico.ltp{padding:0 8px;gap:4px}
+  .pf-asof{font-size:10.5px}
   .pf-acts .btn{justify-content:center;padding:0 8px}
   .pf-tg{width:100%;justify-content:center}
   .pf-sum{display:grid;grid-template-columns:1fr 1fr;overflow:visible}
@@ -1723,8 +1747,11 @@ const GF = lsJson('gf', {psu:false, semi:false, back:false, backP:'1Y', uni:'all
 delete GF.same;                                              // old "Same method" setting from earlier visits: dropped
 const QP = new URLSearchParams(location.search);
 if (QP.has('uni') && history.replaceState) history.replaceState(null, '', location.pathname + location.hash);   // old ?uni= links: ignored, URL cleaned
+/* "Others" (every NSE stock outside the 3 lists) is its own list: "All lists" = the 3 lists only */
+const OTH = 'Others';
+const othOnly = s => !!(s.uni && s.uni.length) && s.uni.every(u => u === OTH);
 const vis = s => !(GF.psu && s.psu === 'psu') && !(GF.semi && s.psu === 'semi')
-  && (!GF.uni || GF.uni === 'all' || (s.uni || []).includes(GF.uni));
+  && (!GF.uni || GF.uni === 'all' ? !othOnly(s) : (s.uni || []).includes(GF.uni));
 const V = () => S.filter(vis);
 /* per-user settings: kept in this browser (localStorage) so a refresh reopens the same view.
    Every read / write goes through lsGet / lsSet, so a login-backed store can replace it in one place later. */
@@ -1744,18 +1771,21 @@ function setMode() {
   NOPRICE = BACK && !D.then.hasPrice;
   industries = {};
   S.forEach(s => (industries[s.ind] = industries[s.ind] || {name:s.ind, stocks:[]}).stocks.push(s));
-  Object.values(industries).forEach(buildIndustry);
+  // industry benchmarks: from the list on screen ("Others" on its own, else the 3 lists), so the Others list
+  // never moves the numbers of the main lists; an industry with none of those falls back to all its stocks
+  const scope = GF.uni === OTH ? othOnly : (s => !othOnly(s));
+  Object.values(industries).forEach(g => { const sub = g.stocks.filter(scope); buildIndustry(g, sub.length ? sub : g.stocks); });
 }
-function buildIndustry(g) {
-  const pes = g.stocks.filter(s=>s.pe!=null);
+function buildIndustry(g, list = g.stocks) {
+  const pes = list.filter(s=>s.pe!=null);
   const w = pes.filter(s=>s.mcap);
-  g.n = g.stocks.length; g.nPE = pes.length;
-  g.mcap = g.stocks.reduce((t,s)=>t+(s.mcap||0),0);
+  g.n = list.length; g.nPE = pes.length;
+  g.mcap = list.reduce((t,s)=>t+(s.mcap||0),0);
   g.pe = {median: median(pes.map(s=>s.pe)), mean: mean(pes.map(s=>s.pe)),
           weighted: w.length ? w.reduce((t,s)=>t+s.mcap,0) / w.reduce((t,s)=>t+s.mcap/s.pe,0) : null};
-  g.medPB = median(g.stocks.map(s=>s.pb));
-  g.medROE = median(g.stocks.map(s=>s.roe));
-  g.medDY = median(g.stocks.map(s=>s.dy));
+  g.medPB = median(list.map(s=>s.pb));
+  g.medROE = median(list.map(s=>s.roe));
+  g.medDY = median(list.map(s=>s.dy));
   g.cheapest = pes.length ? pes.reduce((a,b)=>a.pe<=b.pe?a:b) : null;
 }
 setMode();
@@ -1798,11 +1828,11 @@ function computeScores() {
   const key = JSON.stringify(W) + '|' + method;                // same stocks, weights and PE method → scores are already on them
   if (computeScores.S === S && computeScores.key === key) return;
   computeScores.S = S; computeScores.key = key;
-  const uni = {}, byInd = {};
-  for (const k in METRICS) uni[k] = S.map(METRICS[k].v).filter(ok).sort((a,b)=>a-b);
+  const uni = {}, byInd = {}, main = s => !othOnly(s);      // peers = the 3 lists, so Others never shifts their scores
+  for (const k in METRICS) uni[k] = S.filter(main).map(METRICS[k].v).filter(ok).sort((a,b)=>a-b);
   Object.values(industries).forEach(g => {
     byInd[g.name] = {};
-    for (const k in METRICS) byInd[g.name][k] = g.stocks.map(METRICS[k].v).filter(ok).sort((a,b)=>a-b);
+    for (const k in METRICS) byInd[g.name][k] = g.stocks.filter(main).map(METRICS[k].v).filter(ok).sort((a,b)=>a-b);
   });
   S.forEach(s => {
     s.score = null; s.parts = {};
@@ -1897,7 +1927,7 @@ function csvName(tab, st, def, keys) {
   return parts.join('_').replace(/[^A-Za-z0-9_.-]+/g, '_') + '.csv';
 }
 /* list in the header picker goes first: all_ / N500_ / NS500_ / NM250_ */
-const LIST_CODE = {'all':'all', 'NIFTY 500':'N500', 'Smallcap 500':'NS500', 'Microcap 250':'NM250'};
+const LIST_CODE = {'all':'all', 'NIFTY 500':'N500', 'Smallcap 500':'NS500', 'Microcap 250':'NM250', 'Others':'OTH'};
 const listCode = () => LIST_CODE[GF.uni || 'all'] || String(GF.uni).replace(/[^A-Za-z0-9]+/g, '');
 const csvCell = v => {
   if (v == null || (typeof v === 'number' && !isFinite(v))) return '';
@@ -3226,8 +3256,29 @@ const pfActsHtml = () => `<div class="pf-top"><div class="pf-acts">
     <button type="button" class="btn primary" data-open="trade">+ Buy / Sell</button>
     <button type="button" class="btn" data-open="cash">Pay in / out</button>
     <button type="button" class="btn ghost ico" data-open="rates" title="Charges &amp; taxes on each trade" aria-label="Charges and taxes">${IC_TAX}</button>
-    ${pfCanRefresh() ? `<button type="button" class="btn ghost ico${PF_POLL ? ' spin' : ''}" data-open="ltp" title="Refresh live prices (Angel)" aria-label="Refresh live prices"${PF_POLL ? ' disabled' : ''}>${IC_REF}</button>` : ''}
-  </div></div>`;
+    ${pfCanRefresh() ? `<button type="button" class="btn ghost ico ltp${PF_POLL ? ' spin' : ''}" data-open="ltp" title="Refresh live prices${pfAsOf().full ? ' (now as of ' + esc(pfAsOf().full) + ' IST)' : ''}" aria-label="Refresh live prices"${PF_POLL ? ' disabled' : ''}>${IC_REF}${pfAsOf().short ? `<span class="pf-asof">${esc(pfAsOf().short)}</span>` : ''}</button>` : ''}
+  </div>${pfIdxHtml()}</div>`;
+/* when the live prices were last fetched (same for every account): "12:20" today, else "13 Oct" */
+function pfAsOf() {
+  const a = String((PF.mkt && PF.mkt.asOf) || '');
+  if (!/^\d{4}-\d\d-\d\d \d\d:\d\d/.test(a)) return {};
+  const todayIst = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+  const d = new Date(a.slice(0, 10) + 'T00:00:00Z');
+  const dm = d.getUTCDate() + ' ' + d.toLocaleString('en-IN', {month: 'short', timeZone: 'UTC'});
+  return {short: a.slice(0, 10) === todayIst ? a.slice(11, 16) : dm, full: dm + ', ' + a.slice(11, 16)};
+}
+/* NIFTY 50 and BANK NIFTY: last price and the day's move (from hni_market/ltp "idx") */
+function pfIdxHtml() {
+  const I = PF.mkt && PF.mkt.idx;
+  if (!I) return '';
+  const one = (k, lab) => {
+    const x = I[k]; if (!x || !x.ltp) return '';
+    const ch = x.prev ? x.ltp - x.prev : null, pct = ch != null ? ch / x.prev * 100 : null;
+    return `<span class="pf-ix"><b>${lab}</b>${fmt(x.ltp, 2)}${ch == null ? '' : `<em class="${ch >= 0 ? 'up' : 'dn'}">${ch >= 0 ? '▲' : '▼'}<span class="abs"> ${fmt(Math.abs(ch), 2)} (</span>${pct >= 0 ? '+' : '−'}${fmt(Math.abs(pct), 2)}%<span class="abs">)</span></em>`}</span>`;
+  };
+  const h = one('NIFTY', 'NIFTY<span class="abs"> 50</span>') + one('BANKNIFTY', 'BANK NIFTY');
+  return h ? `<div class="pf-idx">${h}</div>` : '';
+}
 /* phone portfolio, laid out like Zerodha's Holdings: one summary card, then a card per stock.
    Tapping a stock opens a soft sheet with its value / momentum details, your holding and its news. */
 function pfPhone(P) {
@@ -3607,6 +3658,11 @@ function typeConfirm(title, html, onOk) {
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
 /* symbol box with its own dropdown (the phone's datalist only shows above the keyboard):
    matches symbol start first, then name; last row adds a symbol that is not in the lists */
+/* every NSE stock (public/nse_all.json from EQUITY_L.csv, [[SYMBOL, name], ...]): hints for stocks outside the
+   lists. Fetched the first time Buy / Sell opens, then kept for the visit. */
+let NSE_ALL = null, NSE_WAIT = null;
+const nseAll = () => NSE_WAIT = NSE_WAIT || fetch('nse_all.json').then(r => r.ok ? r.json() : []).catch(() => [])
+  .then(j => { NSE_ALL = Array.isArray(j) ? j : []; return NSE_ALL; });
 function symPicker(input, onPick) {
   const box = document.createElement('div'); box.className = 'sp-list'; box.hidden = true;
   input.parentNode.classList.add('sp-wrap'); input.after(box);
@@ -3620,7 +3676,17 @@ function symPicker(input, onPick) {
       if (a.length >= 8) break;
     }
     items = a.concat(b).slice(0, 8).map(s => ({sym: s.sym, name: s.name, held: PF_HELD.has(s.sym)}));
-    if (/^[A-Z0-9&._-]{1,20}$/.test(q) && !TODAY.has(q)) items.push({sym: q, name: 'Add as a stock not in these lists', add: true});
+    if (items.length < 8 && NSE_ALL) {                     // then any other NSE stock
+      const na = [], nb = [];
+      for (const [sym, name] of NSE_ALL) {
+        if (TODAY.has(sym)) continue;
+        if (sym.startsWith(q)) na.push({sym, name, nse: true}); else if (sym.includes(q) || (name || '').toUpperCase().includes(q)) nb.push({sym, name, nse: true});
+        if (na.length >= 8) break;
+      }
+      items = items.concat(na.concat(nb).slice(0, 8 - items.length).map(it => Object.assign(it, {held: PF_HELD.has(it.sym)})));
+    }
+    const known = items.some(it => it.sym === q) || (NSE_ALL && NSE_ALL.some(x => x[0] === q));
+    if (/^[A-Z0-9&._-]{1,20}$/.test(q) && !TODAY.has(q) && !known) items.push({sym: q, name: NSE_ALL && NSE_ALL.length ? 'Not on NSE\'s list: add anyway' : 'Add as a stock not in these lists', add: true});
     hi = 0;
     box.innerHTML = items.map((it, i) => `<button type="button" class="sp-it${i === hi ? ' on' : ''}${it.add ? ' add' : ''}" data-i="${i}"><b>${esc(it.sym)}</b><span>${esc(it.name || '')}</span>${it.held ? '<i>held</i>' : ''}</button>`).join('');
     box.hidden = !items.length;
@@ -3628,6 +3694,7 @@ function symPicker(input, onPick) {
   const pick = i => { const it = items[i]; if (!it) return; input.value = it.sym; box.hidden = true; onPick(it); };
   input.addEventListener('input', paint);
   input.addEventListener('focus', paint);
+  if (!NSE_ALL) nseAll().then(() => { if (document.activeElement === input) paint(); });
   input.addEventListener('keydown', e => {
     if (box.hidden) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); hi = (hi + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
@@ -3677,7 +3744,7 @@ function pfTradeForm(x) {
     const ch = +f.ch.value || 0;
     $('.pf-calc', w).textContent = q > 0 && p > 0 ? (t === 'buy' ? `Cash out ₹${fmt(q * p + ch, 2)} (₹${fmt(q * p, 2)} + charges)` : `Cash in ₹${fmt(q * p - ch, 2)} (₹${fmt(q * p, 2)} − charges)`) : '';
   };
-  symPicker(f.sym, () => { calc(); f.qty.focus(); });
+  symPicker(f.sym, it => { if (it && it.nse && it.name) f.nm.value = it.name; calc(); f.qty.focus(); });   // NSE stock: its name filled in
   w.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => { t = b.dataset.t; seg(); calc(); }));
   ['sym', 'qty', 'px'].forEach(k => f[k].addEventListener('input', calc));
   f.sym.addEventListener('change', calc);

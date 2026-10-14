@@ -92,6 +92,8 @@ OUTPUT_FUND = BASE / "public" / "fundamentals.html"   # second page, same Fireba
 N500_CSV    = BASE / "nifty500_valuation.csv"
 SC250_CSV   = BASE / "niftysmallcap500_valuation.csv"
 MC250_CSV   = BASE / "niftymicrocap250_valuation.csv"
+OTH_CSV     = BASE / "Nifty_Others_Fundamentals.csv"   # every other NSE stock (others.py / others.yml)
+EQUITY_CSV  = BASE / "EQUITY_L.csv"                    # NSE's list of every listed company (others.py --list-only)
 NEWS_CSV    = BASE / "multi_stock_news.csv"
 
 PLACEHOLDER      = "%%DATASETS_PLACEHOLDER%%"
@@ -645,6 +647,15 @@ def load_csv(path: Path, name_col: str, label: str, optional=False):
 
     df = pd.read_csv(path, low_memory=False)
     print(f"    Loaded: {len(df)} rows × {len(df.columns)} cols")
+    if path == OTH_CSV:                                 # small companies: screener often has nothing for them
+        has = pd.Series(False, index=df.index)
+        for c in ("CMP", "MARKET_CAP_CR"):
+            if c in df.columns:
+                has |= pd.to_numeric(df[c], errors="coerce").notna()
+        print(f"    Kept {int(has.sum())} with a price or market cap, dropped {int((~has).sum())} with no data")
+        df = df[has]
+        if df.empty:
+            return []
 
     if name_col in df.columns:
         df = df.rename(columns={name_col: "COMPANY_NAME"})
@@ -756,6 +767,28 @@ def inject_news(html: str, news_js: str) -> str:
 # 📈 FUNDAMENTALS PAGE
 # =========================
 
+def write_nse_list(out: Path) -> int:
+    """public/nse_all.json = [[SYMBOL, company name], ...] from EQUITY_L.csv: the Portfolio's symbol hints for
+    stocks outside the lists. Loaded only when someone opens Buy / Sell. Returns the count (0 = no file)."""
+    if not EQUITY_CSV.exists():
+        print("  EQUITY_L.csv not found: no symbol hints beyond the lists")
+        return 0
+    try:
+        d = pd.read_csv(EQUITY_CSV, dtype=str)
+        d.columns = [c.strip().upper() for c in d.columns]
+        sc = next(c for c in d.columns if "SYMBOL" in c)
+        nc = next((c for c in d.columns if "NAME" in c), None)
+        rows = sorted({(str(r[sc]).strip().upper(), str(r[nc]).strip() if nc else "") for _, r in d.iterrows()
+                       if str(r[sc]).strip() and str(r[sc]).strip().lower() != "nan"})
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps([list(x) for x in rows], separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
+        print(f"  nse_all.json: {len(rows)} NSE symbols for the Portfolio's hints")
+        return len(rows)
+    except Exception as e:
+        print(f"  [WARN] nse_all.json not written ({e})")
+        return 0
+
+
 def build_fundamentals():
     """Build public/fundamentals.html from the same 3 CSVs (explicit paths, so test_*.csv is never read)."""
     print("\nBuilding Fundamentals page...\n")
@@ -763,7 +796,7 @@ def build_fundamentals():
         print("  [WARN] skipped — fundamentals.py missing")
         return
     try:
-        fundamentals.build_site([N500_CSV, SC250_CSV, MC250_CSV], OUTPUT_FUND, minify=minify_html_css)
+        fundamentals.build_site([N500_CSV, SC250_CSV, MC250_CSV, OTH_CSV], OUTPUT_FUND, minify=minify_html_css)
     except Exception:
         traceback.print_exc()   # log it, but keep the screener build + deploy going
         print("  [WARN] Fundamentals build failed — previous fundamentals.html stays live")
@@ -789,6 +822,13 @@ def build(deploy=False):
     data_n500  = load_csv(N500_CSV,  N500_NAME_COL,  "Nifty 500")
     data_sc250 = load_csv(SC250_CSV, SC250_NAME_COL, "Smallcap 250", optional=True)
     data_mc250 = load_csv(MC250_CSV, MC250_NAME_COL, "Microcap 250", optional=True)
+    try:                                                # "Others": optional, and never allowed to break the build
+        data_oth = load_csv(OTH_CSV, "COMPANY_NAME", "Others", optional=True) or []
+    except Exception:
+        traceback.print_exc()
+        print("  [WARN] Others list skipped")
+        data_oth = []
+    n_nse = write_nse_list(OUTPUT.parent / "nse_all.json")
 
     if data_sc250 is None:
         data_sc250 = []
@@ -814,14 +854,16 @@ def build(deploy=False):
         if isinstance(o, float) and (o != o or o in (float("inf"), float("-inf"))):
             return None
         return o
-    for key, rows in (("sc250", data_sc250), ("mc250", data_mc250)):
+    for key, rows in (("sc250", data_sc250), ("mc250", data_mc250), ("oth", data_oth)):
         (OUTPUT.parent / f"screener_{key}.json").write_text(json.dumps(_nan_free(rows), separators=(",", ":"), allow_nan=False), encoding="utf-8")
     datasets_js = (
         "const DATASETS = {\n"
         f"n500:{js_safe(json.dumps(data_n500, separators=(',', ':')))},\n"
         "sc250:null,\n"
-        "mc250:null\n"
-        "};"
+        "mc250:null,\n"
+        "oth:null\n"
+        "};\n"
+        f"const OTH_N = {len(data_oth)};"                # 0 = no Others file yet: the page hides that button
     )
 
     # ── Inject into template ──
@@ -840,7 +882,7 @@ def build(deploy=False):
     # ── Fundamentals page (separate HTML, same deploy) ──
     build_fundamentals()
 
-    total = len(data_n500 or []) + len(data_sc250) + len(data_mc250)
+    total = len(data_n500 or []) + len(data_sc250) + len(data_mc250) + len(data_oth)
     print(f"\n✅ Build Complete  —  {total} total stocks, "
           f"{n_news} news items")
     print(f"   Output: {OUTPUT}")

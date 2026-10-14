@@ -359,8 +359,16 @@ All times are IST. GitHub's own schedules often start 10–30 minutes late.
 | News + build + deploy | 00:00 every other night; 09:15, 10:15, 13:15, 13:30 Mon–Fri | GitHub (`cron.yml`) |
 | Weekly Angel prices | The first run once `prices.csv` is 5+ days old | GitHub (`cron.yml`) |
 | Portfolio live prices | Every 10 min, 09:00–15:40 Mon–Fri | Cloudflare Worker → GitHub (`ltp.yml`) |
-| Portfolio live prices (on demand) | ⟳ button, admins, at most once per 3 min | Website → Worker → GitHub |
+| Portfolio live prices (on demand) | ⟳ button, every signed-in user, at most once per 3 min | Website → Worker → GitHub |
 | Master lists (Angel scrip master, NSE lists) | Downloaded on the first `ltp.yml` run of each IST day, then cached | GitHub cache |
+| NSE list of every company (`EQUITY_L.csv`) | Every `cron.yml` run (`others.py --list-only`); kept if NSE fails | GitHub (`cron.yml`) |
+| "Others" fundamentals (`Nifty_Others_Fundamentals.csv`) | Sunday 03:00, then asks `cron.yml` for a build | GitHub (`others.yml`) |
+| Finish "Delete user" (login accounts) | Every `ltp.yml` and `cron.yml` run (`account_deletes.py`) | GitHub |
+
+**Others list.** `others.py` takes every company in `EQUITY_L.csv` that is in none of the 3 lists and scrapes it with
+`n500.py`'s engine (imported, so fixes there apply here too). Small companies often have little or no screener data:
+rows with neither a price nor a market cap are left out of the site. "All lists" / "All Stocks" stay the 3 lists;
+Others is its own entry, and its stocks never change the scores or industry numbers of the 3 lists.
 
 ---
 

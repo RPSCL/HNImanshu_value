@@ -50,7 +50,8 @@ import requests
 BASE        = Path(__file__).resolve().parent
 OUT_CSV     = BASE / "prices.csv"
 CACHE_DIR   = BASE / ".cache"
-CSV_FILES   = ["nifty500_valuation.csv", "niftysmallcap500_valuation.csv", "niftymicrocap250_valuation.csv"]
+CSV_FILES   = ["nifty500_valuation.csv", "niftysmallcap500_valuation.csv", "niftymicrocap250_valuation.csv",
+               "Nifty_Others_Fundamentals.csv"]          # others: priced too (momentum, Historical); not used for the data date
 SCRIP_URL   = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
 BENCH_SYM   = "^NIFTY500"                 # row name used for the benchmark in prices.csv
 BENCH_NAMES = {"nifty500"}               # matched against the index's symbol / name, spaces removed, lower case
@@ -92,7 +93,7 @@ def load_symbols():
 			continue
 		d = pd.read_csv(p, usecols=lambda c: c in ("SYMBOL", "DATE_DOWNLOADED"), low_memory=False)
 		syms += [str(s).strip().upper() for s in d["SYMBOL"].dropna()]
-		if "DATE_DOWNLOADED" in d:
+		if "DATE_DOWNLOADED" in d and "others" not in f.lower():
 			dt = pd.to_datetime(d["DATE_DOWNLOADED"], errors="coerce").max()
 			if pd.notna(dt) and (asof is None or dt > asof):
 				asof = dt
