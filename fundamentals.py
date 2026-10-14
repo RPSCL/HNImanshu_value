@@ -904,8 +904,6 @@ def build_all(df, asof, prices=None, bench=None):
         rec_n = build_record(r, F, inputs_sm(r, F, asof, fin, ltp, g("HIGH_52W_NOW") or r["HIGH_52W"]), fin)
         rec_n["pxSrc"] = ltp_src
         rec_n["mom"] = rec0["mom"]
-        rv = rev_windows(px, g("LTP"), RV_KEYS) if ltp_ok else None   # Reversal tab: 3M … 18M returns, Angel both ends
-        rec0["rv"] = rec_n["rv"] = rv
         rec_n.update(qx)
         smnow.append(rec_n)
         ltps[sym] = (ltp, ltp_src)
@@ -914,23 +912,6 @@ def build_all(df, asof, prices=None, bench=None):
         print("Prices: %d LTPs too far from %s → CSV CMP used" % (n_farL, asof.date()))
     backs = {k: build_back(df, F, asof, k, prices, bench, ltps) for k in PERIODS}
     return now, smnow, backs
-
-
-# Momentum reversal (Reversal tab): price return over 3, 6, 9, 12, 15 and 18 months, shortest first.
-# Today: latest Angel close vs the close 3M … 18M back. 3M back (the only back date it allows): the close then vs
-# 6M … 18M back, i.e. windows of 3, 6, 9, 12 and 15 months as seen from that date (prices.csv has nothing older).
-RV_KEYS = ["3M", "6M", "9M", "1Y", "1_25Y", "1_5Y"]
-
-
-def rev_windows(px, base, keys):
-    """[return % over each window] from `base` price back to PRICE_<key>_ADJ (split / bonus adjusted); None if no base."""
-    if not base or not ok(base):
-        return None
-    out = []
-    for k in keys:
-        p = px.get("PRICE_%s_ADJ" % k)
-        out.append(round((float(base) / float(p) - 1) * 100, 2) if ok(p) and float(p) > 0 else None)
-    return out if sum(v is not None for v in out) >= 2 else None
 
 
 def momentum(px, key):
@@ -964,8 +945,6 @@ def build_back(df, F, asof, key, prices, bench, ltps):
             rec["mcap"] = num(r["MARKET_CAP_CR"], 0)      # no price then: today's size, only for the Mcap filters
             rec["mcapToday"] = True
         rec["mom"] = momentum(px, key) if p1 else None   # momentum as of the back date (prices up to then only)
-        if key == "3M":                                   # Reversal backtest: windows 3 … 15 months as seen from then
-            rec["rv"] = rev_windows(px, p1, RV_KEYS[1:]) if p1 else None
         rec.update(quality_extras(r, F, back))             # profit gate + growth checks, as known on that date
         a, b = inputs_fund(r, F, back, fin, with_trend=False)["fund"], inputs_fund(r, F, asof, fin, with_trend=False)["fund"]
         patG, patL = growth_pct(a["pat"], b["pat"])
@@ -1764,7 +1743,6 @@ __AUTH_BODY__<script>
   <a href="#/" data-t="home">Industries</a>
   <a href="#/value" data-t="value">Value screen</a>
   <a href="#/momentum" data-t="momentum">Momentum</a>
-  <a href="#/reversal" data-t="reversal">Reversal</a>
   <a href="#/all" data-t="all">All Stocks</a>
   <a href="#/method" data-t="method">Methodology</a>
 </nav>
@@ -2255,7 +2233,6 @@ const assetCols = () => [C.pta].concat(has('pfa') ? [C.pfa] : [], has('invp') ? 
 const view = $('#view');
 /* phone: two menu buttons replace the tab row and the row of screens */
 const TABS = [['#/value', 'Value screen', 'Cheap, good-quality stocks by screen'], ['#/momentum', 'Momentum', 'Strongest price trends'],
-              ['#/reversal', 'Momentum reversal', 'Returns improving: 18M < 15M < … < 3M'],
               ['#/', 'Industries', 'Industry PE, PB, ROE'], ['#/all', 'All Stocks', 'Every stock with every column'], ['#/method', 'Methodology', 'How every number is worked out']];
 function syncMnav() {
   const h = location.hash || '#/', t = TABS.find(x => x[0] === h) || (h.startsWith('#/industry/') ? TABS[2] : null);
@@ -3002,42 +2979,6 @@ function allView() {
     [C.sym, C.ind, C.score, C.name, C.mom, C.trend, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...safeCols(), ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.dy, C.proChg, C.mcap, C.from52, C.flags],
     rows, {sortKey:'mcap', sortDir:-1, search:true, csv:() => csvName('All_stocks', af, AF_DEF, VF_CSV_KEYS())}));
   if (!priced.length) view.insertAdjacentHTML('beforeend', '<p class="hint">No prices for this date yet (prices.csv has no price for it), so nothing to list.</p>');
-}
-
-/* ---------- MOMENTUM REVERSAL: price returns getting better the shorter the window —
-   18M < 15M < 12M < 9M < 6M < 3M. Each "<" that holds is a point (5 today); 3 or more = listed. Strongest first:
-   most points, then the biggest gap between the 3M and the 18M return. Historical: 3M back only (prices.csv has
-   nothing older than 18M), where the windows are 3 … 15 months as seen from then (4 points, 3 or more = listed). */
-const RV_FS = {min: 3};                                   // this visit only
-function rvOf(s) {
-  const w = s.rv; if (!w || w.length < 3) return null;
-  const n = w.length - 1; let pass = 0;
-  for (let i = 0; i < n; i++) { if (!ok(w[i]) || !ok(w[i + 1])) return null; if (w[i] > w[i + 1]) pass++; }
-  return {pass, n, str: w[0] - w[n]};
-}
-function reversalView() {
-  setNav('reversal'); view.innerHTML = '';
-  const key = BACK ? (D.then.key || GF.backP) : null;
-  if (BACK && key !== '3M') {
-    view.insertAdjacentHTML('beforeend', `<div class="pf-note">Momentum reversal can be backtested from <b>3M</b> back only (18M of prices before it: windows become 3 … 15 months). <button type="button" class="btn" id="rv3m">Show 3M back</button></div>`);
-    $('#rv3m').addEventListener('click', () => setHistorical(true, '3M'));
-    return;
-  }
-  const labs = BACK ? ['3M', '6M', '9M', '12M', '15M'] : ['3M', '6M', '9M', '12M', '15M', '18M'];
-  const nPts = labs.length - 1, minPts = Math.min(RV_FS.min, nPts);
-  const rows = V().filter(s => { s._rv = s.cmp != null ? rvOf(s) : null; return s._rv && s._rv.n === nPts && s._rv.pass >= minPts; });
-  const chips = [3, 4, 5].filter(k => k <= nPts).map(k => `<button type="button" class="preset${k === minPts ? ' on' : ''}" data-rvmin="${k}">${k === nPts ? 'All ' + nPts : k + '+ of ' + nPts}</button>`).join('');
-  view.insertAdjacentHTML('beforeend', `<div class="fbox"><div class="fbar"><div class="pchips">${chips}</div></div></div>`);
-  view.querySelectorAll('[data-rvmin]').forEach(b => b.addEventListener('click', () => { RV_FS.min = +b.dataset.rvmin; reversalView(); }));
-  stats([['Showing', rows.length], ['Rule', labs.slice().reverse().join(' < ')], ['Median 3M', fmt(median(rows.map(s => s.rv[0]))) + '%'],
-         ['Median ' + labs[nPts], fmt(median(rows.map(s => s.rv[nPts]))) + '%']], rows);
-  const ret = (i) => ({k: 'rv' + i, label: labs[i] + ' return', tip: 'Price change over the last ' + labs[i] + (BACK ? ', as seen from the back date' : '') + ' (split / bonus adjusted)',
-    v: s => s.rv[i], f: s => pctPill(s.rv[i], v => v >= 0)});
-  const rvCol = {k: 'rvs', label: 'Reversal', tip: 'Points: each step shorter window → higher return (' + labs.slice().reverse().join(' < ') + '); ties broken by 3M minus ' + labs[nPts] + ' return',
-    v: s => s._rv.pass * 1e4 + s._rv.str, f: s => `<b>${s._rv.pass}/${s._rv.n}</b> <span class="na">${s._rv.str > 0 ? '+' : ''}${fmt(s._rv.str, 1)} pp</span>`};
-  view.appendChild(makeTable('rev', [C.sym, C.ind, rvCol, ...labs.map((_, i) => ret(i)), C.name, C.mom, C.score, C.cmp, C.pe, C.mcap],
-    rows, {sortKey: 'rvs', sortDir: -1, search: true, csv: () => 'Reversal_' + listCode() + '_' + minPts + 'of' + nPts}));
-  if (!V().some(s => s.rv)) view.insertAdjacentHTML('beforeend', '<p class="hint">No 3M … 18M returns yet: they come from prices.csv (the weekly Angel price update).</p>');
 }
 
 /* ---------- MOMENTUM: stocks by price momentum, strongest first. Default: momentum 70+ and nothing else;
@@ -4066,12 +4007,6 @@ function methodView() {
   ${Object.keys(W_DEF).map(k => `<tr><td>${W_LABEL[k]}</td><td>${METRICS[k].hi ? 'higher' : 'lower'}</td><td>${W[k]}</td></tr>`).join('')}</table></div>
   <p><b>Momentum tip:</b> it is not part of the Value score. Cheap stocks are often falling; Min momentum 40 (the Value screen default) skips the ones still in free fall.</p>
 
-  <h2>Momentum reversal (Reversal tab)</h2>
-  <p>Stocks whose price returns get better the shorter the window: 18-month return &lt; 15M &lt; 12M &lt; 9M &lt; 6M &lt; 3M.
-  Each of these 5 steps that holds is a point; 3 or more points = listed (the buttons switch to 4+ or all 5). Strongest first: most points,
-  then the biggest gap between the 3M and the 18M return. Prices are Angel One closes, split and bonus adjusted.
-  <b>Backtest:</b> Historical <b>3M</b> only, where the windows are 3 … 15 months as seen from that date (4 steps); "Price return since" shows what happened next.</p>
-
   <h2>Momentum (Momentum tab, Momentum column)</h2>
   <p>How strongly a stock's price has been rising, as a score from 0 to 100. Worked out every week from Angel One daily closes (split and bonus adjusted):</p>
   ${tbl(
@@ -4176,7 +4111,6 @@ function route() {
   else if (h === '#/method') methodView();
   else if (h === '#/all') allView();
   else if (h === '#/momentum') momentumView();
-  else if (h === '#/reversal') reversalView();
   else if (h === '#/portfolio') portfolioView();
   else homeView();
   meta();
