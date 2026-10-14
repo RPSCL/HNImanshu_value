@@ -26,6 +26,8 @@ RSS_URL      = "https://news.google.com/rss/search?q={q}%20when%3A{d}d&hl=en-IN&
 UA           = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
 OTHERS_CSV   = "Nifty_Others_Fundamentals.csv"   # every other NSE stock (others.py): news for these too
+BATCH        = 1750   # per run: every stock in anyone's portfolio, then this many more (random, least recently fetched first)
+STATE_FILE   = "news_state.json"   # {SYMBOL: "YYYY-MM-DD HH:MM" last fetched}: 2 runs cover the whole list
 INDEX_URLS = {
     "niftymicrocap250": "https://nsearchives.nseindia.com/content/indices/ind_niftymicrocap250_list.csv",
     "nifty500":         "https://nsearchives.nseindia.com/content/indices/ind_nifty500list.csv",
@@ -151,6 +153,47 @@ def fetch_index_csvs():
     stocks = list(zip(all_stocks["symbol"], all_stocks["name"]))
     random.shuffle(stocks)
     return stocks
+
+
+def portfolio_symbols():
+    """Every symbol anyone holds (Firestore hni_portfolio, buys − sells > 0). Needs the service account
+    (GOOGLE_APPLICATION_CREDENTIALS); without it, or on any error, an empty set and the run carries on."""
+    if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+        print("  (no service account: portfolio stocks not put first)", flush=True)
+        return set()
+    try:
+        import firebase_admin
+        from firebase_admin import firestore
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app()
+        held = set()
+        for snap in firestore.client().collection("hni_portfolio").stream():
+            qty = {}
+            for t in (snap.to_dict() or {}).get("txns", []) or []:
+                if t.get("t") in ("buy", "sell") and t.get("sym"):
+                    k = str(t["sym"]).upper().strip()
+                    qty[k] = qty.get(k, 0) + (t.get("qty") or 0) * (1 if t["t"] == "buy" else -1)
+            held |= {k for k, q in qty.items() if q > 1e-9}
+        print(f"  {len(held)} stocks held in portfolios: fetched first, every run", flush=True)
+        return held
+    except Exception as e:
+        print(f"  (portfolio stocks not read: {e})", flush=True)
+        return set()
+
+
+def load_state():
+    try:
+        import json
+        with open(STATE_FILE, encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
+def save_state(st):
+    import json
+    with open(STATE_FILE, "w", encoding="utf-8") as fh:
+        json.dump(st, fh, separators=(",", ":"), sort_keys=True)
 
 
 # ══════════════════════════════════════════════
@@ -304,9 +347,17 @@ def main():
         seen_links  = set()
         seen_keys   = set()
 
-    stocks = fetch_index_csvs()
+    all_stocks = fetch_index_csvs()
+    names = dict(all_stocks)
+    held = portfolio_symbols()                                     # 1. everything people hold, every run
+    state = load_state()
+    rest = [(s, n) for s, n in all_stocks if s not in held]
+    random.shuffle(rest)                                           # random among equals …
+    rest.sort(key=lambda x: state.get(x[0], ""))                  # … never-fetched / longest-ago first
+    stocks = [(s, names.get(s, s)) for s in sorted(held)] + rest[:BATCH]   # 2. + BATCH more
     total  = len(stocks)
-    print(f"\n📋 {total} stocks | workers={MAX_WORKERS} | ≤{RATE} calls/s\n", flush=True)
+    print(f"\n📋 {total} stocks this run: {len(held)} held in portfolios + {min(BATCH, len(rest))} of {len(rest)} others"
+          f" (least recently fetched first) | workers={MAX_WORKERS} | ≤{RATE} calls/s\n", flush=True)
 
     accumulated = []
     done = found = 0
@@ -366,6 +417,11 @@ def main():
 
     existing_df = trim_and_dedup(existing_df, cutoff)
     existing_df.to_csv(outfile, index=False, encoding="utf-8-sig")
+    stamp = datetime.now(IST).strftime("%Y-%m-%d %H:%M")         # these were asked this run, news or not
+    for s, _ in stocks:
+        state[s] = stamp
+    keep = {s for s, _ in all_stocks}
+    save_state({k: v for k, v in state.items() if k in keep})
 
     elapsed = time.time() - t0
     print(f"\n✅ Done | {found} new rows | total {len(existing_df)} | time {elapsed/60:.1f} min", flush=True)
