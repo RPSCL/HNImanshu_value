@@ -1,0 +1,75 @@
+# others.yml — fundamentals for every NSE stock outside the 3 lists → Nifty_Others_Fundamentals.csv
+#
+# Weekly (Sunday 03:00 IST, after Saturday's full run of the 3 lists), or by hand from the Actions tab.
+#   others.py: refreshes EQUITY_L.csv (NSE's list of every company), takes the companies in none of the 3 lists,
+#   scrapes them from screener.in with n500.py's engine (same circuit breaker: if screener stops answering, it stops
+#   and keeps last week's rows) and upserts Nifty_Others_Fundamentals.csv.
+# Then it commits the two CSVs and asks cron.yml for a build + deploy (mode -1), so the site's "Others" list
+# updates without waiting for the next scheduled build.
+name: Others fundamentals
+
+permissions:
+  contents: write
+  actions: write            # to start cron.yml's build afterwards
+
+concurrency:
+  group: others-scrape
+  cancel-in-progress: false
+
+on:
+  schedule:
+    - cron: "30 21 * * 6"   # Sunday 03:00 IST (= Saturday 21:30 UTC)
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Test: scrape only this many stocks (blank = all)"
+        required: false
+        default: ""
+
+jobs:
+  others:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install requests pandas numpy beautifulsoup4 lxml tqdm
+
+      - name: "🔎 Scrape the others"
+        run: |
+          LIMIT="${{ github.event.inputs.limit }}"
+          if [ -n "$LIMIT" ]; then python -u others.py --limit "$LIMIT"; else python -u others.py; fi
+
+      - name: Commit & push
+        if: always()
+        run: |
+          git config --global user.name  "github-actions"
+          git config --global user.email "actions@github.com"
+          [ -f EQUITY_L.csv ] && git add EQUITY_L.csv
+          [ -f Nifty_Others_Fundamentals.csv ] && git add Nifty_Others_Fundamentals.csv
+          [ -f old_csv.zip ] && git add old_csv.zip
+          git diff --cached --quiet && { echo "Nothing new to commit"; exit 0; }
+          git commit -m "Others fundamentals update [skip ci]"
+          for i in 1 2 3; do
+            if git pull --rebase -X theirs origin main && git push origin main; then echo "Pushed"; exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((i * 5))
+          done
+          echo "::warning::Could not push (main kept changing)."
+
+      - name: "🏗 Ask cron.yml for a build + deploy"
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run cron.yml --ref main -f force_full=-1

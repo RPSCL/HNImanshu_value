@@ -105,6 +105,14 @@ jobs:
       #    fetch_prices.py → prices.csv (Angel One: latest close, close 1 year back, 52W highs, splits)
       #    build.py → public/index.html + public/fundamentals.html
       # ───────────────────────────────────────────
+      # NSE's list of every listed company (EQUITY_L.csv, repo root): the Portfolio's symbol hints for stocks
+      # outside the 3 lists, and the "Others" list scraped by others.yml. Best effort: on failure the old file stays.
+      - name: "📃 NSE equity list (EQUITY_L.csv)"
+        if: steps.mode.outputs.mode != 'prices'
+        continue-on-error: true
+        timeout-minutes: 3
+        run: python others.py --list-only
+
       - name: "🚀 Full run (1) — scrape"
         if: steps.mode.outputs.mode == 'full'
         run: |
@@ -123,7 +131,7 @@ jobs:
         id: fetchpx
         if: (steps.mode.outputs.mode == 'full' || steps.mode.outputs.mode == 'light' || steps.mode.outputs.mode == 'prices') && hashFiles('fetch_prices.py') != ''
         continue-on-error: true
-        timeout-minutes: 60
+        timeout-minutes: 100        # ≈ 1.2 s per symbol: 3 lists + Others ≈ 2,200 symbols ≈ 45 min
         env:
           ANGEL_API_KEY:     ${{ secrets.ANGEL_API_KEY }}
           ANGEL_CLIENT_CODE: ${{ secrets.ANGEL_CLIENT_CODE }}
@@ -199,6 +207,8 @@ jobs:
             niftysmallcap500_valuation.csv \
             multi_stock_news.csv \
             public/ || true
+          [ -f EQUITY_L.csv ] && git add EQUITY_L.csv                         # NSE's list of every listed company
+          [ -f Nifty_Others_Fundamentals.csv ] && git add Nifty_Others_Fundamentals.csv   # written by others.yml
           [ -f prices.csv ] && git add prices.csv          # weekly Angel prices (1Y back + same-method view)
           [ -f old_csv.zip ] && git add old_csv.zip
           # dated CSVs now live inside old_csv.zip → remove any loose ones from git
@@ -234,6 +244,16 @@ jobs:
         run: |
           echo '${{ secrets.GOOGLE_CREDENTIALS }}' > serviceAccount.json
           npm install -g firebase-tools
+
+      # "Delete user" from the website's Users list: removes the login accounts noted in hni_deletes
+      - name: "🗑 Finish account deletions"
+        if: steps.mode.outputs.mode != 'prices'
+        continue-on-error: true
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: serviceAccount.json
+        run: |
+          pip install -q firebase-admin
+          python account_deletes.py
 
       - name: Deploy to Firebase Hosting
         if: steps.mode.outputs.mode != 'prices'

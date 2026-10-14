@@ -9,9 +9,8 @@ name: Portfolio LTP
 
 on:
   schedule:
-    - cron: "30-50/10 3 * * 1-5"   # 09:00, 09:10, 09:20 IST (03:30–03:50 UTC)
-    - cron: "*/10 4-9 * * 1-5"     # 09:30 … 15:20 IST, every 10 min (04:00–09:50 UTC)
-    - cron: "0-10/10 10 * * 1-5"   # 15:30, 15:40 IST (10:00, 10:10 UTC): 15:40 is the last run, after the close
+    - cron: "*/30 3-9 * * 1-5"     # 03:00–09:30 UTC = 08:30–15:00 IST, every 30 min
+    - cron: "20 10 * * 1-5"        # 15:50 IST: closing prices
   workflow_dispatch:               # Actions tab "Run workflow", and the website button (via the Worker)
 
 concurrency:
@@ -23,12 +22,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - name: Checkout (only the two scripts)
+      - name: Checkout (only the scripts it needs)
         uses: actions/checkout@v5
         with:
           sparse-checkout: |
             fetch_prices.py
             portfolio_ltp.py
+            account_deletes.py
             creds.py
             .github/workflows/ltp.yml
           sparse-checkout-cone-mode: false
