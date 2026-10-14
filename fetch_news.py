@@ -17,7 +17,7 @@ from news_dedup import dedup_frame        # same story, different words ("₹59 
 IST          = timezone(timedelta(hours=5, minutes=30))
 NEWS_DAYS    = 7
 MAX_WORKERS  = 8    # parallel RSS calls; with RATE below this is plenty
-RATE         = 6    # max Google News calls per second (all threads together); ~1,250 stocks ≈ 3–4 min
+RATE         = 6    # max Google News calls per second (all threads together); ~2,250 stocks (3 lists + Others) ≈ 6–7 min
 MAX_RETRIES  = 3    # only on errors / "slow down" replies, never on a stock that simply has no news
 TASK_TIMEOUT = 20
 SAVE_EVERY   = 50
@@ -25,6 +25,7 @@ MAX_RESULTS  = 15
 RSS_URL      = "https://news.google.com/rss/search?q={q}%20when%3A{d}d&hl=en-IN&gl=IN&ceid=IN:en"
 UA           = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
+OTHERS_CSV   = "Nifty_Others_Fundamentals.csv"   # every other NSE stock (others.py): news for these too
 INDEX_URLS = {
     "niftymicrocap250": "https://nsearchives.nseindia.com/content/indices/ind_niftymicrocap250_list.csv",
     "nifty500":         "https://nsearchives.nseindia.com/content/indices/ind_nifty500list.csv",
@@ -112,6 +113,30 @@ def fetch_index_csvs():
             frames.append(df.dropna())
         except Exception:
             continue
+
+    # + every stock in the repo's own lists: the 3 valuation CSVs (a fallback when NSE blocks the download)
+    #   and the Others list (Nifty_Others_Fundamentals.csv, others.py), so news covers every stock on the site
+    for f, name_cols in (("nifty500_valuation.csv", ("COMPANY_NAME_x", "COMPANY_NAME")),
+                         ("niftysmallcap500_valuation.csv", ("COMPANY_NAME",)),
+                         ("niftymicrocap250_valuation.csv", ("COMPANY_NAME",)),
+                         (OTHERS_CSV, ("COMPANY_NAME",))):
+        if not os.path.exists(f):
+            continue
+        try:
+            d = pd.read_csv(f, usecols=lambda c: c in ("SYMBOL", "CMP", "MARKET_CAP_CR") + name_cols, low_memory=False)
+            nc = next((c for c in name_cols if c in d.columns), None)
+            if f == OTHERS_CSV:                            # only the Others the site shows (a price or market cap)
+                has = pd.Series(False, index=d.index)
+                for c in ("CMP", "MARKET_CAP_CR"):
+                    if c in d.columns:
+                        has |= pd.to_numeric(d[c], errors="coerce").notna()
+                d = d[has]
+            d = pd.DataFrame({"symbol": d["SYMBOL"].astype(str).str.strip(),
+                              "name": d[nc].astype(str) if nc else d["SYMBOL"].astype(str)})
+            frames.append(d[d["symbol"].ne("") & d["symbol"].ne("nan")])
+            print(f"  + {len(d)} stocks from {f}", flush=True)
+        except Exception as e:
+            print(f"  (could not read {f}: {e})", flush=True)
 
     if not frames:
         print("❌ Failed to fetch index CSVs", flush=True)
