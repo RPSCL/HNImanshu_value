@@ -91,7 +91,13 @@ def load_symbols():
 		p = BASE / f
 		if not p.exists():
 			continue
-		d = pd.read_csv(p, usecols=lambda c: c in ("SYMBOL", "DATE_DOWNLOADED"), low_memory=False)
+		d = pd.read_csv(p, usecols=lambda c: c in ("SYMBOL", "DATE_DOWNLOADED", "CMP", "MARKET_CAP_CR"), low_memory=False)
+		if "others" in f.lower():                          # Others: only those the site shows (screener had a price / mcap)
+			has = pd.Series(False, index=d.index)
+			for c in ("CMP", "MARKET_CAP_CR"):
+				if c in d.columns:
+					has |= pd.to_numeric(d[c], errors="coerce").notna()
+			d = d[has]
 		syms += [str(s).strip().upper() for s in d["SYMBOL"].dropna()]
 		if "DATE_DOWNLOADED" in d and "others" not in f.lower():
 			dt = pd.to_datetime(d["DATE_DOWNLOADED"], errors="coerce").max()
