@@ -353,7 +353,12 @@ def main():
 	ap.add_argument("--map-only", action="store_true")
 	ap.add_argument("--force", action="store_true", help="fetch even if prices.csv is younger than MIN_AGE_DAYS")
 	ap.add_argument("--is-due", action="store_true", help="only report: exit 0 if a fetch is due, 1 if not")
+	ap.add_argument("--part", type=int, choices=(1, 2, 3), default=None,
+	                help="fetch only this third of the symbols (cron.yml: Saturday 02:00 / 04:00 / 06:00 IST); "
+	                     "the other thirds' rows in prices.csv stay as they are")
 	a = ap.parse_args()
+	if a.part:
+		a.force = True                                               # a scheduled part always fetches
 	if a.is_due:
 		return 0 if is_due(a.force) else 1
 	if not a.map_only and not is_due(a.force):
@@ -365,8 +370,16 @@ def main():
 	log(f"{len(syms)} symbols  |  data date {asof}  |  BACK_DATE {back}  |  candles from {start}")
 
 	tmap = build_token_map(scrip_master())
-	todo = syms[:a.limit] if a.limit else syms
-	todo = todo + [BENCH_SYM]
+	if a.part:                                                       # thirds in list order (3 lists first, then Others)
+		n = len(syms)
+		b = [0, -(-n // 3), -(-2 * n // 3), n]
+		part_syms = syms[b[a.part - 1]:b[a.part]]
+		log(f"Part {a.part} of 3: {len(part_syms)} symbols ({part_syms[0] if part_syms else '-'} … {part_syms[-1] if part_syms else '-'})")
+	else:
+		part_syms = syms
+	todo = part_syms[:a.limit] if a.limit else part_syms
+	if a.part in (None, 1):
+		todo = todo + [BENCH_SYM]                                    # the NIFTY 500 benchmark: once, with part 1
 	missing = [s for s in todo if s not in tmap]
 	log(f"Mapped to Angel tokens: {len(todo) - len(missing)} / {len(todo)}"
 	    + (f"  (not found: {', '.join(missing[:15])}{' …' if len(missing) > 15 else ''})" if missing else ""))
@@ -449,6 +462,11 @@ def main():
 			if okk is False and prev is not None and str(prev.get("STATUS", "")).startswith("OK"):
 				row = {**prev, "STATUS": f"STALE (fetch failed {now_s[:10]})"}      # keep last good prices
 		rows.append(row)
+	if a.part:                                                       # one third fetched: keep the other thirds' rows
+		fresh = {r["SYMBOL"]: r for r in rows}
+		keep = [s for s in syms + [BENCH_SYM] if s in fresh or s in old]
+		rows = [fresh.get(s) or old[s] for s in keep]
+		log(f"Part {a.part}: {len(fresh)} rows fetched now, {len(rows) - len(fresh)} kept from earlier parts / runs")
 	el = time.monotonic() - t0
 	log(f"Fetch time {el/60:.1f} min ({el / max(n_all, 1):.2f} s per symbol)  |  rate-limit replies: {api.n_rate}"
 	    f"  |  final pace {api.limiter.rate:.2f} requests/s")

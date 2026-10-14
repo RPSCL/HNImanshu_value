@@ -165,10 +165,10 @@ In words:
 
 | Mode | When | Steps |
 |---|---|---|
-| **full** | Saturday 00:00 IST, or manual run with `1` | archive CSVs → scrape all three lists → Angel prices (if due) → build → commit → deploy → Telegram |
-| **light** | All other scheduled times, or manual `0` | Angel prices (only if `prices.csv` is 5+ days old) → **fetch news** → build → commit → deploy → Telegram |
+| **full** | Saturday 00:00 IST, or manual run with `1` | archive CSVs → scrape all three lists → build → commit → deploy → Telegram (no Angel prices) |
+| **light** | All other scheduled times, or manual `0` | **fetch news** → build → commit → deploy → Telegram |
 | **build** | Manual `-1` | build → commit → deploy (good for testing a code change) |
-| **prices** | Manual `2` | Angel prices only, commit `prices.csv`; no build or deploy |
+| **prices** | Saturday 02:00 / 04:00 / 06:00 IST (part 1 / 2 / 3), or manual `2` + `price_part` | Angel prices for one third of the stocks, commit `prices.csv`; no build or deploy |
 
 ### What `build.py` produces
 
@@ -355,19 +355,18 @@ All times are IST. GitHub's own schedules often start 10–30 minutes late.
 
 | What | When | Runs on |
 |---|---|---|
-| Full scrape + prices + build + deploy | Saturday 00:00 | GitHub (`cron.yml`) |
+| Full scrape of the 3 lists + build + deploy (no prices) | Saturday 00:00 | GitHub (`cron.yml`) |
 | News + build + deploy | 00:00 every other night; 09:15, 10:15, 13:15, 13:30 Mon–Fri | GitHub (`cron.yml`) |
-| Weekly Angel prices | The first run once `prices.csv` is 5+ days old | GitHub (`cron.yml`) |
+| Angel prices (`prices.csv`), in thirds | Saturday 02:00 / 04:00 / 06:00 (prices only; the site updates at the Sunday 00:00 build) | GitHub (`cron.yml`) |
 | Portfolio live prices | Every 10 min, 09:00–15:40 Mon–Fri | Cloudflare Worker → GitHub (`ltp.yml`) |
 | Portfolio live prices (on demand) | ⟳ button, every signed-in user, at most once per 3 min | Website → Worker → GitHub |
 | Master lists (Angel scrip master, NSE lists) | Downloaded on the first `ltp.yml` run of each IST day, then cached | GitHub cache |
 | NSE list of every company (`EQUITY_L.csv`) | Every `cron.yml` run (`others.py --list-only`); kept if NSE fails | GitHub (`cron.yml`) |
-| "Others" fundamentals, first half (symbols A…) | Sunday 00:00, then asks `cron.yml` for a build | GitHub (`others.yml`) |
-| "Others" fundamentals, second half | Monday 00:00, then asks `cron.yml` for a build | GitHub (`others.yml`) |
+| "Others" fundamentals, part 1 / 2 / 3 (thirds by symbol) | Saturday 12:00 / 15:00 / 18:00, each then asks `cron.yml` for a build | GitHub (`others.yml`) |
 | Finish "Delete user" (login accounts) | Every `ltp.yml` and `cron.yml` run (`account_deletes.py`) | GitHub |
 
-**Others list.** Scraped in two halves on two nights, because screener.in slows to minutes per stock after
-~1,000 stocks from one machine; each half updates only its own rows. `others.py` takes every company in `EQUITY_L.csv` that is in none of the 3 lists and scrapes it with
+**Others list.** Scraped in three parts on Saturday (12:00, 15:00, 18:00), each on a fresh machine, because
+screener.in slows to minutes per stock after ~1,000 stocks from one machine; each part updates only its own rows. `others.py` takes every company in `EQUITY_L.csv` that is in none of the 3 lists and scrapes it with
 `n500.py`'s engine (imported, so fixes there apply here too). Small companies often have little or no screener data:
 rows with neither a price nor a market cap are left out of the site. "All lists" / "All Stocks" stay the 3 lists;
 Others is its own entry, and its stocks never change the scores or industry numbers of the 3 lists.
