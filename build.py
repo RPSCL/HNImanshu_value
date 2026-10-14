@@ -490,7 +490,7 @@ def _extract_source(url: str) -> str:
 
 NEWS_PREFIX = "https://news.google.com/rss/articles/"
 NEWS_SUFFIX = "?oc=5&hl=en-US&gl=US&ceid=US:en"
-NEWS_DAYS_KEEP, NEWS_PER_STOCK = 7, 10
+NEWS_DAYS_KEEP, NEWS_PER_STOCK = 7, 8          # 8 headlines per stock (was 10): a smaller news.json
 
 
 def write_news_json(path: Path, out: Path) -> int:
@@ -841,6 +841,11 @@ def build(deploy=False):
     news_js  = build_news_js({})
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     n_news = write_news_json(NEWS_CSV, OUTPUT.parent / "news.json")
+    for old in ("screener_news.json",):                 # leftovers nothing loads any more: not deployed again
+        f = OUTPUT.parent / old
+        if f.exists():
+            f.unlink()
+            print(f"  removed old public/{old}")
 
     # ── Build DATASETS JS ──
     # Only NIFTY 500 (the list the page opens on) is inside index.html; Smallcap / Microcap are their own files,

@@ -2272,11 +2272,37 @@ function holdStrip(st) {
    fundamentals_back_1Y.json, fetched the first time Industries or Historical needs it */
 let THEN1 = D.then && D.then.stocks ? D.then : null;
 let THEN_BY = new Map(THEN1 ? THEN1.stocks.map(s => [s.sym, s]) : []);
+/* back files leave out what is the same as today (name, link, industry, lists, PSU): copied back in here */
+function fillBack(j) {
+  if (!j || !j.stocks || j._filled) return j;
+  for (const x of j.stocks) {
+    const t = TODAY.get(x.sym); if (!t) continue;
+    for (const k of ['name', 'url', 'ind', 'uni', 'psu']) if (x[k] === undefined && t[k] !== undefined) x[k] = t[k];
+  }
+  j._filled = true; return j;
+}
+/* fundamentals_hist.json: every back date in one small file with just the fields the sparkline and the
+   "1Y ago" columns read; fetched once. {key: {key, date, hasPrice, stocks}} or null (old build / offline file) */
+let HIST_P = null;
+const loadHist = () => HIST_P = HIST_P || fetch('fundamentals_hist.json').then(r => r.ok ? r.json() : null).catch(() => null).then(j => {
+  if (!j || !j.cols || !j.dates) return null;
+  const out = {};
+  for (const k in j.dates) {
+    const d = j.dates[k];
+    out[k] = {key: k, date: d.date, hasPrice: d.hasPrice, light: true, stocks: d.rows.map(r => {
+      const o = {}; j.cols.forEach((c, i) => { if (r[i] != null) o[c] = r[i]; });
+      if (o.tr) o.tr = {pass: o.tr[0], of: o.tr[1], d: {proD: o.tr[2]}};
+      return o; })};
+  }
+  return out;
+});
 function ensureThen1() {
   if (THEN1 || ensureThen1.p || !D.then) return;
   const key = D.then.key || '1Y';
-  ensureThen1.p = fetch('fundamentals_back_' + key + '.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : Promise.reject(r.status))
-    .then(j => { THEN1 = j; THEN_BY = new Map(j.stocks.map(s => [s.sym, s])); BACK_CACHE[key] = j;
+  const full = () => fetch('fundamentals_back_' + key + '.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(j => { fillBack(j); BACK_CACHE[key] = j; return j; });
+  ensureThen1.p = loadHist().then(H => H && H[key] ? H[key] : full())   // the small file has PE / PB / ROE: enough here
+    .then(j => { THEN1 = j; THEN_BY = new Map(j.stocks.map(s => [s.sym, s]));
                  const h = location.hash || '#/'; if (!BACK && (h === '#/' || h === '#/portfolio' || h.startsWith('#/industry/'))) route(); })
     .catch(() => { ensureThen1.p = null; });
 }
@@ -2384,7 +2410,7 @@ function placeDrop(f) {
 const closeDrops = () => { document.querySelectorAll('.fbox.dopen').forEach(f => f.classList.remove('dopen')); for (const k in DROP) DROP[k].open = false; document.body.classList.remove('fmodal'); };
 /* memory mode (Value screen): the screen opens on its default (Deep value) unless the user pressed Save;
    changes work at once but are kept only for this visit until Save; Default (after a warning) forgets them */
-const FMEM = {};
+const FMEM = {}, FSESS = {};                               // FSESS: other tabs' filters, kept for this visit only
 function fmem(key, def, base) {
   if (!FMEM[key]) {
     let saved = null; try { saved = JSON.parse(lsGet(key + '_saved') || 'null'); } catch (e) {}
@@ -2395,8 +2421,10 @@ function fmem(key, def, base) {
 function filterBox(o, rerender) {
   const {key, def} = o;
   const M = o.memory ? fmem(key, def, Object.assign({}, def, o.memory)) : null;
-  const put = obj => M ? (M.live = Object.assign({}, def, obj)) : lsSet(key, JSON.stringify(obj));
-  const st = M ? Object.assign({}, M.live) : lsJson(key, def);
+  // every filter box opens on its predefined values after a page refresh: changes last only for this visit
+  // (Value screen: unless you pressed Save there)
+  const put = obj => M ? (M.live = Object.assign({}, def, obj)) : (FSESS[key] = Object.assign({}, def, obj));
+  const st = M ? Object.assign({}, M.live) : Object.assign({}, def, FSESS[key] || {});
   const dirty = M && JSON.stringify(M.live) !== JSON.stringify(Object.assign({}, def, M.saved || M.base));
   const presets = (o.presets || []).filter(p => !NOPRICE || !p.price);  // price-based screens need a price for this date
   const unset = v => v === '' || v == null || v === 0;                 // blank box and 0 both mean "no filter"
@@ -2463,7 +2491,7 @@ function filterBox(o, rerender) {
       $('[data-no]', w).addEventListener('click', () => w._close());
       $('[data-yes]', w).addEventListener('click', () => { M.saved = null; lsSet(key + '_saved', ''); M.live = Object.assign({}, M.base); w._close(); rerender(); });
     });
-  } else $('[data-reset]', f).addEventListener('click', () => { lsSet(key, '{}'); rerender(); });
+  } else $('[data-reset]', f).addEventListener('click', () => { FSESS[key] = {}; rerender(); });
   view.appendChild(f);
   const on = $('.preset.on', f), pc = $('.pchips', f);               // phone: swipe row starts at the active screen
   if (on && pc.scrollWidth > pc.clientWidth) pc.scrollLeft = on.offsetLeft - pc.offsetLeft - 8;
@@ -3483,8 +3511,9 @@ function vdHistLoad() {                                   // one file at a time,
   return VH.p = VH.p || (async () => {
     const by = {};
     for (const k of VH_KEYS) {
-      let j = BACK_CACHE[k];
-      if (!j) { try { const r = await fetch('fundamentals_back_' + k + '.json'); j = r.ok ? await r.json() : null; } catch (e) { j = null; }
+      const H = await loadHist();                           // one small file for all dates; the full ones only if it's missing
+      let j = BACK_CACHE[k] || (H && H[k]);
+      if (!j) { try { const r = await fetch('fundamentals_back_' + k + '.json'); j = r.ok ? fillBack(await r.json()) : null; } catch (e) { j = null; }
                 if (j && j.stocks) BACK_CACHE[k] = j; }
       await nextFrame();
       if (j && j.stocks && j.hasPrice) by[k] = vdSnap(Object.assign({key: k}, j));
@@ -4116,7 +4145,7 @@ function setHistorical(on, key, temp) {
   bchip.classList.add('loading');
   fetch('fundamentals_back_' + key + '.json', {cache: 'no-cache'})
     .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-    .then(j => { BACK_CACHE[key] = j; bchip.classList.remove('loading'); if (GF.backP === key && GF.back) { D.then = j; route(); } })
+    .then(j => { BACK_CACHE[key] = fillBack(j); bchip.classList.remove('loading'); if (GF.backP === key && GF.back) { D.then = j; route(); } })
     .catch(() => {
       bchip.classList.remove('loading');
       alert(backLabel(key) + ' could not be loaded. It loads from the website; a saved offline copy has 1Y only.');
@@ -4294,8 +4323,50 @@ def slim(stocks):
     return out
 
 
-def slim_back(b):
-    return dict(b, stocks=slim(b.get("stocks") or []))
+SAME_AS_TODAY = ("name", "url", "ind", "uni", "psu")      # back files: left out when equal to today's (the page fills them back in)
+
+
+def _no_none(d):
+    return {k: v for k, v in d.items() if v is not None} if isinstance(d, dict) else d
+
+
+def slim_back(b, today=None):
+    """A back snapshot for the website. With today ({SYMBOL: today's record}): fields that are the same as today's are
+    left out (the page copies them back from today, fillBack), and empty values inside since / tr are dropped."""
+    stocks = slim(b.get("stocks") or [])
+    if today:
+        for r in stocks:
+            t = today.get(r.get("sym"))
+            if t:
+                for k in SAME_AS_TODAY:
+                    if k in r and r[k] == t.get(k):
+                        del r[k]
+            if isinstance(r.get("since"), dict):
+                r["since"] = _no_none(r["since"])
+            if isinstance(r.get("tr"), dict):
+                r["tr"] = dict(r["tr"], c=_no_none(r["tr"].get("c")), d=_no_none(r["tr"].get("d")))
+    return dict(b, stocks=stocks)
+
+
+# fundamentals_hist.json: every back date in ONE small file, only the fields the stock popup's sparkline (checklist
+# at each date) and the "PE / PB / ROE a year ago" columns read. ~0.75 MB to download instead of 2.3 MB for the six
+# full back files, which now load only when someone switches Historical on.
+HIST_COLS = ["sym", "ind", "fin", "uni", "cmp", "pe", "pb", "roe", "roce", "cagr", "cc", "cfop", "dy", "fcfy", "de",
+             "graham", "loss5", "lo5pct", "oi", "qoi", "icov", "shg", "tr", "mom", "pro3", "pro3y", "pyr", "qp", "sg5",
+             "mcap", "ttm"]
+
+
+def hist_payload(backs):
+    def cell(r, c):
+        v = r.get(c)
+        if c == "tr":                                   # the checklist reads only pass / of and the promoter change
+            return [v.get("pass"), v.get("of"), (v.get("d") or {}).get("proD")] if isinstance(v, dict) else None
+        return v
+    dates = {}
+    for k, b in backs.items():
+        dates[k] = {"date": b.get("date"), "hasPrice": b.get("hasPrice"),
+                    "rows": [[cell(r, c) for c in HIST_COLS] for r in slim(b.get("stocks") or [])]}
+    return {"cols": HIST_COLS, "dates": dates}
 
 
 def render_html(now, backs, asof, web=False, smnow=None, embed_all=False):
@@ -4349,10 +4420,14 @@ def build_site(paths, out_path, minify=None, prices_path=None):
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")
     extra = 0
-    for k, b in backs.items():                            # every back period (1Y too): its own JSON, loaded only when needed
-        txt = json.dumps(clean(slim_back(b)), allow_nan=False, separators=(",", ":"))
+    today = {r["sym"]: r for r in (smnow if (TODAY_SAME and smnow) else now)}   # the page's TODAY
+    for k, b in backs.items():                            # every back period (1Y too): its own JSON, loaded only for Historical
+        txt = json.dumps(clean(slim_back(b, today)), allow_nan=False, separators=(",", ":"))
         (out_path.parent / ("fundamentals_back_%s.json" % k)).write_text(txt, encoding="utf-8")
         extra += len(txt.encode("utf-8"))
+    txt = json.dumps(clean(hist_payload(backs)), allow_nan=False, separators=(",", ":"))   # sparkline + 1Y columns
+    (out_path.parent / "fundamentals_hist.json").write_text(txt, encoding="utf-8")
+    print("    fundamentals_hist.json %.2f MB (sparkline + 1Y columns)" % (len(txt.encode("utf-8")) / 1e6))
     print("    Fundamentals: %d stocks, data as of %s, back periods %s, page %.1f MB + %.1f MB on demand -> %s" % (
         len(now), asof.strftime("%d %b %Y"), "/".join(b["label"] for b in backs.values()),
         len(html.encode("utf-8")) / 1e6, extra / 1e6, out_path))
