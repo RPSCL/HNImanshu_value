@@ -940,8 +940,12 @@ def build_back(df, F, asof, key, prices, bench, ltps):
     if prices:
         print("Prices %-5s back = %s: price for %d of %d stocks (±%d days); %d skipped as too far"
               % (label, back.date(), n_px, len(then), PRICE_TOL_DAYS, n_far))
+    # "has prices" is judged on the 3 lists only: the Others list is priced later (or not at all for some),
+    # and counting it once switched off every back date's prices (and the stock popup's sparkline with it)
+    main = [t for t in then if any(u != OTHERS_LABEL for u in (t.get("uni") or []))] or then
+    n_main = sum(1 for t in main if t["cmp"] is not None)
     meta = {"key": key, "label": label, "date": back.strftime("%d %b %Y"), "days": days,
-            "hasPrice": n_px >= 0.5 * max(len(then), 1), "nPrice": n_px,
+            "hasPrice": n_main >= 0.5 * max(len(main), 1), "nPrice": n_px,
             "priceDate": None, "priceDateThen": None, "bench": None}
     pick = lambda col: (lambda v: max(set(v), key=v.count) if v else None)([p.get(col) for p in prices.values() if ok(p.get(col))])
     meta["priceDate"], meta["priceDateThen"] = pick("LTP_DATE"), pick("PRICE_%s_DATE" % key)
@@ -1466,6 +1470,8 @@ body.night{--pxline:#ece6da} body.day{--pxline:#36332e}           /* price line:
   .wip-back.sheet .wip-box > h3{position:sticky;top:0;z-index:3;background:var(--panel);margin:0 -16px 8px;padding:16px 46px 8px 16px}   /* title + × stay on top */
   .wip-back.sheet .wip-box.no-box > h3{padding-right:200px}
   .wip-back.sheet h3 > .wip-x{top:8px;right:6px}
+  .wip-back.sheet h3 > .vh{top:8px;right:46px;font:inherit;font-weight:400}       /* sparkline rides in the sticky title */
+  .wip-back.sheet .wip-box.no-box > h3{min-height:50px;box-sizing:border-box}
   .wip-back.sheet .no-list{max-height:none;overflow:visible}            /* one scroll: the sheet itself */
   @keyframes noUp{from{transform:translateY(40%)}}
 }
@@ -3466,7 +3472,7 @@ function vdSnap(j) {                                      // scores + industries
   const keep = {S, industries, NOPRICE, HAS_MOM, cS: computeScores.S, cK: computeScores.key};
   S = j.stocks; NOPRICE = !j.hasPrice; industries = {};
   S.forEach(x => (industries[x.ind] = industries[x.ind] || {name: x.ind, stocks: []}).stocks.push(x));
-  Object.values(industries).forEach(buildIndustry);
+  Object.values(industries).forEach(g => buildIndustry(g));
   computeScores.S = null; computeScores();
   const snap = {key: j.key, date: j.date, by: new Map(S.map(x => [x.sym, x])), inds: industries};
   ({S, industries, NOPRICE, HAS_MOM} = keep); computeScores.S = keep.cS; computeScores.key = keep.cK;
@@ -3529,8 +3535,9 @@ function vdSpark(host, sym, PS) {
   svg.addEventListener('mouseover', e => { const c = e.target.closest('.hit'); if (c) show(+c.dataset.i); });
   svg.addEventListener('click', e => { const c = e.target.closest('.hit'); if (c) { e.stopPropagation(); show(+c.dataset.i); } });
   // leaving the chart hides it after a moment, unless the mouse went into the tooltip itself
-  let hideT = null;
-  const later = () => { clearTimeout(hideT); hideT = setTimeout(() => { tip.hidden = true; tip._i = null; }, 220); };
+  let hideT = null, touch = false;
+  svg.addEventListener('pointerdown', e => { touch = e.pointerType === 'touch'; });   // phone: a tap shows it until you tap elsewhere
+  const later = () => { if (touch) return; clearTimeout(hideT); hideT = setTimeout(() => { tip.hidden = true; tip._i = null; }, 220); };
   svg.addEventListener('mouseleave', later);
   svg.addEventListener('mouseenter', () => clearTimeout(hideT));
   tip.addEventListener('mouseenter', () => clearTimeout(hideT));
@@ -3641,7 +3648,9 @@ function modal(title, html, opt = {}) {
   w.addEventListener('mousedown', e => { if (e.target === w) close(); });
   w._close = close;
   if (opt.sheet && isPhone()) {                                           // phone: × sits in the sticky title
-    const bx = $('.wip-box', w); bx.querySelector('h3').appendChild($('.wip-x', w));
+    const bx = $('.wip-box', w), h3 = bx.querySelector('h3');
+    h3.appendChild($('.wip-x', w));
+    const vh = bx.querySelector(':scope > .vh'); if (vh) h3.appendChild(vh);   // stock sparkline too: under the sticky title it was hidden
     sheetScroll(w, bx, close);
   }
   const first = w.querySelector(opt.noFocus ? '.wip-x' : 'input:not([type=hidden]), .wip-x'); if (first) setTimeout(() => first.focus({preventScroll: true}), 30);
