@@ -1,0 +1,46 @@
+name: ETF Pipeline & Deploy
+
+on:
+  schedule:
+    # Runs Monday-Friday at 10:15 UTC (15:45 IST) after market close
+    - cron: '15 10 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || pip install pandas numpy requests yfinance firebase-admin google-cloud-firestore beautifulsoup4 lxml jinja2
+
+      - name: Update ETF Pricing & Momentum
+        run: |
+          python fetch_prices.py --mode etf || python fetch_prices.py
+
+      - name: Run ETF Fundamental & Valuation Calculations
+        run: |
+          python fundamentals.py --mode 4 || python fundamentals.py 4
+
+      - name: Smart Build HTML (Mode 4 - ETF)
+        run: |
+          python build.py 4
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+          channelId: live
+          projectId: '${{ secrets.FIREBASE_PROJECT_ID }}'
