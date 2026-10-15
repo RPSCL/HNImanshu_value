@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Weekly composite momentum of the ETF pair ratios (Composite Dual Momentum).
+The builder reads public/etf_weekly_momentum.json (weekly closes, scores and signals) for its weekly backtest.
 
 Inputs (daily history, any of these column names is accepted):
     niftyit.csv   goldbees.csv   alpha.csv        date column: Date/date/timestamp/time
@@ -58,6 +59,10 @@ def composite(s: pd.Series) -> pd.DataFrame:
     return pd.DataFrame({"r6m": r6, "r12m": r12, "score": W6 * r6 + W12 * r12})
 
 
+def clean(s):
+    return [None if pd.isna(v) else round(float(v), 4) for v in s]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default=".", help="folder holding niftyit.csv, goldbees.csv, alpha.csv")
@@ -70,35 +75,37 @@ def main():
         print(f"[SKIP] weekly momentum not computed, missing in {d.resolve()}: {', '.join(missing)}")
         return
     print("Using:", ", ".join(str(f) for f in files.values()))
-    px = {n: load(f) for n, f in files.items()}
-    gold = px["goldbees"]
-    rows = []
-    for ch_name, ch_label in (("niftyit", "NIFTYIT"), ("alpha", "ALPHA")):
-        ch = px[ch_name]
-        both = pd.concat([ch, gold], axis=1, join="inner").dropna()          # same trading days only
-        both.columns = ["ch", "gold"]
-        wk = both.resample("W-FRI").last().dropna()
-        ratio = wk["ch"] / wk["gold"]
-        rc, ac = composite(ratio), composite(wk["ch"])
+    df = pd.concat([load(files["niftyit"]), load(files["alpha"]), load(files["goldbees"])], axis=1, join="inner").dropna()
+    df.columns = ["ITBEES", "ALPHA", "GOLDBEES"]                      # same trading days only
+    wk = df.assign(_d=df.index).groupby(pd.Grouper(freq="W-FRI")).last().dropna()
+    wk.index = pd.DatetimeIndex(wk.pop("_d"))                          # label each week by its last trading day
+    weeks = [x.strftime("%Y-%m-%d") for x in wk.index]
+    own = {s: composite(wk[s]) for s in ("ITBEES", "ALPHA", "GOLDBEES")}
+    rows, pairs = [], {}
+    for ch in ("ITBEES", "ALPHA"):
+        ratio = wk[ch] / wk["GOLDBEES"]
+        rc = composite(ratio)
+        sig = []
         for dt in wk.index:
-            if pd.isna(rc.at[dt, "score"]):
-                continue
-            rel = rc.at[dt, "score"] > 0
-            ab = pd.notna(ac.at[dt, "score"]) and ac.at[dt, "score"] > 0
-            rows.append({"week": dt.strftime("%Y-%m-%d"), "pair": f"{ch_label}/GOLDBEES",
-                         "ratio": round(ratio[dt], 6),
-                         "r6m_pct": round(rc.at[dt, "r6m"], 2), "r12m_pct": round(rc.at[dt, "r12m"], 2),
-                         "composite_score": round(rc.at[dt, "score"], 2),
-                         "challenger_score": None if pd.isna(ac.at[dt, "score"]) else round(ac.at[dt, "score"], 2),
-                         "signal": ch_label if (rel and ab) else "GOLDBEES"})
-    df = pd.DataFrame(rows).sort_values(["pair", "week"])
+            sc, oc = rc.at[dt, "score"], own[ch].at[dt, "score"]
+            s = None if pd.isna(sc) else (ch if (sc > 0 and pd.notna(oc) and oc > 0) else "GOLDBEES")
+            sig.append(s)
+            if s:
+                rows.append({"week": dt.strftime("%Y-%m-%d"), "pair": f"{ch}/GOLDBEES", "ratio": round(ratio[dt], 6),
+                             "r6m_pct": round(rc.at[dt, "r6m"], 2), "r12m_pct": round(rc.at[dt, "r12m"], 2),
+                             "composite_score": round(sc, 2),
+                             "challenger_score": None if pd.isna(oc) else round(oc, 2), "signal": s})
+        pairs[f"{ch}/GOLDBEES"] = {"ratio": clean(ratio), "r6": clean(rc["r6m"]), "r12": clean(rc["r12m"]),
+                                   "comp": clean(rc["score"]), "own": clean(own[ch]["score"]), "signal": sig}
     out.mkdir(parents=True, exist_ok=True)
-    df.to_csv(out / "etf_weekly_momentum.csv", index=False)
+    pd.DataFrame(rows).sort_values(["pair", "week"]).to_csv(out / "etf_weekly_momentum.csv", index=False)
+    js = {"asOf": weeks[-1], "weeks": weeks, "px": {s: clean(wk[s]) for s in wk.columns},
+          "score": {s: clean(own[s]["score"]) for s in own}, "pairs": pairs}
     (out / "public").mkdir(exist_ok=True)
-    js = {p: g.drop(columns="pair").to_dict("records") for p, g in df.groupby("pair")}
     (out / "public" / "etf_weekly_momentum.json").write_text(json.dumps(js, separators=(",", ":")), encoding="utf-8")
-    print(f"{len(df)} weekly rows -> etf_weekly_momentum.csv, public/etf_weekly_momentum.json")
-    print(df.groupby("pair").tail(1).to_string(index=False))
+    print(f"{len(weeks)} weeks ({weeks[0]} .. {weeks[-1]}), {len(rows)} signal rows -> etf_weekly_momentum.csv, public/etf_weekly_momentum.json")
+    for k, p in pairs.items():
+        print(f"  latest {k}: ratio composite {p['comp'][-1]}, own {p['own'][-1]} -> {p['signal'][-1]}")
 
 
 if __name__ == "__main__":
