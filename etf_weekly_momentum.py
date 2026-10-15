@@ -29,6 +29,13 @@ DATE_COLS = ["date", "timestamp", "time", "datetime"]
 PX_COLS = ["adj close", "adj_close", "adjclose", "close", "close price", "price", "ltp"]
 
 
+def find(d: Path, name: str):
+    """niftyit / goldbees / alpha .csv: any capitalisation, any subfolder, spaces/underscores ignored"""
+    key = lambda s: s.lower().replace(" ", "").replace("_", "").replace("-", "")
+    hits = [f for f in d.rglob("*") if f.suffix.lower() == ".csv" and key(f.stem) == name and ".git" not in f.parts]
+    return sorted(hits, key=lambda f: len(f.parts))[0] if hits else None
+
+
 def load(path: Path) -> pd.Series:
     df = pd.read_csv(path)
     low = {c.strip().lower(): c for c in df.columns}
@@ -57,7 +64,13 @@ def main():
     ap.add_argument("--out", default=".", help="folder for etf_weekly_momentum.csv and public/…json")
     a = ap.parse_args()
     d, out = Path(a.dir), Path(a.out)
-    px = {n: load(d / f"{n}.csv") for n in ("niftyit", "goldbees", "alpha")}
+    files = {n: find(d, n) for n in ("niftyit", "goldbees", "alpha")}
+    missing = [n + ".csv" for n, f in files.items() if f is None]
+    if missing:                       # do not break the ETF pipeline / deploy: just skip this step
+        print(f"[SKIP] weekly momentum not computed, missing in {d.resolve()}: {', '.join(missing)}")
+        return
+    print("Using:", ", ".join(str(f) for f in files.values()))
+    px = {n: load(f) for n, f in files.items()}
     gold = px["goldbees"]
     rows = []
     for ch_name, ch_label in (("niftyit", "NIFTYIT"), ("alpha", "ALPHA")):
