@@ -89,7 +89,9 @@ jobs:
       #       2  → prices (Angel prices for one third, picked in price_part; nothing else: no build, no deploy)
       #       4  → etf    (ONLY the Portfolio Builder's ETFs + NIFTY 500 benchmark: Angel prices + momentum (3M / 6M / 12-1M,
       #                    now and 1Y back) → prices.csv rows → public/builder_etf.json → commit → Firebase deploy.
-      #                    No scrape, no news, no screener / fundamentals rebuild; every other prices.csv row stays)
+      #                    No scrape, no news, no screener / fundamentals rebuild; every other prices.csv row stays.
+      #                    The monthly ETF-pair scores in builder_etf.json also need every STOCK's monthly momentum: those
+      #                    columns are written by the stock price runs (mode 2, parts 1-3), Saturday 02:00 / 04:00 / 06:00 IST)
       #    Schedule:
       #       Saturday 00:00 IST → full · Saturday 02:00 / 04:00 / 06:00 IST → prices part 1 / 2 / 3 · every other → light
       #    github.event.schedule = the exact cron string that fired, so a late
@@ -211,7 +213,13 @@ jobs:
               print(f"{s:<12}{(x.get('ltp') or 0):>10,.2f}  {f(m[0])}{f(m[1])}{f(m[2])}   |           {f(b[0])}{f(b[1])}{f(b[2])}   {f(x.get('ret1y'))}%  {x.get('ltpDate')}")
           from fetch_prices import ETF_SYMS
           miss = [e for e in ETF_SYMS if e not in d["etf"]]
-          msg = f"{len(d['etf'])} of {len(ETF_SYMS)} ETFs priced (as of {d.get('asOf')})" + (f"; missing: {', '.join(miss)}" if miss else "")
+          g = d["etf"].get("GOLDBEES") or {}
+          n_sc = sum(1 for v in (g.get("scoreM") or []) if v is not None)
+          msg = (f"{len(d['etf'])} of {len(ETF_SYMS)} ETFs priced (as of {d.get('asOf')}); monthly momentum scores {n_sc}/13"
+                 + (f"; missing: {', '.join(miss)}" if miss else ""))
+          if n_sc < 13:
+              print("NOTE: the 1-year backtest re-scores the ETF pairs every month from the STOCKS' monthly momentum, which only the")
+              print("      stock price runs write (mode 2, parts 1-3 = Saturday 02:00 / 04:00 / 06:00 IST). Run mode 2 parts 1, 2, 3 once.")
           print(msg)
           open(os.environ["GITHUB_OUTPUT"], "a").write(f"msg={msg}\n")
           EOF
