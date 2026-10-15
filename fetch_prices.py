@@ -63,7 +63,7 @@ SCRIP_URL   = "https://margincalculator.angelbroking.com/OpenAPI_File/files/Open
 BENCH_SYM   = "^NIFTY500"                 # row name used for the benchmark in prices.csv
 BENCH_NAMES = {"nifty500"}               # matched against the index's symbol / name, spaces removed, lower case
 # ETFs for the Portfolio Builder (builder.html, index part): fetched with part 1, like the benchmark
-ETF_SYMS    = ["GOLDBEES", "ITBEES", "ALPHA", "JUNIORBEES", "MON100", "HNGSNGBEES", "FMCGIETF", "LIQUIDBEES"]
+ETF_SYMS    = ["GOLDBEES", "ITBEES", "ALPHA", "JUNIORBEES", "MON100", "HNGSNGBEES", "FMCGIETF"]
 BACK_DAYS   = 365                         # must match fundamentals.BACK_DAYS
 MONTH_DAYS  = [round(k * 365 / 12) for k in range(13)]   # k = 0 (now) … 12 (= 365 days, the 1Y back date): month points for the Portfolio Builder
 PERIODS     = {"3M": 91, "6M": 182, "9M": 273, "1Y": 365, "1_25Y": 456, "1_5Y": 548}   # must match fundamentals.PERIODS

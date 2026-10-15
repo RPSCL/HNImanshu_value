@@ -803,12 +803,6 @@ def write_nse_list(out: Path) -> int:
         return 0
 
 
-def get_portfolio_momentum_state():
-    """Return the Dual Momentum ETF state and weekly backtest metrics."""
-    from dual_momentum_engine import get_portfolio_momentum_state as _get_state
-    return _get_state()
-
-
 def write_builder_etf(out: Path) -> int:
     """prices.csv → public/builder_etf.json for the Portfolio Builder (builder.html), index part:
     {"asOf", "etf": {SYM: {ltp, ltpDate, r3: 3-month return now %, r3Back: 3-month return as of 1Y back %,
@@ -824,7 +818,7 @@ def write_builder_etf(out: Path) -> int:
     try:
         from fetch_prices import ETF_SYMS, BENCH_SYM
     except Exception:
-        ETF_SYMS, BENCH_SYM = ["GOLDBEES", "ITBEES", "ALPHA", "JUNIORBEES", "MON100", "HNGSNGBEES", "FMCGIETF", "LIQUIDBEES"], "^NIFTY500"
+        ETF_SYMS, BENCH_SYM = ["GOLDBEES", "ITBEES", "ALPHA", "JUNIORBEES", "MON100", "HNGSNGBEES", "FMCGIETF"], "^NIFTY500"
     src = BASE / "prices.csv"
     data = {"asOf": None, "etf": {}, "bench": None}
     try:
@@ -897,14 +891,6 @@ def write_builder_etf(out: Path) -> int:
         data["monthDates"] = None
     dates = [x["ltpDate"] for x in data["etf"].values() if x.get("ltpDate")]
     data["asOf"] = max(dates) if dates else None
-    # Dual Momentum drives the ETF sleeve; keep the legacy price fields above
-    # for compatibility with existing data consumers elsewhere in the page.
-    try:
-        data["dualMomentum"] = get_portfolio_momentum_state()
-        print(f"  Dual Momentum: {data['dualMomentum']['active_holding']} as of {data['dualMomentum']['as_of_date']}")
-    except Exception as e:
-        data["dualMomentum"] = None
-        print(f"  [WARN] Dual Momentum data unavailable ({e}); legacy ETF data remains intact")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
     miss = [e for e in ETF_SYMS if e not in data["etf"]]
