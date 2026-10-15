@@ -49,6 +49,7 @@ OPEN_BROWSER = True
 
 # file name (without leading digits and "_valuation.csv")  ->  label shown on the dashboard
 UNIVERSES = {"nifty500": "NIFTY 500", "niftysmallcap500": "Smallcap 500", "niftymicrocap250": "Microcap 250"}
+OTH_TAG = "oth"                    # file tag of the Others files (fundamentals_oth.json …)
 OTHERS_KEY, OTHERS_LABEL = "others", "Others"   # every other NSE stock (Nifty_Others_Fundamentals.csv, others.py):
                                                 # its own list, NOT part of "All lists"
 
@@ -2301,11 +2302,22 @@ function fillBack(j) {
   }
   j._filled = true; return j;
 }
+/* extra stock files in this page's own format, added after load (hniMore below): today = fundamentals_<tag>.json,
+   each back date = fundamentals_back_<key>_<tag>.json, sparkline = fundamentals_hist_<tag>.json */
+const MORE = [];
+const jget = u => fetch(u, {cache: 'no-cache'}).then(r => r.ok ? r.json() : Promise.reject(r.status));
+const getBack = key => jget('fundamentals_back_' + key + '.json').then(j => !MORE.length || !j || !j.stocks ? j :
+  Promise.all(MORE.map(t => jget('fundamentals_back_' + key + '_' + t + '.json').catch(() => null)))
+    .then(xs => { xs.forEach(x => { if (x && x.stocks) j.stocks = j.stocks.concat(x.stocks); }); return j; }))
+  .then(fillBack);
 /* fundamentals_hist.json: every back date in one small file with just the fields the sparkline and the
    "1Y ago" columns read; fetched once. {key: {key, date, hasPrice, stocks}} or null (old build / offline file) */
 let HIST_P = null;
-const loadHist = () => HIST_P = HIST_P || fetch('fundamentals_hist.json').then(r => r.ok ? r.json() : null).catch(() => null).then(j => {
+const loadHist = () => HIST_P = HIST_P || Promise.all(['fundamentals_hist.json', ...MORE.map(t => 'fundamentals_hist_' + t + '.json')]
+    .map(u => fetch(u).then(r => r.ok ? r.json() : null).catch(() => null))).then(([j, ...xs]) => {
   if (!j || !j.cols || !j.dates) return null;
+  xs.forEach(x => { if (x && x.dates && String(x.cols) === String(j.cols))
+    for (const k in x.dates) if (j.dates[k]) j.dates[k].rows = j.dates[k].rows.concat(x.dates[k].rows); });
   const out = {};
   for (const k in j.dates) {
     const d = j.dates[k];
@@ -2319,8 +2331,7 @@ const loadHist = () => HIST_P = HIST_P || fetch('fundamentals_hist.json').then(r
 function ensureThen1() {
   if (THEN1 || ensureThen1.p || !D.then) return;
   const key = D.then.key || '1Y';
-  const full = () => fetch('fundamentals_back_' + key + '.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : Promise.reject(r.status))
-    .then(j => { fillBack(j); BACK_CACHE[key] = j; return j; });
+  const full = () => getBack(key).then(j => { BACK_CACHE[key] = j; return j; });
   ensureThen1.p = loadHist().then(H => H && H[key] ? H[key] : full())   // the small file has PE / PB / ROE: enough here
     .then(j => { THEN1 = j; THEN_BY = new Map(j.stocks.map(s => [s.sym, s]));
                  const h = location.hash || '#/'; if (!BACK && (h === '#/' || h === '#/portfolio' || h.startsWith('#/industry/'))) route(); })
@@ -3533,7 +3544,7 @@ function vdHistLoad() {                                   // one file at a time,
     for (const k of VH_KEYS) {
       const H = await loadHist();                           // one small file for all dates; the full ones only if it's missing
       let j = BACK_CACHE[k] || (H && H[k]);
-      if (!j) { try { const r = await fetch('fundamentals_back_' + k + '.json'); j = r.ok ? fillBack(await r.json()) : null; } catch (e) { j = null; }
+      if (!j) { try { j = await getBack(k); } catch (e) { j = null; }
                 if (j && j.stocks) BACK_CACHE[k] = j; }
       await nextFrame();
       if (j && j.stocks && j.hasPrice) by[k] = vdSnap(Object.assign({key: k}, j));
@@ -4163,9 +4174,8 @@ function setHistorical(on, key, temp) {
   if (!GF.back) { route(); return; }
   if (BACK_CACHE[key]) { D.then = BACK_CACHE[key]; route(); return; }
   bchip.classList.add('loading');
-  fetch('fundamentals_back_' + key + '.json', {cache: 'no-cache'})
-    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-    .then(j => { BACK_CACHE[key] = fillBack(j); bchip.classList.remove('loading'); if (GF.backP === key && GF.back) { D.then = j; route(); } })
+  getBack(key)
+    .then(j => { BACK_CACHE[key] = j; bchip.classList.remove('loading'); if (GF.backP === key && GF.back) { D.then = j; route(); } })
     .catch(() => {
       bchip.classList.remove('loading');
       alert(backLabel(key) + ' could not be loaded. It loads from the website; a saved offline copy has 1Y only.');
@@ -4176,10 +4186,32 @@ hist.checked = false;
 hist.addEventListener('change', () => setHistorical(hist.checked));
 bsel.addEventListener('change', () => setHistorical(GF.back, bsel.value));   // picking a date keeps Historical as it is
 const us = $('#uniSel');
-us.innerHTML = '<option value="all">All lists</option>' + D.lists.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
+const UNI_WANT = GF.uni;                                    // last visit's list: may be one added later (hniMore)
+const uniFill = () => { us.innerHTML = '<option value="all">All lists</option>' + D.lists.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join(''); };
+uniFill();
 us.value = D.lists.includes(GF.uni) ? GF.uni : 'all';
 GF.uni = us.value;                                          // drop an unknown list name passed in the URL
 us.addEventListener('change', () => { GF.uni = us.value; saveGF(); route(); });
+/* add the stocks of fundamentals_<tag>.json (+ its back / sparkline files) to this page; data loaded before
+   without them is dropped and loads again with them on next use */
+window.hniMore = async tag => {
+  if (MORE.includes(tag)) return;
+  let j = null; try { j = await jget('fundamentals_' + tag + '.json'); } catch (e) {}
+  if (!j || !Array.isArray(j.stocks) || !j.stocks.length) return;
+  MORE.push(tag);
+  const add = j.stocks.filter(s => s && s.sym && !TODAY.has(s.sym));
+  add.forEach(s => { D.stocks.push(s); TODAY.set(s.sym, s); });
+  [...new Set(add.map(s => s.ind).filter(n => n && !SEC_COLOR[n]))].sort()
+    .forEach(n => SEC_COLOR[n] = SEC_PAL[Object.keys(SEC_COLOR).length % SEC_PAL.length]);
+  (j.lists || []).forEach(l => { if (!D.lists.includes(l)) D.lists.push(l); });
+  const cur = us.value; uniFill();
+  us.value = cur === 'all' && D.lists.includes(UNI_WANT) ? UNI_WANT : cur; GF.uni = us.value;
+  if (us._paint) us._paint(); HDR_OK = false; lockHeader();   // a longer list name: measure the List chip again
+  Object.keys(BACK_CACHE).forEach(k => delete BACK_CACHE[k]);
+  HIST_P = null; THEN1 = null; THEN_BY = new Map(); ensureThen1.p = null;
+  VH.p = null; VH.snaps = null; VH_PTS.clear(); computeScores.S = null;
+  if (GF.back) setHistorical(true, GF.backP, true); else route();
+};
 
 /* day / night: same key as the screener, so both pages always match */
 /* ---------- themed dropdown: hides the native <select>, keeps it as the source of truth ---------- */
@@ -4433,6 +4465,15 @@ def build_site(paths, out_path, minify=None, prices_path=None):
         prices_path = pathlib.Path(str(paths[0])).parent / PRICES_CSV
     prices, bench = load_prices(prices_path) if prices_path else ({}, None)
     now, smnow, backs = build_all(df, asof, prices, bench)
+    # "Others" (every NSE stock outside the 3 lists) is NOT in the page or its usual files: it goes to its own files
+    # (fundamentals_oth.json, fundamentals_back_<key>_oth.json, fundamentals_hist_oth.json), loaded by the page only
+    # when the signed-in add-on asks for them. Its scores were already worked out above with the 3 lists as peers.
+    oth = {r["sym"] for r in now if r.get("uni") and all(u == OTHERS_LABEL for u in r["uni"])}
+    part = lambda rows, want: [r for r in (rows or []) if (r.get("sym") in oth) == want]
+    now_all, smnow_all = now, smnow
+    now, smnow = part(now_all, False), part(smnow_all, False)
+    backs_oth = {k: dict(b, stocks=part(b.get("stocks"), True)) for k, b in backs.items()}
+    backs = {k: dict(b, stocks=part(b.get("stocks"), False)) for k, b in backs.items()}
     html, span = render_html(now, backs, asof, web=True, smnow=smnow)
     if minify:
         html = minify(html)
@@ -4440,14 +4481,22 @@ def build_site(paths, out_path, minify=None, prices_path=None):
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")
     extra = 0
-    today = {r["sym"]: r for r in (smnow if (TODAY_SAME and smnow) else now)}   # the page's TODAY
-    for k, b in backs.items():                            # every back period (1Y too): its own JSON, loaded only for Historical
-        txt = json.dumps(clean(slim_back(b, today)), allow_nan=False, separators=(",", ":"))
-        (out_path.parent / ("fundamentals_back_%s.json" % k)).write_text(txt, encoding="utf-8")
-        extra += len(txt.encode("utf-8"))
-    txt = json.dumps(clean(hist_payload(backs)), allow_nan=False, separators=(",", ":"))   # sparkline + 1Y columns
-    (out_path.parent / "fundamentals_hist.json").write_text(txt, encoding="utf-8")
-    print("    fundamentals_hist.json %.2f MB (sparkline + 1Y columns)" % (len(txt.encode("utf-8")) / 1e6))
+    rows_all = smnow_all if (TODAY_SAME and smnow_all) else now_all
+    today = {r["sym"]: r for r in rows_all}                # the page's TODAY (with Others once they are added)
+    def put(name, obj):
+        t = json.dumps(clean(obj), allow_nan=False, separators=(",", ":"))
+        (out_path.parent / name).write_text(t, encoding="utf-8")
+        return len(t.encode("utf-8"))
+    for k in backs:                                       # every back period (1Y too): its own JSON, loaded only for Historical
+        extra += put("fundamentals_back_%s.json" % k, slim_back(backs[k], today))
+    hist_mb = put("fundamentals_hist.json", hist_payload(backs)) / 1e6   # sparkline + 1Y columns
+    print("    fundamentals_hist.json %.2f MB (sparkline + 1Y columns)" % hist_mb)
+    oth_today = [r for r in rows_all if r["sym"] in oth]
+    o = put("fundamentals_%s.json" % OTH_TAG, {"stocks": slim(oth_today), "lists": [OTHERS_LABEL] if oth_today else []})
+    for k in backs_oth:
+        o += put("fundamentals_back_%s_%s.json" % (k, OTH_TAG), slim_back(backs_oth[k], today))
+    o += put("fundamentals_hist_%s.json" % OTH_TAG, hist_payload(backs_oth))
+    print("    %s: %d stocks in their own files, %.1f MB (loaded only on request)" % (OTHERS_LABEL, len(oth_today), o / 1e6))
     print("    Fundamentals: %d stocks, data as of %s, back periods %s, page %.1f MB + %.1f MB on demand -> %s" % (
         len(now), asof.strftime("%d %b %Y"), "/".join(b["label"] for b in backs.values()),
         len(html.encode("utf-8")) / 1e6, extra / 1e6, out_path))

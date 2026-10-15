@@ -865,10 +865,8 @@ def build(deploy=False):
         "const DATASETS = {\n"
         f"n500:{js_safe(json.dumps(data_n500, separators=(',', ':')))},\n"
         "sc250:null,\n"
-        "mc250:null,\n"
-        "oth:null\n"
-        "};\n"
-        f"const OTH_N = {len(data_oth)};"                # 0 = no Others file yet: the page hides that button
+        "mc250:null\n"
+        "};"
     )
 
     # ── Inject into template ──

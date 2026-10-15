@@ -1019,7 +1019,6 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
     <button class="uni-btn" id="btn-sc250">Smallcap 500</button>
     <button class="uni-btn" id="btn-mc250">Microcap 250</button>
     <button class="uni-btn" id="btn-all">All Stocks</button>
-    <button class="uni-btn" id="btn-oth" title="Every other NSE stock, outside the 3 lists">Others</button>
   </div>
   <div class="h-stats">
     <div class="hstat"><div class="hstat-val" id="hs-total">—</div><div class="hstat-lbl">Universe</div></div>
@@ -1392,17 +1391,17 @@ function buildAll(){
   for(var j=0;j<merged.length;j++) merged[j].FINAL_RANK=j+1;
   DATASETS.all=merged;
 }
-/* Smallcap / Microcap / Others live in screener_sc250.json / screener_mc250.json / screener_oth.json (build.py)
-   and load on first use. "All Stocks" = the 3 lists only; Others is its own list. */
+/* Smallcap / Microcap live in screener_sc250.json / screener_mc250.json (build.py) and load on first use.
+   Any other list button (id btn-<k>) loads screener_<k>.json the same way. "All Stocks" = the 3 lists. */
 var LIST_WAIT = {};
 function loadList(k){
   if (DATASETS[k]) return Promise.resolve();
   return LIST_WAIT[k] = LIST_WAIT[k] || fetch('screener_' + k + '.json', {cache:'no-cache'})
     .then(function(r){ if(!r.ok) throw r.status; return r.json(); })
-    .then(function(j){ DATASETS[k] = j; if (k !== 'oth') DATASETS.all = null; })
+    .then(function(j){ DATASETS[k] = j; if (k === 'sc250' || k === 'mc250') DATASETS.all = null; })
     .catch(function(e){ LIST_WAIT[k] = null; throw e; });
 }
-function needLists(u){ return u==='all' ? ['sc250','mc250'] : (u==='sc250'||u==='mc250'||u==='oth') ? [u] : []; }
+function needLists(u){ return u==='all' ? ['sc250','mc250'] : u==='n500' ? [] : [u]; }
 (function(){ var c = navigator.connection || {}; if (!c.saveData && !/2g/.test(c.effectiveType || '')) setTimeout(function(){ loadList('sc250').catch(function(){}); loadList('mc250').catch(function(){}); }, 3000); })();
 </script>
 
@@ -1522,7 +1521,7 @@ function toggleTheme(){
 }
 
 // ── FUNDAMENTALS LINK: screener tab -> fundamentals List picker label (must match UNIVERSES in fundamentals.py) ──
-var FUND_UNI = {n500:'NIFTY 500', sc250:'Smallcap 500', mc250:'Microcap 250', all:'all', oth:'Others'};
+var FUND_UNI = {n500:'NIFTY 500', sc250:'Smallcap 500', mc250:'Microcap 250', all:'all'};
 function updateFundLink(){
   var a = document.getElementById('fund-btn'); if(!a) return;
   a.href = 'fundamentals';   // clean URL; fundamentals opens on "All lists" first, then remembers the user's own pick
@@ -1540,11 +1539,7 @@ function switchUniverse(u){
     return;
   }
   universe=u; rawData=DATASETS[u]; selectedSym=null; closeDetail();
-  document.getElementById('btn-n500').classList.toggle('active',u==='n500');
-  document.getElementById('btn-sc250').classList.toggle('active',u==='sc250');
-  document.getElementById('btn-mc250').classList.toggle('active',u==='mc250');
-  document.getElementById('btn-all').classList.toggle('active',u==='all');
-  document.getElementById('btn-oth').classList.toggle('active',u==='oth');
+  document.querySelectorAll('.uni-btn').forEach(function(b){ b.classList.toggle('active', b.id==='btn-'+u); });
   searchQ=''; document.getElementById('search-inp').value=''; updateSearchClearBtn();
   buildSidebar(); buildMobileSheet(); updateHideNanCount(); updateFundLink(); run();
 }
@@ -1889,12 +1884,9 @@ function wireInfoBtn(btnId, tipId){
 wireInfoBtn('grade-info-btn','grade-tooltip');
 wireInfoBtn('grade-th-info-btn','grade-tooltip');
 
-document.getElementById('btn-n500').addEventListener('click',function(){ switchUniverse('n500'); });
-document.getElementById('btn-sc250').addEventListener('click',function(){ switchUniverse('sc250'); });
-document.getElementById('btn-mc250').addEventListener('click',function(){ switchUniverse('mc250'); });
-document.getElementById('btn-all').addEventListener('click',function(){ switchUniverse('all'); });
-document.getElementById('btn-oth').addEventListener('click',function(){ switchUniverse('oth'); });
-if (typeof OTH_N === 'undefined' || !OTH_N) document.getElementById('btn-oth').style.display = 'none';   // no Others file built yet
+document.querySelector('.universe-switch').addEventListener('click',function(e){   // every list button, incl. ones added later
+  var b = e.target.closest('.uni-btn'); if (b && b.id.indexOf('btn-')===0) switchUniverse(b.id.slice(4));
+});
 
 document.getElementById('search-inp').addEventListener('input',function(){ handleSearch(this.value); });
 document.getElementById('search-clear-btn').addEventListener('click',function(){
