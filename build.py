@@ -806,7 +806,8 @@ def write_nse_list(out: Path) -> int:
 def write_builder_etf(out: Path) -> int:
     """prices.csv → public/builder_etf.json for the Portfolio Builder (builder.html), index part:
     {"asOf", "etf": {SYM: {ltp, ltpDate, r3: 3-month return now %, r3Back: 3-month return as of 1Y back %,
-                           ret1y: return since 1Y back %}}, "bench": {...same for the NIFTY 500}}.
+                           mom / momBack: [3M, 6M, 12-1M] returns now / 1Y back, ret1y: return since 1Y back %}},
+     "bench": {...same for the NIFTY 500}}.
     The ETFs are fetched by fetch_prices.py with part 1 (ETF_SYMS)."""
     try:
         from fetch_prices import ETF_SYMS, BENCH_SYM
@@ -832,6 +833,9 @@ def write_builder_etf(out: Path) -> int:
         ltp, p1 = num(r.get("LTP")), num(r.get("PRICE_1Y_ADJ"))
         return {"ltp": ltp, "ltpDate": r.get("LTP_DATE") if isinstance(r.get("LTP_DATE"), str) else None,
                 "r3": num(r.get("MOM_NOW_R3")), "r3Back": num(r.get("MOM_1Y_R3")),
+                # [3M, 6M, 12-1M] returns, now and as of 1Y back: the page turns them into its momentum score
+                "mom": [num(r.get("MOM_NOW_R%s" % k)) for k in (3, 6, 12)],
+                "momBack": [num(r.get("MOM_1Y_R%s" % k)) for k in (3, 6, 12)],
                 "ret1y": round((ltp / p1 - 1) * 100, 2) if ltp and p1 else None,
                 "backDate": r.get("PRICE_1Y_DATE") if isinstance(r.get("PRICE_1Y_DATE"), str) else None}
     for e in ETF_SYMS:
