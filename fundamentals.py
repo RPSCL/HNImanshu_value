@@ -1208,8 +1208,10 @@ body.day .toggle-thumb{transform:translateX(16px)}
 body.pf-mode #pfBackV{display:inline-flex}
 body.pf-mode #backBtn,body.pf-mode .global > .gsep,body.pf-mode #uniChip,body.pf-mode .global > .chip.strike,body.pf-mode #histGrp,
 body.pf-mode #saveHtml,body.pf-mode #nav,body.pf-mode #meta{display:none!important}
+.btn.hbag[hidden]{display:none}
 .btn.hbag:hover,.btn.hbag.on{border-color:var(--brass);color:var(--brass);background:var(--brassbg)}
-@media (max-width:700px){.btn.hbag{position:absolute;top:13px;right:calc(var(--au-right,104px) + 80px);width:32px;height:32px;padding:0;justify-content:center;border-radius:50%}}
+@media (max-width:700px){.btn.hbag{position:absolute;top:13px;right:calc(var(--au-right,104px) + 80px);width:32px;height:32px;padding:0;justify-content:center;border-radius:50%}
+  .btn.hbag.bld{right:calc(var(--au-right,104px) + 120px)}}
 /* ---------- phone header, de-cluttered ----------
    top-right: Portfolio · Telegram · avatar · day/night.  Then three rows with thin lines between them:
    ← Screener  /  List · PSU · Semi PSU  /  Historical ······ period.  Tabs and screens live in two menu buttons (#mnav). */
@@ -1733,6 +1735,7 @@ __AUTH_BODY__<script>
     <button class="btn primary" id="saveHtml">Save as HTML</button>
     <button type="button" class="btn hweek" id="weeklyBtn" title="Weekly updates on Telegram"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#29a9eb"/><path d="M5.4 11.6l11.5-4.4c.5-.2 1 .1.8.9l-2 9.3c-.1.6-.5.8-1.1.5l-3-2.2-1.5 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5.1c.2-.2 0-.3-.4-.1l-6.9 4.4-3-.9c-.6-.2-.7-.6.1-1z" fill="#fff"/></svg>Weekly</button>
     <a class="btn hbag" id="pfBag" href="#/portfolio" title="Portfolio" aria-label="Portfolio"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg><span class="lg">Portfolio</span></a>
+    <a class="btn hbag bld" id="pfBuilder" href="builder" target="_blank" rel="noopener" title="Portfolio builder (admin)" aria-label="Portfolio builder" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg><span class="lg">Builder</span></a>
     <div id="theme-toggle" title="Day / night">
       <span class="toggle-icon moon-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
       <button class="toggle-track" aria-label="Toggle day / night theme"><div class="toggle-thumb"></div></button>
@@ -1746,7 +1749,6 @@ __AUTH_BODY__<script>
   <a href="#/momentum" data-t="momentum">Momentum</a>
   <a href="#/all" data-t="all">All Stocks</a>
   <a href="#/method" data-t="method">Methodology</a>
-  <a href="builder" target="_blank" rel="noopener" title="Opens in a new tab">Portfolio builder ↗</a>
 </nav>
 <div id="mnav" aria-label="Pages and screens">
   <button type="button" class="mnav-b" id="mnavTab" aria-haspopup="dialog"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Value screen</span><i>▾</i></button>
@@ -2235,8 +2237,7 @@ const assetCols = () => [C.pta].concat(has('pfa') ? [C.pfa] : [], has('invp') ? 
 const view = $('#view');
 /* phone: two menu buttons replace the tab row and the row of screens */
 const TABS = [['#/value', 'Value screen', 'Cheap, good-quality stocks by screen'], ['#/momentum', 'Momentum', 'Strongest price trends'],
-              ['#/', 'Industries', 'Industry PE, PB, ROE'], ['#/all', 'All Stocks', 'Every stock with every column'], ['#/method', 'Methodology', 'How every number is worked out'],
-              ['builder', 'Portfolio builder ↗', 'Index + value + momentum mix, in a new tab']];
+              ['#/', 'Industries', 'Industry PE, PB, ROE'], ['#/all', 'All Stocks', 'Every stock with every column'], ['#/method', 'Methodology', 'How every number is worked out']];
 function syncMnav() {
   const h = location.hash || '#/', t = TABS.find(x => x[0] === h) || (h.startsWith('#/industry/') ? TABS[2] : null);
   $('#mnavTab span').textContent = t ? t[1] : 'Menu';
@@ -3052,6 +3053,12 @@ async function pfLoadNow() {
   if ((location.hash || '') === '#/portfolio') route(); else pfMarkBags();
 }
 window.addEventListener('hni-ready', () => pfLoad());
+/* Portfolio builder button: shown to admins only (auth.js window.hniAdmin: the admin@ account or a hni_admins/{uid} document) */
+(function () {
+  const b = $('#pfBuilder'); if (!b) return;
+  const show = () => { if (window.hniAdmin) window.hniAdmin.then(a => { b.hidden = !a; }).catch(() => {}); };
+  show(); window.addEventListener('hni-ready', show);
+})();
 /* NSE renamed a held stock (portfolio_ltp.py publishes OLD → NEW): open holdings move to the new symbol by themselves.
    Closed (locked) records keep their old symbol. */
 async function pfApplyRenames() {

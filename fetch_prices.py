@@ -14,6 +14,11 @@ daily candles and writes ONE row per symbol:
     LISTED_FROM                           first candle fetched (a stock listed after a back date is left out there)
     MOM_<P>_R3, MOM_<P>_R6, MOM_<P>_R12   price momentum as of today (P = NOW) and as of each back date:
                                           3-month, 6-month and 12-minus-1-month returns, %, split-adjusted
+    MOM_M<k>_R3 / _R6 / _R12              the same three momentum returns as of each month point k = 1 … 12 months back
+                                          (MONTH_DAYS: 30, 61, 91 … 365 days; k = 12 is the 1Y back date). With the NOW set these
+                                          give the Portfolio Builder the whole stock universe's momentum month by month, so the ETF
+                                          pairs can be re-scored every month in the 1-year backtest
+    PX_MONTHLY                            ETFs + benchmark only: split-adjusted close at k = 0 (latest) … 12, '|' separated
     ADJ_FACTOR, CORP_ACTIONS              detected split / bonus factor after BACK_DATE, and every event found
     BACK_DATE, STATUS, FETCHED_AT
 
@@ -60,6 +65,7 @@ BENCH_NAMES = {"nifty500"}               # matched against the index's symbol / 
 # ETFs for the Portfolio Builder (builder.html, index part): fetched with part 1, like the benchmark
 ETF_SYMS    = ["GOLDBEES", "ITBEES", "ALPHA", "JUNIORBEES", "MON100", "HNGSNGBEES", "FMCGIETF"]
 BACK_DAYS   = 365                         # must match fundamentals.BACK_DAYS
+MONTH_DAYS  = [round(k * 365 / 12) for k in range(13)]   # k = 0 (now) … 12 (= 365 days, the 1Y back date): month points for the Portfolio Builder
 PERIODS     = {"3M": 91, "6M": 182, "9M": 273, "1Y": 365, "1_25Y": 456, "1_5Y": 548}   # must match fundamentals.PERIODS
 RATE        = 2.5                         # max candle requests per second, shared by all workers (Angel throttles ~3/s)
 WORKERS     = 3                           # parallel fetches; network delay overlaps, the rate limit stays global
@@ -271,7 +277,7 @@ def corporate_actions(c):
 	return ev
 
 
-def summarise(c, asof: date):
+def summarise(c, asof: date, with_px=False):
 	"""Numbers for one symbol from its candles (oldest → newest): latest close + one price per back period."""
 	ev = corporate_actions(c)
 	def factor_after(d):                                             # product of events strictly after day d
@@ -303,6 +309,15 @@ def summarise(c, asof: date):
 		now_p = last[1] if d == 0 else px(d)
 		row.update({f"MOM_{k}_R3": pct(now_p, px(d + 91)), f"MOM_{k}_R6": pct(now_p, px(d + 182)),
 		            f"MOM_{k}_R12": pct(px(d + 30), px(d + 365))})       # 12-1: skips the last month (short-term reversal)
+	# month by month (k = 1 … 12): the same three returns, for the Portfolio Builder's monthly ETF-pair check
+	for k in range(1, 13):
+		d = MONTH_DAYS[k]
+		now_p = px(d)
+		row.update({f"MOM_M{k}_R3": pct(now_p, px(d + 91)), f"MOM_M{k}_R6": pct(now_p, px(d + 182)),
+		            f"MOM_M{k}_R12": pct(px(d + 30), px(d + 365))})
+	if with_px:                                                      # ETFs + benchmark: the monthly price path (k = 0 … 12)
+		path = [last[1]] + [px(MONTH_DAYS[k]) for k in range(1, 13)]
+		row["PX_MONTHLY"] = "|".join("" if v is None else f"{v:.4f}" for v in path)
 	row["STATUS"] = "OK" if "PRICE_1Y" in row else "NOT LISTED ON BACK DATE"   # 1Y status kept for older readers
 	return row
 
@@ -429,7 +444,7 @@ def main():
 			c = api.candles(tok, start, end)
 			if not c:
 				raise RuntimeError("no candles")
-			row = summarise(c, asof)
+			row = summarise(c, asof, with_px=(s in ETF_SYMS or s == BENCH_SYM))
 			p1 = f"1Y {row['PRICE_1Y']:>10,.2f} ({row['PRICE_1Y_DATE']})" if row.get("PRICE_1Y") is not None else "1Y        n/a"
 			ca = f"  split/bonus: {row['CORP_ACTIONS']}" if row.get("CORP_ACTIONS") else ""
 			return ({**base, **row},
@@ -488,7 +503,9 @@ def main():
 		cols += [f"PRICE_{k}", f"PRICE_{k}_DATE", f"PRICE_{k}_ADJ", f"HIGH_52W_{k}"]
 	for k in ["NOW"] + list(PERIODS):
 		cols += [f"MOM_{k}_R3", f"MOM_{k}_R6", f"MOM_{k}_R12"]
-	cols += ["ADJ_FACTOR", "CORP_ACTIONS", "BACK_DATE", "STATUS", "FETCHED_AT"]
+	for k in range(1, 13):
+		cols += [f"MOM_M{k}_R3", f"MOM_M{k}_R6", f"MOM_M{k}_R12"]
+	cols += ["PX_MONTHLY", "ADJ_FACTOR", "CORP_ACTIONS", "BACK_DATE", "STATUS", "FETCHED_AT"]
 	out = pd.DataFrame(rows).reindex(columns=cols)
 	out.to_csv(OUT_CSV, index=False)
 	n_ca = int(out["CORP_ACTIONS"].fillna("").str.len().gt(0).sum())

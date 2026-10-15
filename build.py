@@ -808,7 +808,13 @@ def write_builder_etf(out: Path) -> int:
     {"asOf", "etf": {SYM: {ltp, ltpDate, r3: 3-month return now %, r3Back: 3-month return as of 1Y back %,
                            mom / momBack: [3M, 6M, 12-1M] returns now / 1Y back, ret1y: return since 1Y back %}},
      "bench": {...same for the NIFTY 500}}.
-    The ETFs are fetched by fetch_prices.py with part 1 (ETF_SYMS)."""
+    The ETFs are fetched by fetch_prices.py with part 1 (ETF_SYMS), or by themselves with cron.yml mode 4.
+    Month by month (k = 0 now … 12 = the 1Y back date) each ETF / the benchmark also carries
+      scoreM[k]  momentum score, exactly the Momentum screen's method: average percentile of its 3M, 6M, 12-1M returns
+                 among every stock in prices.csv as of that month point (None while the stocks' monthly momentum
+                 is not in prices.csv yet: the Saturday price parts fill it in)
+      pxM[k]     split-adjusted close at that month point
+    plus top-level monthDates[k]. The builder re-scores the ETF pairs every month with these (accurate 1Y backtest)."""
     try:
         from fetch_prices import ETF_SYMS, BENCH_SYM
     except Exception:
@@ -838,16 +844,60 @@ def write_builder_etf(out: Path) -> int:
                 "momBack": [num(r.get("MOM_1Y_R%s" % k)) for k in (3, 6, 12)],
                 "ret1y": round((ltp / p1 - 1) * 100, 2) if ltp and p1 else None,
                 "backDate": r.get("PRICE_1Y_DATE") if isinstance(r.get("PRICE_1Y_DATE"), str) else None}
+    # ---- month-by-month part (k = 0 now … 12 = 1Y back) ----
+    MDAYS = [round(k * 365 / 12) for k in range(13)]
+    mcol = lambda k, r: f"MOM_{'NOW' if k == 0 else 'M%d' % k}_R{r}"
+    try:
+        allpx = pd.read_csv(src, low_memory=False) if src.exists() else pd.DataFrame()
+    except Exception:
+        allpx = pd.DataFrame()
+    stocks = allpx[~allpx["SYMBOL"].isin(list(ETF_SYMS) + [BENCH_SYM])] if len(allpx) else allpx
+    uni = {}                                            # (k, r) → sorted momentum values of every stock at that month point
+    for k in range(13):
+        for r in (3, 6, 12):
+            c = mcol(k, r)
+            v = pd.to_numeric(stocks[c], errors="coerce").dropna().to_numpy(dtype=float) if c in stocks.columns else np.array([])
+            uni[(k, r)] = np.sort(v) if len(v) >= 100 else None      # too few stocks priced for this month yet → no score
+    def pctl(srt, v):                                   # same as fundamentals.py pctl(sorted, v, hi=true)
+        lo = int(np.searchsorted(srt, v, "left")); eq = int(np.searchsorted(srt, v, "right")) - lo
+        return (lo + max(eq - 1, 0) / 2) / (len(srt) - 1)
+    def monthly(sym):
+        r = px.get(sym)
+        if not r:
+            return None, None
+        score = []
+        for k in range(13):
+            ps = []
+            for rr in (3, 6, 12):
+                v, srt = num(r.get(mcol(k, rr))), uni[(k, rr)]
+                if v is not None and srt is not None:
+                    ps.append(pctl(srt, v))
+            score.append(round(sum(ps) / len(ps) * 100, 2) if len(ps) >= 2 else None)
+        path = str(r.get("PX_MONTHLY") or "")
+        pxm = [num(t) if t else None for t in path.split("|")] if path and path != "nan" else []
+        return score, (pxm if len(pxm) == 13 else None)
     for e in ETF_SYMS:
         x = row(e)
         if x:
+            x["scoreM"], x["pxM"] = monthly(e)
             data["etf"][e] = x
     data["bench"] = row(BENCH_SYM)
+    if data["bench"]:
+        data["bench"]["scoreM"], data["bench"]["pxM"] = monthly(BENCH_SYM)
+    try:                                                # k = 12 is BACK_DATE (= data date − 365 days); the dates of the other points follow
+        asof = pd.to_datetime((px.get(BENCH_SYM) or next(iter(px.values()))).get("BACK_DATE")) + pd.Timedelta(days=365)
+        data["monthDates"] = [(asof - pd.Timedelta(days=d)).strftime("%Y-%m-%d") for d in MDAYS]
+    except Exception:
+        data["monthDates"] = None
     dates = [x["ltpDate"] for x in data["etf"].values() if x.get("ltpDate")]
     data["asOf"] = max(dates) if dates else None
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
     miss = [e for e in ETF_SYMS if e not in data["etf"]]
+    g = data["etf"].get("GOLDBEES") or {}
+    n_sc = sum(1 for v in (g.get("scoreM") or []) if v is not None)
+    print(f"  builder_etf.json: monthly momentum scores for {n_sc} of 13 month points"
+          + ("" if n_sc == 13 else " (the stocks' monthly momentum fills in with the Saturday price parts, or run mode 2, parts 1-3, once)"))
     print(f"  builder_etf.json: {len(data['etf'])} of {len(ETF_SYMS)} ETFs"
           + (f" (no prices yet: {', '.join(miss)} — the next prices run, part 1, fetches them)" if miss else ""))
     return len(data["etf"])
