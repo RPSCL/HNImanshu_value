@@ -1466,6 +1466,20 @@ function combinedClass(v){ if(v==null||v==='')return'n-neu'; var n=+v; if(n>=15)
 /* news lives in news.json (written by build.py, shared with Fundamentals) and loads the first time a stock's news is opened;
    on a fast connection it also loads quietly a few seconds after the page, so it is usually already there */
 var NEWS_READY = Object.keys(NEWS_DATA).length > 1, NEWS_WAIT = null, _newsSym = null;
+/* news.json = the 3 lists' stocks; other stocks' news is in news_more.json (news.json "m" lists them), fetched only
+   when one of those stocks' news is opened */
+var NEWS_MORE = {}, NEWS_MORE_WAIT = null, NEWS_MORE_DONE = false;
+function newsRepaint(){
+  var ns = document.getElementById('dp-news-sym'), sc = document.getElementById('dp-news-scroll');
+  if (ns && sc && ns.textContent && ns.textContent !== '—') sc.innerHTML = buildNewsHTML(ns.textContent);
+  var sh = document.getElementById('news-sheet-scroll'); if (_newsOpen && _newsSym && sh) sh.innerHTML = buildNewsHTML(_newsSym);
+}
+function loadMoreNews(){
+  if (NEWS_MORE_WAIT) return NEWS_MORE_WAIT;
+  NEWS_MORE_WAIT = fetch('news_more.json', {cache:'no-cache'}).then(function(r){ return r.ok ? r.json() : {}; }).catch(function(){ return {}; })
+    .then(function(j){ Object.assign(NEWS_DATA, unpackNews(j || {})); NEWS_MORE_DONE = true; newsRepaint(); });
+  return NEWS_MORE_WAIT;
+}
 /* news.json (build.py) is compact: each article once [yymmddHHMM, headline, source, link-id] + per-stock indexes */
 function unpackNews(j){
   var out = {}, M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -1479,15 +1493,15 @@ function loadNews(){
   if (NEWS_READY || NEWS_WAIT) return NEWS_WAIT;
   NEWS_WAIT = fetch('news.json', {cache:'no-cache'}).then(function(r){ return r.ok ? r.json() : {}; }).then(function(j){
     Object.assign(NEWS_DATA, unpackNews(j || {})); NEWS_READY = true;
-    var ns = document.getElementById('dp-news-sym'), sc = document.getElementById('dp-news-scroll');
-    if (ns && sc && ns.textContent && ns.textContent !== '—') sc.innerHTML = buildNewsHTML(ns.textContent);
-    var sh = document.getElementById('news-sheet-scroll'); if (_newsOpen && _newsSym && sh) sh.innerHTML = buildNewsHTML(_newsSym);
+    ((j && j.m) || []).forEach(function(x){ NEWS_MORE[x] = 1; });
+    newsRepaint();
   }).catch(function(){ NEWS_WAIT = null; });
   return NEWS_WAIT;
 }
 (function(){ var c = navigator.connection || {}; if (!c.saveData && !/2g/.test(c.effectiveType || '')) setTimeout(loadNews, 4000); })();
 function buildNewsHTML(sym){
   if (!NEWS_READY) { loadNews(); return '<div class="news-empty">Loading news…</div>'; }
+  if (!NEWS_MORE_DONE && NEWS_MORE[sym] && !NEWS_DATA[sym]) { loadMoreNews(); return '<div class="news-empty">Loading news…</div>'; }
   var items = NEWS_DATA[sym] || NEWS_DATA['__default__'] || [];
   if(!items.length) return '<div class="news-empty">No recent news available.</div>';
   return items.map(function(n){

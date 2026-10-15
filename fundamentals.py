@@ -3182,15 +3182,20 @@ const TXC = {
          ? `<span class="pf-lock" title="Part of a closed position: remove it from the Closed list instead">🔒</span>` : `<span class="pf-acts2"><button type="button" class="pf-ico" data-edit="${esc(r.x.id)}" title="Edit" aria-label="Edit">✎</button><button type="button" class="pf-ico del" data-del="${esc(r.x.id)}" title="Delete" aria-label="Delete">×</button></span>`},
 };
 /* news of the last 7 days for the stocks held (news.json, written by the build from fetch_news.py) */
-let NEWS = null, NEWS_P = null;
-function loadNewsMap() {                                    // news.json (build.py): compact, shared with the screener
-  return NEWS_P = NEWS_P || fetch('news.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : {}).catch(() => ({})).then(j => {
-    NEWS = {};
-    const dt = t => `20${t.slice(0, 2)}-${t.slice(2, 4)}-${t.slice(4, 6)} ${t.slice(6, 8)}:${t.slice(8, 10)}`;
-    for (const sym in (j.s || {})) NEWS[sym] = j.s[sym].map(i => { const a = j.a[i];
-      return [dt(a[0]), a[1] + (a[2] ? ' – ' + a[2] : ''), a[3][0] === '!' ? a[3].slice(1) : j.p + a[3] + j.q]; });
-    return NEWS;
-  });
+/* news.json = the 3 lists' stocks; any other stock's news is in news_more.json (j.m lists them), fetched only
+   when one of those stocks' news is wanted (syms) */
+let NEWS = null, NEWS_P = null, NEWS_M = new Set(), NEWS_MP = null, NEWS_MD = false;
+const newsGet = u => fetch(u, {cache: 'no-cache'}).then(r => r.ok ? r.json() : {}).catch(() => ({}));
+function newsAdd(j) {
+  const dt = t => `20${t.slice(0, 2)}-${t.slice(2, 4)}-${t.slice(4, 6)} ${t.slice(6, 8)}:${t.slice(8, 10)}`;
+  for (const sym in (j.s || {})) NEWS[sym] = j.s[sym].map(i => { const a = j.a[i];
+    return [dt(a[0]), a[1] + (a[2] ? ' – ' + a[2] : ''), a[3][0] === '!' ? a[3].slice(1) : j.p + a[3] + j.q]; });
+}
+const newsNeedMore = syms => !NEWS_MD && (syms || []).some(x => NEWS_M.has(x));
+function loadNewsMap(syms) {                                // news.json (build.py): compact, shared with the screener
+  NEWS_P = NEWS_P || newsGet('news.json').then(j => { NEWS = {}; NEWS_M = new Set(j.m || []); newsAdd(j); return NEWS; });
+  return NEWS_P.then(N => !newsNeedMore(syms) ? N
+    : NEWS_MP = NEWS_MP || newsGet('news_more.json').then(j => { newsAdd(j); NEWS_MD = true; return NEWS; }));
 }
 function pfNewsPanel(host, syms) {
   const p = document.createElement('section'); p.className = 'pf-panel pf-news'; host.appendChild(p);
@@ -3205,8 +3210,8 @@ function pfNewsPanel(host, syms) {
         <span class="d">${esc(d(n[0]))}</span><b data-news="${esc(n[1])}" title="All news for ${esc(n[1])}">${esc(n[1])}</b><span class="t">${esc(n[2])}</span></a>`).join('')
       : `<p class="na">${syms.length ? 'No news in the last 7 days for your holdings.' : 'News for the stocks you hold shows here.'}</p>`;
   };
-  if (NEWS) return paint();
-  loadNewsMap().then(() => { if (p.isConnected) paint(); });
+  if (NEWS && !newsNeedMore(syms)) return paint();
+  loadNewsMap(syms).then(() => { if (p.isConnected) paint(); });
 }
 /* a table inside a panel: title on the left of its own tool row, body scrolls inside the panel */
 function pfPanel(host, title, sub, table) {
@@ -3660,7 +3665,7 @@ function newsOverlay(sym) {
   if (VH.snaps) requestAnimationFrame(() => { if (w.isConnected) vdSpark(vh, sym, PS); });
   else if (slow) { vh.innerHTML = '<button type="button" class="vh-load">Show status history</button>'; $('.vh-load', vh).addEventListener('click', drawVh); }   // 2G / data saver: only on request
   else if (TODAY.get(sym)) setTimeout(drawVh, 60);
-  loadNewsMap().then(N => {
+  loadNewsMap([sym]).then(N => {
     if (!w.isConnected) return;
     const items = (N[sym] || []);
     const d = v => { const t = new Date(v.replace(' ', 'T')); return isNaN(t) ? v : t.toLocaleDateString('en-IN', {day: '2-digit', month: 'short'}) + ', ' + t.toLocaleTimeString('en-IN', {hour: '2-digit', minute: '2-digit'}); };

@@ -493,16 +493,19 @@ NEWS_SUFFIX = "?oc=5&hl=en-US&gl=US&ceid=US:en"
 NEWS_DAYS_KEEP, NEWS_PER_STOCK = 7, 8          # 8 headlines per stock (was 10): a smaller news.json
 
 
-def write_news_json(path: Path, out: Path) -> int:
+def write_news_json(path: Path, out: Path, main_syms=None) -> int:
     """multi_stock_news.csv → public/news.json, compact and shared by both pages:
       {"p": link prefix, "q": link suffix,
        "a": [[yymmddHHMM, headline, source, link-id], …]   each article once, even if several stocks carry it
        "s": {SYMBOL: [article index, …]}}                   newest first, at most 10 per stock, last 7 days
     The Google News link is stored without its fixed start / end (the page adds them back): ~20% of the link.
-    Repeat stories are removed with news_dedup.py (same figures, same wording)."""
+    Repeat stories are removed with news_dedup.py (same figures, same wording).
+    main_syms (the 3 lists): only their news goes in news.json; every other stock's news goes in news_more.json
+    (same format), which the pages load only when such a stock's news is opened. news.json lists those stocks in "m"."""
     if not path.exists():
         print(f"  [NEWS]  {path.name} not found — no news")
-        out.write_text('{"p":"","q":"","a":[],"s":{}}', encoding="utf-8")
+        out.write_text('{"p":"","q":"","a":[],"s":{},"m":[]}', encoding="utf-8")
+        (out.parent / "news_more.json").write_text('{"p":"","q":"","a":[],"s":{}}', encoding="utf-8")
         return 0
     from news_dedup import dedup_frame, source_of
     df = pd.read_csv(path, encoding="utf-8-sig", low_memory=False)
@@ -531,9 +534,20 @@ def write_news_json(path: Path, out: Path) -> int:
             index[key] = len(arts)
             arts.append([r.dt.strftime("%y%m%d%H%M"), head, src, lid])
         lst.append(index[key])
-    txt = json.dumps({"p": NEWS_PREFIX, "q": NEWS_SUFFIX, "a": arts, "s": per}, ensure_ascii=False, separators=(",", ":"))
+    def pack(syms, extra=None):                          # these stocks' news with only the articles they use
+        idx, ss = {}, {}
+        for sym in syms:
+            ss[sym] = [idx.setdefault(i, len(idx)) for i in per[sym]]
+        d = {"p": NEWS_PREFIX, "q": NEWS_SUFFIX, "a": [arts[i] for i in idx], "s": ss}
+        d.update(extra or {})
+        return json.dumps(d, ensure_ascii=False, separators=(",", ":"))
+    main = [k for k in per if main_syms is None or k in main_syms]
+    more = [k for k in per if not (main_syms is None or k in main_syms)]
+    txt, txt2 = pack(main, {"m": more}), pack(more)
     out.write_text(txt, encoding="utf-8")
-    print(f"  [NEWS]  {len(df)} stories after repeats removed → {len(arts)} articles for {len(per)} stocks, news.json {len(txt) / 1e6:.2f} MB")
+    (out.parent / "news_more.json").write_text(txt2, encoding="utf-8")
+    print(f"  [NEWS]  {len(df)} stories after repeats removed → {len(arts)} articles for {len(per)} stocks: "
+          f"news.json {len(main)} stocks {len(txt) / 1e6:.2f} MB, news_more.json {len(more)} stocks {len(txt2) / 1e6:.2f} MB (on demand)")
     return sum(len(v) for v in per.values())
 
 
@@ -840,7 +854,13 @@ def build(deploy=False):
     # screener and the Fundamentals Portfolio, fetched the first time news is needed.
     news_js  = build_news_js({})
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    n_news = write_news_json(NEWS_CSV, OUTPUT.parent / "news.json")
+    main_syms = set()                                   # the 3 lists: their news in news.json, the rest in news_more.json
+    for f in (N500_CSV, SC250_CSV, MC250_CSV):
+        try:
+            main_syms |= set(pd.read_csv(f, usecols=["SYMBOL"])["SYMBOL"].dropna().astype(str).str.strip().str.upper())
+        except Exception:
+            pass
+    n_news = write_news_json(NEWS_CSV, OUTPUT.parent / "news.json", main_syms or None)
     for old in ("screener_news.json",):                 # leftovers nothing loads any more: not deployed again
         f = OUTPUT.parent / old
         if f.exists():
