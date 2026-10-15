@@ -29,6 +29,10 @@ jobs:
         run: |
           python fetch_prices.py --mode etf || python fetch_prices.py
 
+      - name: Weekly composite momentum of ETF ratios (NIFTYIT/GOLDBEES, ALPHA/GOLDBEES)
+        run: |
+          python etf_weekly_momentum.py --dir . --out .
+
       - name: Run ETF Fundamental & Valuation Calculations
         run: |
           python fundamentals.py --mode 4 || python fundamentals.py 4
