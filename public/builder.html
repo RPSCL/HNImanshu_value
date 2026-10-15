@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en" data-auth="required">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Portfolio Builder · HNImanshu</title>
+<meta name="description" content="Split a fund into index ETFs, value stocks and momentum stocks by fixed rules, with a 1-year backtest.">
+<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>
+<link rel="stylesheet" href="auth.css">
+<script type="module" src="auth.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap">
+<script>
+/* same day / night setting as the screener and Fundamentals */
+(function () { var t = 'night'; try { if (localStorage.getItem('hnimanshu_theme') === 'day') t = 'day'; } catch (e) {}
+  document.documentElement.setAttribute('data-theme', t); })();
+</script>
+<style>
+:root{--mono:'IBM Plex Mono',ui-monospace,monospace;--sans:'DM Sans',system-ui,-apple-system,"Segoe UI",sans-serif;
+  --bg:#0e0e0f;--panel:#141416;--panel2:#1a1a1d;--line:#323238;--ink:#f0ece4;--mute:#c0b8ae;--faint:#807870;
+  --brass:#d4b47a;--brassbg:rgba(212,180,122,.12);--good:#78cc90;--goodbg:rgba(120,204,144,.13);
+  --bad:#e09878;--badbg:rgba(224,152,120,.13);--warn:#e0b840;--hover:#1f1f23;color-scheme:dark}
+:root[data-theme=day]{--bg:#c8c1b5;--panel:#bdb6a8;--panel2:#cdc6b8;--line:#7a7468;--ink:#060402;--mute:#281e12;--faint:#4a4238;
+  --brass:#4c2e0a;--brassbg:rgba(76,46,10,.12);--good:#075e1a;--goodbg:rgba(7,94,26,.12);
+  --bad:#781c00;--badbg:rgba(120,28,0,.12);--warn:#482c00;--hover:#b5ae9f;color-scheme:light}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans)}
+a{color:inherit}
+.wrap{max-width:1100px;margin:0 auto;padding:16px}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:6px 0 14px;border-bottom:1px solid var(--line)}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+.logo i{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:var(--brassbg);color:var(--brass);font:700 18px var(--mono);font-style:normal}
+.logo b{font:600 15px var(--mono);letter-spacing:.02em}
+.logo small{display:block;font:500 10px var(--mono);letter-spacing:.14em;color:var(--faint);text-transform:uppercase}
+header .sp{flex:1}
+.btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);
+  color:var(--ink);font:600 12.5px var(--mono);text-decoration:none;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--brass)}
+.btn.primary{background:var(--brass);border-color:var(--brass);color:var(--bg)}
+.btn[disabled]{opacity:.55;cursor:default}
+h1{font:600 22px var(--sans);margin:20px 0 4px}
+.lead{color:var(--mute);margin:0 0 16px;max-width:760px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.fund{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.fund label{display:flex;flex-direction:column;gap:6px;font:500 12px var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.06em}
+.fund input{height:44px;width:min(260px,100%);padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink);
+  font:600 18px var(--mono);outline:none}
+.fund input:focus{border-color:var(--brass)}
+.split{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.chip{border:1px solid var(--line);border-radius:999px;padding:4px 10px;font:500 12px var(--mono);color:var(--mute)}
+.chip b{color:var(--ink)}
+.status{margin:14px 0 0;font:500 12.5px var(--mono);color:var(--faint);min-height:1.5em}
+.status.err{color:var(--bad)}
+.tabs{display:flex;gap:4px;margin:22px 0 12px;border-bottom:1px solid var(--line)}
+.tabs button{border:0;background:none;color:var(--mute);font:600 13px var(--mono);padding:10px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--brass)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.kpi span{display:block;font:500 11px var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+.kpi b{font:600 17px var(--mono)}
+.sleeve{margin:0 0 18px}
+.sleeve h2{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font:600 15px var(--sans);margin:0 0 6px}
+.sleeve h2 small{font:500 12px var(--mono);color:var(--faint)}
+.rule{font-size:12.5px;color:var(--mute);margin:0 0 8px}
+.pairs{display:flex;flex-direction:column;gap:4px;margin:0 0 8px;font:500 12px var(--mono);color:var(--mute)}
+.pairs b{color:var(--ink)}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+table{width:100%;border-collapse:collapse;font:12.5px var(--mono)}
+th{position:sticky;top:0;background:var(--panel2);color:var(--faint);font:600 11px var(--mono);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;text-transform:uppercase;letter-spacing:.04em}
+td{padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:var(--hover)}
+.r{text-align:right}
+.nm{color:var(--mute);font-family:var(--sans);max-width:260px;overflow:hidden;text-overflow:ellipsis}
+.sym{font-weight:600;text-decoration:none;border-bottom:1px dotted var(--faint)}
+.sym:hover{color:var(--brass)}
+.pos{color:var(--good)}.neg{color:var(--bad)}
+.pill{display:inline-block;padding:1px 7px;border-radius:6px;font-weight:600}
+.pill.pos{background:var(--goodbg)}.pill.neg{background:var(--badbg)}
+.zero{color:var(--warn)}
+.note{font-size:12px;color:var(--faint);margin:8px 0 0}
+.empty{padding:14px;color:var(--faint)}
+.disc{margin:26px 0 8px;padding:12px 14px;border:1px dashed var(--line);border-radius:10px;font-size:12px;color:var(--faint)}
+.eng{position:absolute;left:-10000px;top:0;width:1280px;height:900px;border:0;visibility:hidden}
+@media (max-width:640px){
+  .wrap{padding:12px 16px}
+  h1{font-size:19px}
+  .nm{display:none}
+  .fund .btn{flex:1}
+  .kpi b{font-size:15px}
+}
+</style>
+</head>
+<body>
+<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>
+<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){var w=document.getElementById("auWait");if(w)w.innerHTML='Login could not load. <a href="./">Back to screener</a>';}},10000);</script>
+<div class="wrap">
+  <header>
+    <a class="logo" href="fundamentals"><i>H</i><span><b>HNImanshu</b><small>Portfolio builder</small></span></a>
+    <span class="sp"></span>
+    <a class="btn" href="fundamentals">Fundamentals</a>
+  </header>
+
+  <h1>Portfolio builder</h1>
+  <p class="lead">Enter a fund amount. It is split <b>40% index ETFs</b>, <b>40% value stocks</b> (Deep value screen) and
+    <b>20% momentum stocks</b> (top 15 of the Momentum screen), equal weight inside each part, using the same data and
+    screens as Fundamentals. The backtest applies the same rules as they stood 1 year ago.</p>
+
+  <div class="card">
+    <form class="fund" id="fundForm" autocomplete="off">
+      <label>Fund value (₹)<input id="fund" inputmode="numeric" placeholder="e.g. 10,00,000" aria-label="Fund value in rupees"></label>
+      <button class="btn primary" id="go" type="submit">Build</button>
+      <button class="btn" id="csv" type="button" disabled>Download CSV</button>
+    </form>
+    <div class="split" id="split"></div>
+    <p class="status" id="status" role="status">Loading the screens…</p>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button type="button" class="on" data-tab="now" role="tab">Today</button>
+    <button type="button" data-tab="back" role="tab">1-year backtest</button>
+  </div>
+  <div id="out"></div>
+
+  <p class="disc">Educational tool. It applies fixed, published rules to screen data and shows what those rules pick;
+    it is not investment advice and not a recommendation to buy or sell any security. Prices are the latest weekly
+    closes (not live); quantities are whole units rounded down. Past returns in the backtest do not indicate future results.</p>
+</div>
+
+<script>
+/* ---------- rules ---------- */
+const SPLIT = [['index', 'Index ETFs', 0.4], ['value', 'Value', 0.4], ['mom', 'Momentum', 0.2]];
+const ETF_NAME = {GOLDBEES: 'Nippon India ETF Gold BeES', ITBEES: 'Nippon India ETF Nifty IT', ALPHA: 'Kotak Nifty Alpha 50 ETF',
+  JUNIORBEES: 'Nippon India ETF Nifty Next 50 Junior BeES', MON100: 'Motilal Oswal Nasdaq 100 ETF',
+  HNGSNGBEES: 'Nippon India ETF Hang Seng BeES', FMCGIETF: 'ICICI Prudential Nifty FMCG ETF'};
+/* [challenger, default]: the slot holds the default (GOLDBEES) unless the challenger's 3-month return is higher */
+const PAIRS = [['ITBEES', 'GOLDBEES'], ['ALPHA', 'GOLDBEES']];
+const ALWAYS = ['JUNIORBEES', 'MON100', 'HNGSNGBEES', 'FMCGIETF', 'ALPHA'];
+const MOM_TOP = 15;
+
+/* ---------- small helpers ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const num = v => v != null && isFinite(v);
+const fmt = (v, d = 2) => num(v) ? Number(v).toLocaleString('en-IN', {minimumFractionDigits: d, maximumFractionDigits: d}) : '–';
+const rs = v => num(v) ? '₹' + fmt(v, 0) : '–';
+const pct = v => num(v) ? (v > 0 ? '+' : v < 0 ? '−' : '') + fmt(Math.abs(v), 1) + '%' : '–';
+const pill = v => num(v) ? `<span class="pill ${v >= 0 ? 'pos' : 'neg'}">${pct(v)}</span>` : '–';
+const avg = a => { const x = a.filter(num); return x.length ? x.reduce((s, v) => s + v, 0) / x.length : null; };
+const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const status = (t, err) => { const s = $('#status'); s.textContent = t; s.classList.toggle('err', !!err); };
+
+/* ---------- the screens: Fundamentals itself, running hidden inside this page (same login, same engine) ---------- */
+/* Code run inside that page: the Deep value list and the Momentum list, today or (BACK) as of the back date */
+const HELPER = `window.__pb = function (top) {
+  GF.uni = 'all'; GF.psu = false; GF.semi = false;              // the 3 lists, nothing hidden (not saved to its settings)
+  setMode(); computeScores();
+  const pv = x => x == null || !isFinite(x) ? -1e9 : x;
+  const pick = s => ({sym: s.sym, name: s.name, ind: s.ind, cmp: s.cmp, pe: s.pe, mom: s.momS, score: s.score, url: s.url,
+                      ret: BACK ? sv(s, 'ret') : null});
+  const vf = Object.assign({}, VF_DEF, (VF_PRESETS.find(p => p.name === 'Deep value') || {}).st);
+  const value = V().filter(s => s.score != null && s.cmp != null && passVF(s, vf));
+  const mom = V().filter(s => ok(s.momS) && s.cmp != null && passVF(s, MOM_DEF))
+    .sort((a, b) => Math.round(b.momS) - Math.round(a.momS) || pv(b.pe) - pv(a.pe)).slice(0, top);
+  return JSON.stringify({back: BACK, date: BACK ? D.then.date : D.asOf, hasPrice: BACK ? !!D.then.hasPrice : true,
+    bench: BACK && D.then.bench ? D.then.bench.ret : null, value: value.map(pick), mom: mom.map(pick)});
+};`;
+let ENG = null;
+function engine() {
+  return ENG = ENG || new Promise((resolve, reject) => {
+    const f = document.createElement('iframe');
+    f.className = 'eng'; f.tabIndex = -1; f.setAttribute('aria-hidden', 'true'); f.title = 'screens';
+    f.src = (/\.html$/.test(location.pathname) ? 'fundamentals.html' : 'fundamentals') + '?embed=1#/method';   // clean URL on the website
+    document.body.appendChild(f);
+    const t0 = Date.now();
+    const poll = () => {
+      try {
+        const w = f.contentWindow;
+        if (w && w.document.documentElement.classList.contains('auth-ok') && w.eval("typeof V === 'function' && typeof D === 'object' && typeof setHistorical === 'function'")) {
+          w.eval(HELPER);
+          return resolve(w);
+        }
+      } catch (e) {}
+      if (Date.now() - t0 > 60000) return reject(new Error('The screens did not load (60 s). Check your connection and reload.'));
+      setTimeout(poll, 250);
+    };
+    poll();
+  });
+}
+const waitFor = (test, ms = 45000) => new Promise((res, rej) => {
+  const t0 = Date.now();
+  const tick = () => { let v = false; try { v = test(); } catch (e) {} if (v) return res(); if (Date.now() - t0 > ms) return rej(new Error('timeout')); setTimeout(tick, 200); };
+  tick();
+});
+async function screens() {
+  const w = await engine();
+  status('Working out today\'s lists…');
+  w.eval('setHistorical(false, null, true)');
+  await waitFor(() => w.eval('!BACK'));
+  const now = JSON.parse(w.__pb(MOM_TOP));
+  status('Working out the lists as they stood 1 year ago…');
+  w.eval("setHistorical(true, '1Y', true)");
+  let back = null;
+  try {
+    await waitFor(() => w.eval("BACK && D.then && (D.then.key || '1Y') === '1Y' && !!D.then.stocks"));
+    back = JSON.parse(w.__pb(MOM_TOP));
+  } catch (e) { back = null; }
+  w.eval('setHistorical(false, null, true)');
+  return {now, back};
+}
+let ETF_P = null;
+const etfData = () => ETF_P = ETF_P || fetch('builder_etf.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null);
+
+/* ---------- index part: pairs by 3-month return ---------- */
+function etfPick(E, key) {
+  const notes = [], set = [];
+  PAIRS.forEach(([c, d]) => {
+    const rc = E[c] ? E[c][key] : null, rd = E[d] ? E[d][key] : null;
+    const win = num(rc) && (!num(rd) || rc > rd) ? c : d;
+    notes.push({c, d, rc, rd, win}); set.push(win);
+  });
+  ALWAYS.forEach(x => set.push(x));
+  return {list: [...new Set(set)], notes};
+}
+
+/* ---------- allocation ---------- */
+function allocate(fund, lists) {
+  const parts = SPLIT.map(([k, label, share]) => {
+    const items = lists[k] || [], amt = fund * share, each = items.length ? amt / items.length : 0;
+    const rows = items.map(x => {
+      const qty = num(x.price) && x.price > 0 ? Math.floor(each / x.price) : null;
+      return Object.assign({}, x, {target: each, qty, invested: qty != null ? qty * x.price : null});
+    });
+    const invested = rows.reduce((s, r) => s + (r.invested || 0), 0);
+    return {k, label, share, amt, rows, invested};
+  });
+  const invested = parts.reduce((s, p) => s + p.invested, 0);
+  return {parts, invested, cash: fund - invested};
+}
+
+/* ---------- page ---------- */
+let DATA = null, TAB = 'now', LAST = null;
+const fundVal = () => +String($('#fund').value).replace(/[^\d.]/g, '') || 0;
+function paintSplit() {
+  const f = fundVal();
+  $('#split').innerHTML = SPLIT.map(([, label, s]) => `<span class="chip">${label} <b>${Math.round(s * 100)}%</b>${f ? ' · ' + rs(f * s) : ''}</span>`).join('');
+}
+function lists(when) {
+  const D = DATA, E = (D.etf && D.etf.etf) || {}, S = when === 'now' ? D.now : D.back;
+  const key = when === 'now' ? 'r3' : 'r3Back';
+  const pk = etfPick(E, key);
+  const index = pk.list.map(sym => { const e = E[sym] || {};
+    return {sym, name: ETF_NAME[sym] || sym, price: e.ltp, r3: e[key], ret: e.ret1y, etf: true}; });
+  const stock = s => ({sym: s.sym, name: s.name, ind: s.ind, price: s.cmp, pe: s.pe, mom: s.mom, score: s.score, url: s.url, ret: s.ret});
+  return {pk, index, value: S ? S.value.map(stock) : [], mom: S ? S.mom.map(stock) : []};
+}
+function symCell(x) {
+  return x.url ? `<a class="sym" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer" title="Open on Screener.in">${esc(x.sym)}</a>` : `<b>${esc(x.sym)}</b>`;
+}
+function pairNotes(pk, key) {
+  return `<div class="pairs">${pk.notes.map(n => `<span>${esc(n.c)} ${pct(n.rc)} vs ${esc(n.d)} ${pct(n.rd)} (3M) → <b>${esc(n.win)}</b></span>`).join('')}
+    <span>Always: ${ALWAYS.map(esc).join(', ')} · each ETF once, equal weight</span></div>`;
+}
+function paint() {
+  const out = $('#out');
+  if (!DATA) { out.innerHTML = ''; return; }
+  const fund = fundVal();
+  if (TAB === 'now') {
+    const L = lists('now'), A = allocate(fund || 0, L);
+    LAST = {fund, A, date: DATA.now.date};
+    const etfMiss = !DATA.etf || !Object.keys(DATA.etf.etf || {}).length;
+    out.innerHTML = `<div class="kpis">
+        <div class="kpi"><span>Fund</span><b>${rs(fund)}</b></div>
+        <div class="kpi"><span>Invested</span><b>${fund ? rs(A.invested) : '–'}</b></div>
+        <div class="kpi"><span>Cash left</span><b>${fund ? rs(A.cash) : '–'}</b></div>
+        <div class="kpi"><span>Holdings</span><b>${L.index.length + L.value.length + L.mom.length}</b></div>
+        <div class="kpi"><span>Data as of</span><b>${esc(DATA.now.date || '–')}</b></div></div>`
+      + A.parts.map(p => {
+        const extraH = p.k === 'index' ? '<th class="r">3M</th>' : p.k === 'value' ? '<th class="r">Score</th><th class="r">PE</th>' : '<th class="r">Momentum</th><th class="r">PE</th>';
+        const extra = x => p.k === 'index' ? `<td class="r">${pill(x.r3)}</td>` : p.k === 'value' ? `<td class="r">${fmt(x.score, 0)}</td><td class="r">${fmt(x.pe, 1)}</td>`
+          : `<td class="r">${num(x.mom) ? Math.round(x.mom) : '–'}</td><td class="r">${fmt(x.pe, 1)}</td>`;
+        const rule = p.k === 'index' ? pairNotes(L.pk, 'r3') + (etfMiss ? '<p class="note">ETF prices are not in yet: they come with the next weekly price update (part 1). Amounts are shown; units appear once prices are in.</p>' : '')
+          : p.k === 'value' ? '<p class="rule">Every stock that passes the Deep value screen (All lists: NIFTY 500, Smallcap 500, Microcap 250), equal weight.</p>'
+          : `<p class="rule">Momentum screen (All lists), highest momentum first, ties by highest PE: top ${MOM_TOP}, equal weight.</p>`;
+        return `<section class="sleeve"><h2>${p.label} <small>${Math.round(p.share * 100)}% · ${fund ? rs(p.amt) : ''} · ${p.rows.length} holdings${fund && p.rows.length ? ' · ' + rs(p.amt / p.rows.length) + ' each' : ''}</small></h2>${rule}
+          <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Price ₹</th>${extraH}<th class="r">Units</th><th class="r">Amount ₹</th></tr></thead><tbody>${
+          p.rows.length ? p.rows.map(x => `<tr><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td><td class="r">${fmt(x.price, 2)}</td>${extra(x)}
+            <td class="r ${x.qty === 0 ? 'zero' : ''}" ${x.qty === 0 ? 'title="Price is above this holding\'s share of the fund"' : ''}>${fund && x.qty != null ? fmt(x.qty, 0) : '–'}</td><td class="r">${fund && x.invested != null ? fmt(x.invested, 0) : '–'}</td></tr>`).join('')
+          : `<tr><td colspan="7" class="empty">Nothing passes this screen today.</td></tr>`}</tbody></table></div></section>`;
+      }).join('');
+    $('#csv').disabled = !fund;
+  } else {
+    const B = DATA.back;
+    if (!B || !B.hasPrice) { out.innerHTML = '<p class="empty">The 1-year backtest needs prices from 1 year back (prices.csv); they are not available yet.</p>'; return; }
+    const L = lists('back');
+    const r = {index: avg(L.index.map(x => x.ret)), value: avg(L.value.map(x => x.ret)), mom: avg(L.mom.map(x => x.ret))};
+    const tot = SPLIT.reduce((s, [k, , sh]) => s + sh * (num(r[k]) ? r[k] : 0), 0);
+    const bench = num(B.bench) ? B.bench : (DATA.etf && DATA.etf.bench ? DATA.etf.bench.ret1y : null);
+    const f = fund || 0;
+    out.innerHTML = `<p class="rule">The same rules applied to the data as it stood on <b>${esc(B.date)}</b>, held without changes until ${esc(DATA.now.date)}. Equal weight inside each part; 40 / 40 / 20 between parts.</p>
+      <div class="kpis">
+        <div class="kpi"><span>Mix return</span><b class="${tot >= 0 ? 'pos' : 'neg'}">${pct(tot)}</b></div>
+        <div class="kpi"><span>NIFTY 500</span><b>${pct(bench)}</b></div>
+        ${SPLIT.map(([k, label]) => `<div class="kpi"><span>${label}</span><b class="${(r[k] || 0) >= 0 ? 'pos' : 'neg'}">${pct(r[k])}</b></div>`).join('')}
+        ${f ? `<div class="kpi"><span>${rs(f)} would be</span><b>${rs(f * (1 + tot / 100))}</b></div>` : ''}</div>`
+      + SPLIT.map(([k, label, sh]) => {
+        const rows = L[k];
+        const rule = k === 'index' ? pairNotes(L.pk, 'r3Back') : '';
+        return `<section class="sleeve"><h2>${label} <small>${Math.round(sh * 100)}% · ${rows.length} holdings then · average ${pct(r[k])}</small></h2>${rule}
+          <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">${k === 'index' ? '3M then' : k === 'value' ? 'Score then' : 'Momentum then'}</th><th class="r">Return since</th></tr></thead><tbody>${
+          rows.length ? rows.map(x => `<tr><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td>
+            <td class="r">${k === 'index' ? pct(x.r3) : k === 'value' ? fmt(x.score, 0) : (num(x.mom) ? Math.round(x.mom) : '–')}</td><td class="r">${pill(x.ret)}</td></tr>`).join('')
+          : '<tr><td colspan="4" class="empty">Nothing passed this screen then.</td></tr>'}</tbody></table></div></section>`;
+      }).join('')
+      + (L.index.some(x => !num(x.ret)) ? '<p class="note">ETFs without prices count as 0% inside the index part.</p>' : '');
+  }
+}
+function csv() {
+  if (!LAST || !LAST.fund) return;
+  const lines = [['Part', 'Symbol', 'Name', 'Price', 'Units', 'Amount'].join(',')];
+  LAST.A.parts.forEach(p => p.rows.forEach(x => lines.push([p.label, x.sym, '"' + String(x.name || '').replace(/"/g, '""') + '"', num(x.price) ? x.price : '', x.qty == null ? '' : x.qty, x.invested == null ? '' : Math.round(x.invested)].join(','))));
+  lines.push(['Cash left', '', '', '', '', Math.round(LAST.A.cash)].join(','));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([lines.join('\n')], {type: 'text/csv'}));
+  a.download = 'Portfolio_builder_' + Math.round(LAST.fund) + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+$('#fund').value = (() => { const v = +lsGet('pb_fund'); return v > 0 ? v.toLocaleString('en-IN') : ''; })();
+$('#fund').addEventListener('input', e => {
+  const n = String(e.target.value).replace(/[^\d]/g, '');
+  e.target.value = n ? (+n).toLocaleString('en-IN') : '';
+  paintSplit();
+});
+$('#fundForm').addEventListener('submit', e => { e.preventDefault(); lsSet('pb_fund', String(fundVal())); paint(); });
+$('#csv').addEventListener('click', csv);
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
+  TAB = b.dataset.tab; document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b)); paint();
+}));
+paintSplit();
+
+(async () => {
+  await waitFor(() => document.documentElement.classList.contains('auth-ok'), 600000);   // auth.js: signed in
+  try {
+    const [sc, etf] = await Promise.all([screens(), etfData()]);
+    DATA = Object.assign({etf}, sc);
+    status(`Ready · data as of ${DATA.now.date}${DATA.back ? ' · backtest from ' + DATA.back.date : ''}`);
+    paint();
+  } catch (e) { status(e.message || 'Could not load the screens.', true); }
+})();
+</script>
+</body>
+</html>
