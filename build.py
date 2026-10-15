@@ -974,5 +974,11 @@ def build(deploy=False):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="HNImanshu Stock Screener Build")
     ap.add_argument("--deploy", action="store_true", help="Deploy to Firebase after build")
+    ap.add_argument("--etf-only", action="store_true",
+                    help="only rewrite public/builder_etf.json (ETF prices + momentum) from prices.csv; "
+                         "no screener / fundamentals rebuild (cron.yml mode 4)")
     args = ap.parse_args()
+    if args.etf_only:
+        n = write_builder_etf(OUTPUT.parent / "builder_etf.json")
+        sys.exit(0 if n else 1)          # no ETF priced → fail, so a stale file is never redeployed as "updated"
     build(args.deploy)
