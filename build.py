@@ -864,7 +864,7 @@ def write_builder_etf(out: Path) -> int:
     def monthly(sym):
         r = px.get(sym)
         if not r:
-            return None, None
+            return None, None, None
         score = []
         for k in range(13):
             ps = []
@@ -875,15 +875,20 @@ def write_builder_etf(out: Path) -> int:
             score.append(round(sum(ps) / len(ps) * 100, 2) if len(ps) >= 2 else None)
         path = str(r.get("PX_MONTHLY") or "")
         pxm = [num(t) if t else None for t in path.split("|")] if path and path != "nan" else []
-        return score, (pxm if len(pxm) == 13 else None)
+        # Composite dual momentum: 0.5 x R6M + 0.5 x R12M per month point (needs only this ETF's own prices)
+        comp = []
+        for k in range(13):
+            r6, r12 = num(r.get(mcol(k, 6))), num(r.get(mcol(k, 12)))
+            comp.append(round(0.5 * r6 + 0.5 * r12, 2) if r6 is not None and r12 is not None else None)
+        return score, (pxm if len(pxm) == 13 else None), comp
     for e in ETF_SYMS:
         x = row(e)
         if x:
-            x["scoreM"], x["pxM"] = monthly(e)
+            x["scoreM"], x["pxM"], x["compM"] = monthly(e)
             data["etf"][e] = x
     data["bench"] = row(BENCH_SYM)
     if data["bench"]:
-        data["bench"]["scoreM"], data["bench"]["pxM"] = monthly(BENCH_SYM)
+        data["bench"]["scoreM"], data["bench"]["pxM"], data["bench"]["compM"] = monthly(BENCH_SYM)
     try:                                                # k = 12 is BACK_DATE (= data date − 365 days); the dates of the other points follow
         asof = pd.to_datetime((px.get(BENCH_SYM) or next(iter(px.values()))).get("BACK_DATE")) + pd.Timedelta(days=365)
         data["monthDates"] = [(asof - pd.Timedelta(days=d)).strftime("%Y-%m-%d") for d in MDAYS]
