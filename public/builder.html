@@ -133,8 +133,10 @@ const SPLIT = [['index', 'Index ETFs', 0.4], ['value', 'Value', 0.4], ['mom', 'M
 const ETF_NAME = {GOLDBEES: 'Nippon India ETF Gold BeES', ITBEES: 'Nippon India ETF Nifty IT', ALPHA: 'Kotak Nifty Alpha 50 ETF',
   JUNIORBEES: 'Nippon India ETF Nifty Next 50 Junior BeES', MON100: 'Motilal Oswal Nasdaq 100 ETF',
   HNGSNGBEES: 'Nippon India ETF Hang Seng BeES', FMCGIETF: 'ICICI Prudential Nifty FMCG ETF'};
-/* [challenger, default]: the slot holds the default (GOLDBEES) unless the challenger's 3-month return is higher */
+/* [challenger, default]: the slot holds the default (GOLDBEES) unless the challenger's momentum score (the
+   Momentum screen's method) is at least 10% higher than the default's */
 const PAIRS = [['ITBEES', 'GOLDBEES'], ['ALPHA', 'GOLDBEES']];
+const MARGIN = 1.10;
 const ALWAYS = ['JUNIORBEES', 'MON100', 'HNGSNGBEES', 'FMCGIETF', 'ALPHA'];
 const MOM_TOP = 15;
 
@@ -153,9 +155,16 @@ const status = (t, err) => { const s = $('#status'); s.textContent = t; s.classL
 
 /* ---------- the screens: Fundamentals itself, running hidden inside this page (same login, same engine) ---------- */
 /* Code run inside that page: the Deep value list and the Momentum list, today or (BACK) as of the back date */
-const HELPER = `window.__pb = function (top) {
+const HELPER = `window.__pb = function (top, etfJson) {
   GF.uni = 'all'; GF.psu = false; GF.semi = false;              // the 3 lists, nothing hidden (not saved to its settings)
   setMode(); computeScores();
+  /* ETFs scored exactly like computeMomentum(): average percentile of 3M, 6M, 12-1M returns among every stock on screen */
+  const cols = [0, 1, 2].map(i => S.map(s => s.mom ? s.mom[i] : null).filter(ok).sort((a, b) => a - b));
+  const etfScore = {}, etf = JSON.parse(etfJson || '{}');
+  for (const k in etf) {
+    const m = etf[k] || [], p = [0, 1, 2].filter(i => ok(m[i]) && cols[i].length).map(i => pctl(cols[i], m[i], true));
+    etfScore[k] = p.length >= 2 ? p.reduce((a, x) => a + x, 0) / p.length * 100 : null;
+  }
   const pv = x => x == null || !isFinite(x) ? -1e9 : x;
   const pick = s => ({sym: s.sym, name: s.name, ind: s.ind, cmp: s.cmp, pe: s.pe, mom: s.momS, score: s.score, url: s.url,
                       ret: BACK ? sv(s, 'ret') : null});
@@ -164,7 +173,7 @@ const HELPER = `window.__pb = function (top) {
   const mom = V().filter(s => ok(s.momS) && s.cmp != null && passVF(s, MOM_DEF))
     .sort((a, b) => Math.round(b.momS) - Math.round(a.momS) || pv(b.pe) - pv(a.pe)).slice(0, top);
   return JSON.stringify({back: BACK, date: BACK ? D.then.date : D.asOf, hasPrice: BACK ? !!D.then.hasPrice : true,
-    bench: BACK && D.then.bench ? D.then.bench.ret : null, value: value.map(pick), mom: mom.map(pick)});
+    bench: BACK && D.then.bench ? D.then.bench.ret : null, value: value.map(pick), mom: mom.map(pick), etfScore});
 };`;
 let ENG = null;
 function engine() {
@@ -193,18 +202,19 @@ const waitFor = (test, ms = 45000) => new Promise((res, rej) => {
   const tick = () => { let v = false; try { v = test(); } catch (e) {} if (v) return res(); if (Date.now() - t0 > ms) return rej(new Error('timeout')); setTimeout(tick, 200); };
   tick();
 });
-async function screens() {
+async function screens(etf) {
+  const E = (etf && etf.etf) || {}, moms = k => JSON.stringify(Object.fromEntries(Object.keys(E).map(s => [s, E[s][k] || []])));
   const w = await engine();
   status('Working out today\'s lists…');
   w.eval('setHistorical(false, null, true)');
   await waitFor(() => w.eval('!BACK'));
-  const now = JSON.parse(w.__pb(MOM_TOP));
+  const now = JSON.parse(w.__pb(MOM_TOP, moms('mom')));
   status('Working out the lists as they stood 1 year ago…');
   w.eval("setHistorical(true, '1Y', true)");
   let back = null;
   try {
     await waitFor(() => w.eval("BACK && D.then && (D.then.key || '1Y') === '1Y' && !!D.then.stocks"));
-    back = JSON.parse(w.__pb(MOM_TOP));
+    back = JSON.parse(w.__pb(MOM_TOP, moms('momBack')));
   } catch (e) { back = null; }
   w.eval('setHistorical(false, null, true)');
   return {now, back};
@@ -212,13 +222,13 @@ async function screens() {
 let ETF_P = null;
 const etfData = () => ETF_P = ETF_P || fetch('builder_etf.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null);
 
-/* ---------- index part: pairs by 3-month return ---------- */
-function etfPick(E, key) {
+/* ---------- index part: each pair slot = GOLDBEES unless the challenger's momentum score beats it by 10%+ ---------- */
+function etfPick(sc) {
   const notes = [], set = [];
   PAIRS.forEach(([c, d]) => {
-    const rc = E[c] ? E[c][key] : null, rd = E[d] ? E[d][key] : null;
-    const win = num(rc) && (!num(rd) || rc > rd) ? c : d;
-    notes.push({c, d, rc, rd, win}); set.push(win);
+    const mc = sc[c], md = sc[d], need = num(md) ? md * MARGIN : null;
+    const win = num(mc) && (!num(md) || mc >= need) ? c : d;
+    notes.push({c, d, mc, md, need, win}); set.push(win);
   });
   ALWAYS.forEach(x => set.push(x));
   return {list: [...new Set(set)], notes};
@@ -248,18 +258,19 @@ function paintSplit() {
 }
 function lists(when) {
   const D = DATA, E = (D.etf && D.etf.etf) || {}, S = when === 'now' ? D.now : D.back;
-  const key = when === 'now' ? 'r3' : 'r3Back';
-  const pk = etfPick(E, key);
+  const key = when === 'now' ? 'r3' : 'r3Back', sc = (S && S.etfScore) || {};
+  const pk = etfPick(sc);
   const index = pk.list.map(sym => { const e = E[sym] || {};
-    return {sym, name: ETF_NAME[sym] || sym, price: e.ltp, r3: e[key], ret: e.ret1y, etf: true}; });
+    return {sym, name: ETF_NAME[sym] || sym, price: e.ltp, r3: e[key], mom: sc[sym], ret: e.ret1y, etf: true}; });
   const stock = s => ({sym: s.sym, name: s.name, ind: s.ind, price: s.cmp, pe: s.pe, mom: s.mom, score: s.score, url: s.url, ret: s.ret});
   return {pk, index, value: S ? S.value.map(stock) : [], mom: S ? S.mom.map(stock) : []};
 }
 function symCell(x) {
   return x.url ? `<a class="sym" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer" title="Open on Screener.in">${esc(x.sym)}</a>` : `<b>${esc(x.sym)}</b>`;
 }
-function pairNotes(pk, key) {
-  return `<div class="pairs">${pk.notes.map(n => `<span>${esc(n.c)} ${pct(n.rc)} vs ${esc(n.d)} ${pct(n.rd)} (3M) → <b>${esc(n.win)}</b></span>`).join('')}
+const ms = v => num(v) ? Math.round(v) : '–';
+function pairNotes(pk) {
+  return `<div class="pairs">${pk.notes.map(n => `<span>Momentum ${esc(n.c)} ${ms(n.mc)} vs ${esc(n.d)} ${ms(n.md)}${num(n.need) ? ' (needs ≥ ' + fmt(n.need, 1) + ')' : ''} → <b>${esc(n.win)}</b></span>`).join('')}
     <span>Always: ${ALWAYS.map(esc).join(', ')} · each ETF once, equal weight</span></div>`;
 }
 function paint() {
@@ -277,10 +288,10 @@ function paint() {
         <div class="kpi"><span>Holdings</span><b>${L.index.length + L.value.length + L.mom.length}</b></div>
         <div class="kpi"><span>Data as of</span><b>${esc(DATA.now.date || '–')}</b></div></div>`
       + A.parts.map(p => {
-        const extraH = p.k === 'index' ? '<th class="r">3M</th>' : p.k === 'value' ? '<th class="r">Score</th><th class="r">PE</th>' : '<th class="r">Momentum</th><th class="r">PE</th>';
-        const extra = x => p.k === 'index' ? `<td class="r">${pill(x.r3)}</td>` : p.k === 'value' ? `<td class="r">${fmt(x.score, 0)}</td><td class="r">${fmt(x.pe, 1)}</td>`
+        const extraH = p.k === 'index' ? '<th class="r">Momentum</th><th class="r">3M</th>' : p.k === 'value' ? '<th class="r">Score</th><th class="r">PE</th>' : '<th class="r">Momentum</th><th class="r">PE</th>';
+        const extra = x => p.k === 'index' ? `<td class="r">${ms(x.mom)}</td><td class="r">${pill(x.r3)}</td>` : p.k === 'value' ? `<td class="r">${fmt(x.score, 0)}</td><td class="r">${fmt(x.pe, 1)}</td>`
           : `<td class="r">${num(x.mom) ? Math.round(x.mom) : '–'}</td><td class="r">${fmt(x.pe, 1)}</td>`;
-        const rule = p.k === 'index' ? pairNotes(L.pk, 'r3') + (etfMiss ? '<p class="note">ETF prices are not in yet: they come with the next weekly price update (part 1). Amounts are shown; units appear once prices are in.</p>' : '')
+        const rule = p.k === 'index' ? pairNotes(L.pk) + (etfMiss ? '<p class="note">ETF prices are not in yet: they come with the next weekly price update (part 1). Amounts are shown; units appear once prices are in.</p>' : '')
           : p.k === 'value' ? '<p class="rule">Every stock that passes the Deep value screen (All lists: NIFTY 500, Smallcap 500, Microcap 250), equal weight.</p>'
           : `<p class="rule">Momentum screen (All lists), highest momentum first, ties by highest PE: top ${MOM_TOP}, equal weight.</p>`;
         return `<section class="sleeve"><h2>${p.label} <small>${Math.round(p.share * 100)}% · ${fund ? rs(p.amt) : ''} · ${p.rows.length} holdings${fund && p.rows.length ? ' · ' + rs(p.amt / p.rows.length) + ' each' : ''}</small></h2>${rule}
@@ -306,11 +317,11 @@ function paint() {
         ${f ? `<div class="kpi"><span>${rs(f)} would be</span><b>${rs(f * (1 + tot / 100))}</b></div>` : ''}</div>`
       + SPLIT.map(([k, label, sh]) => {
         const rows = L[k];
-        const rule = k === 'index' ? pairNotes(L.pk, 'r3Back') : '';
+        const rule = k === 'index' ? pairNotes(L.pk) : '';
         return `<section class="sleeve"><h2>${label} <small>${Math.round(sh * 100)}% · ${rows.length} holdings then · average ${pct(r[k])}</small></h2>${rule}
-          <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">${k === 'index' ? '3M then' : k === 'value' ? 'Score then' : 'Momentum then'}</th><th class="r">Return since</th></tr></thead><tbody>${
+          <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">${k === 'value' ? 'Score then' : 'Momentum then'}</th><th class="r">Return since</th></tr></thead><tbody>${
           rows.length ? rows.map(x => `<tr><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td>
-            <td class="r">${k === 'index' ? pct(x.r3) : k === 'value' ? fmt(x.score, 0) : (num(x.mom) ? Math.round(x.mom) : '–')}</td><td class="r">${pill(x.ret)}</td></tr>`).join('')
+            <td class="r">${k === 'value' ? fmt(x.score, 0) : ms(x.mom)}</td><td class="r">${pill(x.ret)}</td></tr>`).join('')
           : '<tr><td colspan="4" class="empty">Nothing passed this screen then.</td></tr>'}</tbody></table></div></section>`;
       }).join('')
       + (L.index.some(x => !num(x.ret)) ? '<p class="note">ETFs without prices count as 0% inside the index part.</p>' : '');
@@ -344,8 +355,8 @@ paintSplit();
 (async () => {
   await waitFor(() => document.documentElement.classList.contains('auth-ok'), 600000);   // auth.js: signed in
   try {
-    const [sc, etf] = await Promise.all([screens(), etfData()]);
-    DATA = Object.assign({etf}, sc);
+    const etf = await etfData();
+    DATA = Object.assign({etf}, await screens(etf));
     status(`Ready · data as of ${DATA.now.date}${DATA.back ? ' · backtest from ' + DATA.back.date : ''}`);
     paint();
   } catch (e) { status(e.message || 'Could not load the screens.', true); }
