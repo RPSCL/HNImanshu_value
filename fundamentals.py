@@ -1746,6 +1746,7 @@ __AUTH_BODY__<script>
   <a href="#/momentum" data-t="momentum">Momentum</a>
   <a href="#/all" data-t="all">All Stocks</a>
   <a href="#/method" data-t="method">Methodology</a>
+  <a href="builder" target="_blank" rel="noopener" title="Opens in a new tab">Portfolio builder ↗</a>
 </nav>
 <div id="mnav" aria-label="Pages and screens">
   <button type="button" class="mnav-b" id="mnavTab" aria-haspopup="dialog"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Value screen</span><i>▾</i></button>
@@ -2234,7 +2235,8 @@ const assetCols = () => [C.pta].concat(has('pfa') ? [C.pfa] : [], has('invp') ? 
 const view = $('#view');
 /* phone: two menu buttons replace the tab row and the row of screens */
 const TABS = [['#/value', 'Value screen', 'Cheap, good-quality stocks by screen'], ['#/momentum', 'Momentum', 'Strongest price trends'],
-              ['#/', 'Industries', 'Industry PE, PB, ROE'], ['#/all', 'All Stocks', 'Every stock with every column'], ['#/method', 'Methodology', 'How every number is worked out']];
+              ['#/', 'Industries', 'Industry PE, PB, ROE'], ['#/all', 'All Stocks', 'Every stock with every column'], ['#/method', 'Methodology', 'How every number is worked out'],
+              ['builder', 'Portfolio builder ↗', 'Index + value + momentum mix, in a new tab']];
 function syncMnav() {
   const h = location.hash || '#/', t = TABS.find(x => x[0] === h) || (h.startsWith('#/industry/') ? TABS[2] : null);
   $('#mnavTab span').textContent = t ? t[1] : 'Menu';
@@ -2248,7 +2250,8 @@ function menuSheet(title, items, pick) {
 }
 $('#mnavTab').addEventListener('click', () => {
   const h = location.hash || '#/';
-  menuSheet('Go to', TABS.map(t => ({name: t[1], sub: t[2], href: t[0], on: t[0] === h || (t[0] === '#/' && h.startsWith('#/industry/'))})), it => { location.hash = it.href; });
+  menuSheet('Go to', TABS.map(t => ({name: t[1], sub: t[2], href: t[0], on: t[0] === h || (t[0] === '#/' && h.startsWith('#/industry/'))})),
+    it => { if (it.href[0] === '#') location.hash = it.href; else window.open(it.href, '_blank', 'noopener'); });   // the builder: its own tab
 });
 $('#mnavPre').addEventListener('click', () => {
   const pre = [...view.querySelectorAll('.fbox .preset')];

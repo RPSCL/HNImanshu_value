@@ -803,6 +803,52 @@ def write_nse_list(out: Path) -> int:
         return 0
 
 
+def write_builder_etf(out: Path) -> int:
+    """prices.csv → public/builder_etf.json for the Portfolio Builder (builder.html), index part:
+    {"asOf", "etf": {SYM: {ltp, ltpDate, r3: 3-month return now %, r3Back: 3-month return as of 1Y back %,
+                           ret1y: return since 1Y back %}}, "bench": {...same for the NIFTY 500}}.
+    The ETFs are fetched by fetch_prices.py with part 1 (ETF_SYMS)."""
+    try:
+        from fetch_prices import ETF_SYMS, BENCH_SYM
+    except Exception:
+        ETF_SYMS, BENCH_SYM = ["GOLDBEES", "ITBEES", "ALPHA", "JUNIORBEES", "MON100", "HNGSNGBEES", "FMCGIETF"], "^NIFTY500"
+    src = BASE / "prices.csv"
+    data = {"asOf": None, "etf": {}, "bench": None}
+    try:
+        px = {r["SYMBOL"]: r for r in pd.read_csv(src).to_dict("records")} if src.exists() else {}
+    except Exception as e:
+        print(f"  [WARN] builder_etf.json: prices.csv unreadable ({e})")
+        px = {}
+    def num(v):
+        try:
+            v = float(v)
+            return None if v != v else round(v, 4)
+        except Exception:
+            return None
+    def row(sym):
+        r = px.get(sym)
+        if not r or not str(r.get("STATUS", "")).startswith(("OK", "STALE")):
+            return None
+        ltp, p1 = num(r.get("LTP")), num(r.get("PRICE_1Y_ADJ"))
+        return {"ltp": ltp, "ltpDate": r.get("LTP_DATE") if isinstance(r.get("LTP_DATE"), str) else None,
+                "r3": num(r.get("MOM_NOW_R3")), "r3Back": num(r.get("MOM_1Y_R3")),
+                "ret1y": round((ltp / p1 - 1) * 100, 2) if ltp and p1 else None,
+                "backDate": r.get("PRICE_1Y_DATE") if isinstance(r.get("PRICE_1Y_DATE"), str) else None}
+    for e in ETF_SYMS:
+        x = row(e)
+        if x:
+            data["etf"][e] = x
+    data["bench"] = row(BENCH_SYM)
+    dates = [x["ltpDate"] for x in data["etf"].values() if x.get("ltpDate")]
+    data["asOf"] = max(dates) if dates else None
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
+    miss = [e for e in ETF_SYMS if e not in data["etf"]]
+    print(f"  builder_etf.json: {len(data['etf'])} of {len(ETF_SYMS)} ETFs"
+          + (f" (no prices yet: {', '.join(miss)} — the next prices run, part 1, fetches them)" if miss else ""))
+    return len(data["etf"])
+
+
 def build_fundamentals():
     """Build public/fundamentals.html from the same 3 CSVs (explicit paths, so test_*.csv is never read)."""
     print("\nBuilding Fundamentals page...\n")
@@ -843,6 +889,7 @@ def build(deploy=False):
         print("  [WARN] Others list skipped")
         data_oth = []
     n_nse = write_nse_list(OUTPUT.parent / "nse_all.json")
+    write_builder_etf(OUTPUT.parent / "builder_etf.json")   # Portfolio Builder: ETF prices / 3-month returns
 
     if data_sc250 is None:
         data_sc250 = []

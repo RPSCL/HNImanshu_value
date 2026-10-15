@@ -55,6 +55,8 @@ CSV_FILES   = ["nifty500_valuation.csv", "niftysmallcap500_valuation.csv", "nift
 SCRIP_URL   = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
 BENCH_SYM   = "^NIFTY500"                 # row name used for the benchmark in prices.csv
 BENCH_NAMES = {"nifty500"}               # matched against the index's symbol / name, spaces removed, lower case
+# ETFs for the Portfolio Builder (builder.html, index part): fetched with part 1, like the benchmark
+ETF_SYMS    = ["GOLDBEES", "ITBEES", "ALPHA", "JUNIORBEES", "MON100", "HNGSNGBEES", "FMCGIETF"]
 BACK_DAYS   = 365                         # must match fundamentals.BACK_DAYS
 PERIODS     = {"3M": 91, "6M": 182, "9M": 273, "1Y": 365, "1_25Y": 456, "1_5Y": 548}   # must match fundamentals.PERIODS
 RATE        = 2.5                         # max candle requests per second, shared by all workers (Angel throttles ~3/s)
@@ -379,7 +381,7 @@ def main():
 		part_syms = syms
 	todo = part_syms[:a.limit] if a.limit else part_syms
 	if a.part in (None, 1):
-		todo = todo + [BENCH_SYM]                                    # the NIFTY 500 benchmark: once, with part 1
+		todo = todo + [BENCH_SYM] + [e for e in ETF_SYMS if e not in todo]   # benchmark + builder ETFs: once, with part 1
 	missing = [s for s in todo if s not in tmap]
 	log(f"Mapped to Angel tokens: {len(todo) - len(missing)} / {len(todo)}"
 	    + (f"  (not found: {', '.join(missing[:15])}{' …' if len(missing) > 15 else ''})" if missing else ""))
@@ -464,7 +466,7 @@ def main():
 		rows.append(row)
 	if a.part:                                                       # one third fetched: keep the other thirds' rows
 		fresh = {r["SYMBOL"]: r for r in rows}
-		keep = [s for s in syms + [BENCH_SYM] if s in fresh or s in old]
+		keep = list(dict.fromkeys(s for s in syms + [BENCH_SYM] + ETF_SYMS if s in fresh or s in old))
 		rows = [fresh.get(s) or old[s] for s in keep]
 		log(f"Part {a.part}: {len(fresh)} rows fetched now, {len(rows) - len(fresh)} kept from earlier parts / runs")
 	el = time.monotonic() - t0
