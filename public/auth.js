@@ -36,6 +36,7 @@ try {
   const hosted = await fetch("/__/firebase/init.json").then((r) => r.json());
   if (hosted.projectId === firebaseConfig.projectId && hosted.databaseURL) firebaseConfig.databaseURL = hosted.databaseURL;
 } catch (e) {}
+const ADMIN_EMAIL = "admin@users.hnimanshu.app";       // same admin rule as the Users add-on: this account, or a hni_admins/{uid} document
 const USER_DOMAIN = "users.hnimanshu.app";        // username → hidden email for Firebase
 const SESSION_DAYS = 7;                           // log out a week after the last sign-in
 const USERS = "hni_users";                        // Firestore: one doc per account (its own owner writes it)
@@ -305,6 +306,11 @@ const ready = new Promise((resolve) => {
         return r.json().catch(() => ({ error: "HTTP " + r.status }));
       },
     };
+    // true / false: is this account an admin? (Portfolio builder button on Fundamentals + the builder page itself)
+    window.hniAdmin = (async () => {
+      if (u.email === ADMIN_EMAIL) return true;
+      try { await needFS(); return (await getDoc(doc(db, "hni_admins", u.uid))).exists(); } catch (e) { return false; }
+    })();
     window.dispatchEvent(new Event("hni-ready"));
     if (GATED) showUser(u);
     idle(() => { record(u); loadExt(u); }, 1500);

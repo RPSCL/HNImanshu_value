@@ -7,6 +7,7 @@
 <meta name="description" content="Split a fund into index ETFs, value stocks and momentum stocks by fixed rules, with a 1-year backtest.">
 <style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>
 <link rel="stylesheet" href="auth.css">
+<style>html:not(.pb-admin) .lead,html:not(.pb-admin) .card,html:not(.pb-admin) .tabs,html:not(.pb-admin) #out,html:not(.pb-admin) .disc{display:none}</style>
 <script type="module" src="auth.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap">
@@ -102,9 +103,11 @@ tbody tr:hover td{background:var(--hover)}
   </header>
 
   <h1>Portfolio builder</h1>
+  <p class="lead" id="gate" style="display:block">Checking admin access…</p>
   <p class="lead">Enter a fund amount. It is split <b>40% index ETFs</b>, <b>40% value stocks</b> (Deep value screen) and
     <b>20% momentum stocks</b> (top 15 of the Momentum screen), equal weight inside each part, using the same data and
-    screens as Fundamentals. The backtest applies the same rules as they stood 1 year ago.</p>
+    screens as Fundamentals. <b>PSU stocks are never picked</b> (value or momentum). The backtest applies the same rules as
+    they stood 1 year ago, and re-checks the ETF pairs every month.</p>
 
   <div class="card">
     <form class="fund" id="fundForm" autocomplete="off">
@@ -156,9 +159,9 @@ const status = (t, err) => { const s = $('#status'); s.textContent = t; s.classL
 /* ---------- the screens: Fundamentals itself, running hidden inside this page (same login, same engine) ---------- */
 /* Code run inside that page: the Deep value list and the Momentum list, today or (BACK) as of the back date */
 const HELPER = `window.__pb = function (top, etfJson) {
-  GF.uni = 'all'; GF.psu = false; GF.semi = false;              // the 3 lists, nothing hidden (not saved to its settings)
+  GF.uni = 'all'; GF.psu = true; GF.semi = false;               // the 3 lists, PSU stocks hidden = never picked, now or in the backtest (not saved to its settings)
   setMode(); computeScores();
-  /* ETFs scored exactly like computeMomentum(): average percentile of 3M, 6M, 12-1M returns among every stock on screen */
+  /* ETFs scored exactly like computeMomentum(): average percentile of 3M, 6M, 12-1M returns among every stock (S, PSU included, as the screen ranks them) */
   const cols = [0, 1, 2].map(i => S.map(s => s.mom ? s.mom[i] : null).filter(ok).sort((a, b) => a - b));
   const etfScore = {}, etf = JSON.parse(etfJson || '{}');
   for (const k in etf) {
@@ -234,6 +237,29 @@ function etfPick(sc) {
   return {list: [...new Set(set)], notes};
 }
 
+/* ---------- index part, 1-year backtest: the ETF pairs are re-scored EVERY MONTH ----------
+   builder_etf.json carries, per ETF, scoreM[k] (momentum score) and pxM[k] (adjusted close) for k = 12 (1 year back) … 0 (now).
+   Each month the same rule as today picks the slot ETFs (default unless the challenger is MARGIN higher), the unique list is
+   held equal weight for that month and rebalanced at the next month point; returns are chained. No trading costs. */
+function hasMonthly(E) { return Object.keys(E).some(s => E[s] && Array.isArray(E[s].pxM) && E[s].pxM.length === 13); }
+function etfBacktest(E, dates) {
+  const rows = [], held = {}; let growth = 1, scored = 0, switches = 0, prev = null;
+  for (let k = 12; k >= 1; k--) {
+    const sc = {}; Object.keys(E).forEach(s => { const v = E[s] && E[s].scoreM; sc[s] = v && num(v[k]) ? v[k] : null; });
+    const pk = etfPick(sc);
+    if (PAIRS.some(([c, d]) => num(sc[c]) && num(sc[d]))) scored++;
+    const wins = pk.notes.map(n => n.win);
+    if (prev) switches += wins.filter((w, i) => w !== prev[i]).length;
+    prev = wins;
+    const rets = pk.list.map(s => { const p = E[s] && E[s].pxM, a = p && p[k], b = p && p[k - 1]; return num(a) && num(b) && a > 0 ? (b / a - 1) * 100 : null; });
+    const mr = avg(rets.map(x => x == null ? 0 : x));               // an ETF without a price counts 0%, as before
+    growth *= 1 + mr / 100;
+    pk.list.forEach((s, i) => { const h = held[s] = held[s] || {months: 0, g: 1}; h.months++; h.g *= 1 + (rets[i] || 0) / 100; });
+    rows.push({k, date: dates && dates[k], list: pk.list, notes: pk.notes, ret: mr});
+  }
+  return {rows, ret: (growth - 1) * 100, held, scored, switches};
+}
+
 /* ---------- allocation ---------- */
 function allocate(fund, lists) {
   const parts = SPLIT.map(([k, label, share]) => {
@@ -273,6 +299,17 @@ function pairNotes(pk) {
   return `<div class="pairs">${pk.notes.map(n => `<span>Momentum ${esc(n.c)} ${ms(n.mc)} vs ${esc(n.d)} ${ms(n.md)}${num(n.need) ? ' (needs ≥ ' + fmt(n.need, 1) + ')' : ''} → <b>${esc(n.win)}</b></span>`).join('')}
     <span>Always: ${ALWAYS.map(esc).join(', ')} · each ETF once, equal weight</span></div>`;
 }
+function indexMonthly(BT, sh) {
+  const cell = (n) => `${esc(n.win)} <small>(${esc(n.c)} ${ms(n.mc)} vs ${esc(n.d)} ${ms(n.md)})</small>`;
+  const heldRows = Object.entries(BT.held).sort((a, b) => b[1].months - a[1].months)
+    .map(([s, h]) => `<tr><td><b>${esc(s)}</b></td><td class="nm">${esc(ETF_NAME[s] || s)}</td><td class="r">${h.months} of 12</td><td class="r">${pill((h.g - 1) * 100)}</td></tr>`).join('');
+  const monthRows = BT.rows.map(x => `<tr><td>${esc(x.date || ('−' + x.k + ' mo'))}</td>${x.notes.map(n => `<td>${cell(n)}</td>`).join('')}<td class="r">${x.list.length}</td><td class="r">${pill(x.ret)}</td></tr>`).join('');
+  const cov = BT.scored < 12 ? `<p class="note">Monthly momentum scores were available for ${BT.scored} of 12 months; in the others the default (${esc(PAIRS[0][1])}) is held. They fill in once the stocks' monthly momentum is in prices.csv (the Saturday price parts, or run cron.yml mode 2, parts 1–3, once).</p>` : '';
+  return `<section class="sleeve"><h2>Index ETFs <small>${Math.round(sh * 100)}% · re-checked monthly · ${BT.switches} switch${BT.switches === 1 ? '' : 'es'} in the year · ${pct(BT.ret)}</small></h2>
+    <p class="rule">Each month the pair rule is applied to that month's momentum scores: the slot is ${esc(PAIRS[0][1])} unless the challenger scores at least ${Math.round((MARGIN - 1) * 100)}% higher. ${esc(ALWAYS.join(', '))} are always held; each ETF once, equal weight, rebalanced monthly.</p>${cov}
+    <div class="tw"><table><thead><tr><th>Month</th>${PAIRS.map(([c, d], i) => `<th>Slot ${i + 1}: ${esc(c)} vs ${esc(d)}</th>`).join('')}<th class="r">ETFs</th><th class="r">Sleeve return</th></tr></thead><tbody>${monthRows}</tbody></table></div>
+    <div class="tw" style="margin-top:10px"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Months held</th><th class="r">Return while held</th></tr></thead><tbody>${heldRows}</tbody></table></div></section>`;
+}
 function paint() {
   const out = $('#out');
   if (!DATA) { out.innerHTML = ''; return; }
@@ -292,8 +329,8 @@ function paint() {
         const extra = x => p.k === 'index' ? `<td class="r">${ms(x.mom)}</td><td class="r">${pill(x.r3)}</td>` : p.k === 'value' ? `<td class="r">${fmt(x.score, 0)}</td><td class="r">${fmt(x.pe, 1)}</td>`
           : `<td class="r">${num(x.mom) ? Math.round(x.mom) : '–'}</td><td class="r">${fmt(x.pe, 1)}</td>`;
         const rule = p.k === 'index' ? pairNotes(L.pk) + (etfMiss ? '<p class="note">ETF prices are not in yet: they come with the next weekly price update (part 1). Amounts are shown; units appear once prices are in.</p>' : '')
-          : p.k === 'value' ? '<p class="rule">Every stock that passes the Deep value screen (All lists: NIFTY 500, Smallcap 500, Microcap 250), equal weight.</p>'
-          : `<p class="rule">Momentum screen (All lists), highest momentum first, ties by highest PE: top ${MOM_TOP}, equal weight.</p>`;
+          : p.k === 'value' ? '<p class="rule">Every non-PSU stock that passes the Deep value screen (All lists: NIFTY 500, Smallcap 500, Microcap 250), equal weight.</p>'
+          : `<p class="rule">Momentum screen (All lists, PSU stocks left out), highest momentum first, ties by highest PE: top ${MOM_TOP}, equal weight.</p>`;
         return `<section class="sleeve"><h2>${p.label} <small>${Math.round(p.share * 100)}% · ${fund ? rs(p.amt) : ''} · ${p.rows.length} holdings${fund && p.rows.length ? ' · ' + rs(p.amt / p.rows.length) + ' each' : ''}</small></h2>${rule}
           <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Price ₹</th>${extraH}<th class="r">Units</th><th class="r">Amount ₹</th></tr></thead><tbody>${
           p.rows.length ? p.rows.map(x => `<tr><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td><td class="r">${fmt(x.price, 2)}</td>${extra(x)}
@@ -305,17 +342,19 @@ function paint() {
     const B = DATA.back;
     if (!B || !B.hasPrice) { out.innerHTML = '<p class="empty">The 1-year backtest needs prices from 1 year back (prices.csv); they are not available yet.</p>'; return; }
     const L = lists('back');
-    const r = {index: avg(L.index.map(x => x.ret)), value: avg(L.value.map(x => x.ret)), mom: avg(L.mom.map(x => x.ret))};
+    const EM = (DATA.etf && DATA.etf.etf) || {}, BT = hasMonthly(EM) ? etfBacktest(EM, DATA.etf.monthDates) : null;
+    const r = {index: BT ? BT.ret : avg(L.index.map(x => x.ret)), value: avg(L.value.map(x => x.ret)), mom: avg(L.mom.map(x => x.ret))};
     const tot = SPLIT.reduce((s, [k, , sh]) => s + sh * (num(r[k]) ? r[k] : 0), 0);
     const bench = num(B.bench) ? B.bench : (DATA.etf && DATA.etf.bench ? DATA.etf.bench.ret1y : null);
     const f = fund || 0;
-    out.innerHTML = `<p class="rule">The same rules applied to the data as it stood on <b>${esc(B.date)}</b>, held without changes until ${esc(DATA.now.date)}. Equal weight inside each part; 40 / 40 / 20 between parts.</p>
+    out.innerHTML = `<p class="rule">The same rules applied to the data as it stood on <b>${esc(B.date)}</b>, held until ${esc(DATA.now.date)}: the value and momentum stocks (PSU left out) without changes; the index ETFs re-checked every month${BT ? '' : ' (monthly ETF data not in yet: ETFs held as picked at the start)'}. Equal weight inside each part; 40 / 40 / 20 between parts.</p>
       <div class="kpis">
         <div class="kpi"><span>Mix return</span><b class="${tot >= 0 ? 'pos' : 'neg'}">${pct(tot)}</b></div>
         <div class="kpi"><span>NIFTY 500</span><b>${pct(bench)}</b></div>
         ${SPLIT.map(([k, label]) => `<div class="kpi"><span>${label}</span><b class="${(r[k] || 0) >= 0 ? 'pos' : 'neg'}">${pct(r[k])}</b></div>`).join('')}
         ${f ? `<div class="kpi"><span>${rs(f)} would be</span><b>${rs(f * (1 + tot / 100))}</b></div>` : ''}</div>`
       + SPLIT.map(([k, label, sh]) => {
+        if (k === 'index' && BT) return indexMonthly(BT, sh);
         const rows = L[k];
         const rule = k === 'index' ? pairNotes(L.pk) : '';
         return `<section class="sleeve"><h2>${label} <small>${Math.round(sh * 100)}% · ${rows.length} holdings then · average ${pct(r[k])}</small></h2>${rule}
@@ -354,6 +393,11 @@ paintSplit();
 
 (async () => {
   await waitFor(() => document.documentElement.classList.contains('auth-ok'), 600000);   // auth.js: signed in
+  /* admin only (auth.js: window.hniAdmin = admin@ account, or a hni_admins/{uid} document, same rule as the Users list) */
+  let admin = false;
+  try { await waitFor(() => window.hniAdmin, 20000); admin = !!(await window.hniAdmin); } catch (e) {}
+  if (!admin) { $('#gate').innerHTML = 'The Portfolio builder is for admins only. <a href="fundamentals">Back to Fundamentals</a>'; return; }
+  document.documentElement.classList.add('pb-admin'); $('#gate').remove();
   try {
     const etf = await etfData();
     DATA = Object.assign({etf}, await screens(etf));
