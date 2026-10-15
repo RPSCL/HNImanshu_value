@@ -4,6 +4,12 @@
 #       "⟳" button (also through the Worker, ltp_worker.js, which refuses it outside those hours).
 #       portfolio_ltp.py checks the time again and fetches nothing outside the market window, unless a manual
 #       run from the Actions tab ticks "any time" (for testing).
+# Gate (first step, before checkout / pip / Angel): a run starts working only if one is due, so a refused run costs seconds, not minutes.
+#       Mon–Fri 09:00–15:40 IST  → always runs.
+#       Mon–Fri after 15:40 IST  → runs ONCE (the closing prices): the first request after 15:40 that day, if no run has
+#                                  already completed / is running since 15:40 today. Every later request that day is refused at once.
+#       Weekends, and 00:00–09:00 IST → refused at once.
+#       A refused run cancels itself (shows as "cancelled" in the Actions list), which is also how the gate tells real runs from refused ones.
 # Once a day: Angel's scrip master and NSE's master lists (EQUITY_L, SME_EQUITY_L, symbol changes) are
 #       downloaded on the first run of the Indian day and kept in .cache/ ; every later run that day restores
 #       them from the GitHub cache in a second instead of downloading again.
@@ -18,6 +24,10 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+  actions: write                   # the gate reads this workflow's runs and cancels a refused run
+
 concurrency:
   group: portfolio-ltp
   cancel-in-progress: false        # a run in progress finishes; clicks while it runs queue at most one more
@@ -27,7 +37,52 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      # ── GATE: decides in seconds whether this run is due; everything below waits for it ──
+      - name: "⏱ Gate: is a run due?"
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANY_TIME: ${{ github.event.inputs.any_time }}
+        run: |
+          DOW=$(TZ=Asia/Kolkata date +%u)                      # 1 = Mon … 7 = Sun
+          MINS=$(( 10#$(TZ=Asia/Kolkata date +%H) * 60 + 10#$(TZ=Asia/Kolkata date +%M) ))
+          GO=false; ANYTIME=false; WHY=""
+          if [ "$ANY_TIME" = "true" ]; then
+            GO=true; ANYTIME=true; WHY="manual test run (any time)"
+          elif [ "$DOW" -ge 6 ]; then
+            WHY="weekend"
+          elif [ "$MINS" -lt 540 ]; then
+            WHY="before 09:00 IST"
+          elif [ "$MINS" -lt 940 ]; then
+            GO=true; WHY="market hours (09:00–15:40 IST)"
+          else
+            # after 15:40 IST on a weekday: one closing-price run per day. "Already ran" = another, earlier run of this workflow
+            # that is still going or finished successfully since 15:40 today (refused runs are cancelled, so they never count).
+            SINCE=$(date -u -d "TZ=\"Asia/Kolkata\" $(TZ=Asia/Kolkata date +%F) 15:40" +%Y-%m-%dT%H:%M:%SZ)
+            DAY=$(date -u -d "TZ=\"Asia/Kolkata\" $(TZ=Asia/Kolkata date +%F) 00:00" +%Y-%m-%dT%H:%M:%SZ)
+            DONE=$(gh api -X GET "repos/${GITHUB_REPOSITORY}/actions/workflows/ltp.yml/runs" -f created=">=${DAY}" -f per_page=100 \
+              --jq "[.workflow_runs[] | select(.id < ${GITHUB_RUN_ID} and .updated_at >= \"${SINCE}\"
+                      and (.status != \"completed\"
+                           or (.conclusion == \"success\" and ((.updated_at|fromdateiso8601) - (.run_started_at|fromdateiso8601)) >= 20)))] | length") || DONE=""
+            if [ -z "$DONE" ]; then
+              GO=true; ANYTIME=true; WHY="after 15:40 IST: run history unreadable, allowing this one"
+            elif [ "$DONE" -eq 0 ]; then
+              GO=true; ANYTIME=true; WHY="after 15:40 IST: the day's closing-price run (first one today)"
+            else
+              WHY="after 15:40 IST: today's closing-price run already happened"
+            fi
+          fi
+          echo "go=$GO"           >> "$GITHUB_OUTPUT"
+          echo "anytime=$ANYTIME" >> "$GITHUB_OUTPUT"
+          echo "IST $(TZ=Asia/Kolkata date '+%a %H:%M') → go=$GO  ($WHY)"
+          if [ "$GO" != "true" ]; then
+            echo "### ⏭ Refused: $WHY" >> "$GITHUB_STEP_SUMMARY"
+            gh run cancel "$GITHUB_RUN_ID" || true             # show as cancelled, stop the job right here
+            sleep 20                                           # (cancel normally ends the job during this wait)
+          fi
+
       - name: Checkout (only the scripts it needs)
+        if: steps.gate.outputs.go == 'true'
         uses: actions/checkout@v5
         with:
           sparse-checkout: |
@@ -39,6 +94,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Setup Python 3.11 (pip downloads cached)
+        if: steps.gate.outputs.go == 'true'
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
@@ -47,32 +103,37 @@ jobs:
 
       # IST date → cache key: the first run of each Indian day downloads, the rest restore
       - name: Today (IST)
+        if: steps.gate.outputs.go == 'true'
         id: day
         run: echo "d=$(TZ=Asia/Kolkata date +%Y%m%d)" >> "$GITHUB_OUTPUT"
 
       - name: Today's master lists (restore, or save after the first run)
+        if: steps.gate.outputs.go == 'true'
         uses: actions/cache@v4
         with:
           path: .cache
           key: ltp-masters-${{ steps.day.outputs.d }}
 
       - name: Install dependencies
+        if: steps.gate.outputs.go == 'true'
         run: pip install firebase-admin smartapi-python pyotp logzero websocket-client requests pandas
 
       - name: Service account
+        if: steps.gate.outputs.go == 'true'
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: printf '%s' "$GOOGLE_CREDENTIALS" > "$RUNNER_TEMP/serviceAccount.json"
 
       - name: Fetch LTP + check symbols with NSE
+        if: steps.gate.outputs.go == 'true'
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/serviceAccount.json
           ANGEL_API_KEY: ${{ secrets.ANGEL_API_KEY }}
           ANGEL_CLIENT_CODE: ${{ secrets.ANGEL_CLIENT_CODE }}
           ANGEL_PIN: ${{ secrets.ANGEL_PIN }}
           ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
-        run: python -u portfolio_ltp.py ${{ github.event.inputs.any_time == 'true' && '--any-time' || '' }}
+        run: python -u portfolio_ltp.py ${{ steps.gate.outputs.anytime == 'true' && '--any-time' || '' }}
 
       - name: Clean up
-        if: always()
+        if: always() && steps.gate.outputs.go == 'true'
         run: rm -f "$RUNNER_TEMP/serviceAccount.json"
