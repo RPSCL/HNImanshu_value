@@ -1,0 +1,85 @@
+# builder_prices.yml — day-by-day prices for the PF Builder's backtest chart
+#
+# Started by the PF Builder page itself (Cloudflare Worker, POST /builder; admins only) when the 1-year-back list holds stocks
+# that have no saved daily prices, or by hand from the Actions tab (symbols = comma separated, e.g. TCS,INFY).
+#
+#   1. fetch_prices.py --history --symbols …  downloads the 7 ETFs + NIFTY 500 + the listed stocks from Angel One, day by day.
+#      Only when the ETFs came through, it deletes everything in etf_prices/ and writes the fresh set (raw candles, daily_close.csv,
+#      requested.json). prices.csv is not touched.
+#   2. build.py --daily-only                  etf_prices/daily_close.csv → public/builder_daily.json
+#   3. commit etf_prices/ + public/builder_daily.json, deploy to Firebase Hosting (the page polls for the new file and redraws the chart).
+name: PF Builder prices
+
+on:
+  workflow_dispatch:
+    inputs:
+      symbols:
+        description: "Stocks of the 1-year-back list, comma separated (ETFs + NIFTY 500 are always included)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+# the same lock as Smart Build & Deploy: two runs never commit at the same time (this one waits for a running full build)
+concurrency:
+  group: smart-build
+  cancel-in-progress: false
+
+jobs:
+  prices:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install requests pandas numpy smartapi-python pyotp logzero websocket-client
+
+      # the symbols arrive through an env var (never pasted into the script), and fetch_prices.py only accepts A-Z 0-9 & _ -
+      - name: "📈 Angel — ETFs + the stocks, day by day"
+        env:
+          SYMBOLS:           ${{ github.event.inputs.symbols }}
+          ANGEL_API_KEY:     ${{ secrets.ANGEL_API_KEY }}
+          ANGEL_CLIENT_CODE: ${{ secrets.ANGEL_CLIENT_CODE }}
+          ANGEL_PIN:         ${{ secrets.ANGEL_PIN }}
+          ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
+        run: python -u fetch_prices.py --history --symbols "$SYMBOLS"
+
+      - name: "🏗 builder_daily.json"
+        run: python build.py --daily-only
+
+      - name: Commit & push
+        run: |
+          git config --global user.name  "github-actions"
+          git config --global user.email "actions@github.com"
+          git add -A etf_prices public/builder_daily.json
+          git diff --cached --quiet && { echo "Nothing new to commit"; exit 0; }
+          git commit -m "PF Builder prices [skip ci]"
+          for i in 1 2 3; do
+            if git pull --rebase -X theirs origin main && git push origin main; then echo "Pushed"; exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((i * 5))
+          done
+          echo "::warning::Could not push (main kept changing). The site still deploys from this run."
+
+      - name: Setup Firebase
+        run: |
+          echo '${{ secrets.GOOGLE_CREDENTIALS }}' > serviceAccount.json
+          npm install -g firebase-tools
+
+      - name: Deploy to Firebase Hosting
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: serviceAccount.json
+        run: firebase deploy --project hnimanshu --only hosting --non-interactive 2>/dev/null
