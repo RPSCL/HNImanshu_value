@@ -20,14 +20,16 @@
 :root{--mono:'IBM Plex Mono',ui-monospace,monospace;--sans:'DM Sans',system-ui,-apple-system,"Segoe UI",sans-serif;
   --bg:#0e0e0f;--panel:#141416;--panel2:#1a1a1d;--line:#323238;--ink:#f0ece4;--mute:#c0b8ae;--faint:#807870;
   --brass:#d4b47a;--brassbg:rgba(212,180,122,.12);--good:#78cc90;--goodbg:rgba(120,204,144,.13);
-  --bad:#e09878;--badbg:rgba(224,152,120,.13);--warn:#e0b840;--hover:#1f1f23;color-scheme:dark}
+  --bad:#e09878;--badbg:rgba(224,152,120,.13);--warn:#e0b840;--hover:#1f1f23;color-scheme:dark;
+  --c1:#6aa7e0;--c2:#78cc90;--c3:#e09878;--c4:#b48ae0;--c5:#e0c840;--c6:#5fc9c9;--c7:#e07aa8}
 :root[data-theme=day]{--bg:#c8c1b5;--panel:#bdb6a8;--panel2:#cdc6b8;--line:#7a7468;--ink:#060402;--mute:#281e12;--faint:#4a4238;
   --brass:#4c2e0a;--brassbg:rgba(76,46,10,.12);--good:#075e1a;--goodbg:rgba(7,94,26,.12);
-  --bad:#781c00;--badbg:rgba(120,28,0,.12);--warn:#482c00;--hover:#b5ae9f;color-scheme:light}
+  --bad:#781c00;--badbg:rgba(120,28,0,.12);--warn:#482c00;--hover:#b5ae9f;color-scheme:light;
+  --c1:#1f5f9e;--c2:#0b6b25;--c3:#a03a10;--c4:#6a3aa0;--c5:#7a5c00;--c6:#0b6a6a;--c7:#a02a62}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans)}
 a{color:inherit}
-.wrap{max-width:1100px;margin:0 auto;padding:16px}
+.wrap{max-width:1100px;margin:0 auto;padding:16px 16px 40px}
 header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:6px 0 14px;border-bottom:1px solid var(--line)}
 .logo{display:flex;align-items:center;gap:10px;text-decoration:none}
 .logo i{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:var(--brassbg);color:var(--brass);font:700 18px var(--mono);font-style:normal}
@@ -38,9 +40,10 @@ header .sp{flex:1}
   color:var(--ink);font:600 12.5px var(--mono);text-decoration:none;cursor:pointer;white-space:nowrap}
 .btn:hover{border-color:var(--brass)}
 .btn.primary{background:var(--brass);border-color:var(--brass);color:var(--bg)}
+.btn.sm{height:28px;padding:0 10px;font-size:11.5px}
 .btn[disabled]{opacity:.55;cursor:default}
-h1{font:600 22px var(--sans);margin:20px 0 4px}
-.lead{color:var(--mute);margin:0 0 16px;max-width:760px}
+h1{font:600 24px var(--sans);margin:22px 0 4px;letter-spacing:-.01em}
+.lead{color:var(--mute);margin:0 0 16px;max-width:780px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
 .fund{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
 .fund label{display:flex;flex-direction:column;gap:6px;font:500 12px var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.06em}
@@ -52,43 +55,89 @@ h1{font:600 22px var(--sans);margin:20px 0 4px}
 .chip b{color:var(--ink)}
 .status{margin:14px 0 0;font:500 12.5px var(--mono);color:var(--faint);min-height:1.5em}
 .status.err{color:var(--bad)}
-.tabs{display:flex;gap:4px;margin:22px 0 12px;border-bottom:1px solid var(--line)}
-.tabs button{border:0;background:none;color:var(--mute);font:600 13px var(--mono);padding:10px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs{display:flex;gap:4px;margin:24px 0 14px;border-bottom:1px solid var(--line)}
+.tabs button{border:0;background:none;color:var(--mute);font:600 13px var(--mono);padding:10px 14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
 .tabs button.on{color:var(--ink);border-bottom-color:var(--brass)}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
 .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .kpi span{display:block;font:500 11px var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
 .kpi b{font:600 17px var(--mono)}
-.sleeve{margin:0 0 18px}
-.sleeve h2{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font:600 15px var(--sans);margin:0 0 6px}
-.sleeve h2 small{font:500 12px var(--mono);color:var(--faint)}
-.rule{font-size:12.5px;color:var(--mute);margin:0 0 8px}
-.pairs{display:flex;flex-direction:column;gap:4px;margin:0 0 8px;font:500 12px var(--mono);color:var(--mute)}
+.toolbar{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin:0 0 10px}
+.toolbar span{margin-right:auto;font:500 11.5px var(--mono);color:var(--faint)}
+
+/* collapsible sleeves */
+details.sleeve{border:1px solid var(--line);border-radius:12px;background:var(--panel);margin:0 0 12px;overflow:hidden}
+details.sleeve>summary{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:13px 16px 13px 38px;cursor:pointer;list-style:none;position:relative;user-select:none}
+details.sleeve>summary::-webkit-details-marker{display:none}
+details.sleeve>summary::before{content:"";position:absolute;left:16px;top:50%;width:7px;height:7px;margin-top:-6px;border-right:2px solid var(--faint);border-bottom:2px solid var(--faint);
+  transform:rotate(-45deg);transition:transform .15s}
+details.sleeve[open]>summary::before{transform:rotate(45deg);margin-top:-8px}
+details.sleeve>summary:hover{background:var(--hover)}
+details.sleeve[open]>summary{border-bottom:1px solid var(--line)}
+.st{font:600 15px var(--sans)}
+details.sleeve summary small{font:500 12px var(--mono);color:var(--faint)}
+.sbody{padding:12px 16px 16px}
+.rule{font-size:12.5px;color:var(--mute);margin:0 0 10px}
+.pairs{display:flex;flex-direction:column;gap:4px;margin:0 0 10px;font:500 12px var(--mono);color:var(--mute)}
 .pairs b{color:var(--ink)}
 .tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.tw+.tw{margin-top:12px}
 table{width:100%;border-collapse:collapse;font:12.5px var(--mono)}
 th{position:sticky;top:0;background:var(--panel2);color:var(--faint);font:600 11px var(--mono);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;text-transform:uppercase;letter-spacing:.04em}
 td{padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
 tr:last-child td{border-bottom:0}
 tbody tr:hover td{background:var(--hover)}
+td small{color:var(--faint)}
 .r{text-align:right}
 .nm{color:var(--mute);font-family:var(--sans);max-width:260px;overflow:hidden;text-overflow:ellipsis}
 .sym{font-weight:600;text-decoration:none;border-bottom:1px dotted var(--faint)}
 .sym:hover{color:var(--brass)}
+.tag{color:var(--faint);font-weight:500}
 .pos{color:var(--good)}.neg{color:var(--bad)}
 .pill{display:inline-block;padding:1px 7px;border-radius:6px;font-weight:600}
 .pill.pos{background:var(--goodbg)}.pill.neg{background:var(--badbg)}
 .zero{color:var(--warn)}
-.note{font-size:12px;color:var(--faint);margin:8px 0 0}
+.note{font-size:12px;color:var(--faint);margin:10px 0 0}
 .empty{padding:14px;color:var(--faint)}
+.sub{font:600 12px var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 8px}
 .disc{margin:26px 0 8px;padding:12px 14px;border:1px dashed var(--line);border-radius:10px;font-size:12px;color:var(--faint)}
 .eng{position:absolute;left:-10000px;top:0;width:1280px;height:900px;border:0;visibility:hidden}
+
+/* charts */
+.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 16px}
+.cc{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.cc.wide{grid-column:1/-1}
+.cc h3{margin:0 0 2px;font:600 13.5px var(--sans)}
+.cc p.cap{margin:0 0 8px;font:500 11.5px var(--mono);color:var(--faint)}
+.chart{position:relative;min-height:120px}
+.chart svg{display:block;max-width:100%}
+.gl{stroke:var(--line);stroke-width:1;stroke-dasharray:2 3}
+.zl{stroke:var(--faint);stroke-width:1}
+.ax{fill:var(--faint);font:10.5px var(--mono)}
+.xh{stroke:var(--faint);stroke-width:1}
+.tip{position:absolute;display:none;pointer-events:none;z-index:5;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font:11.5px/1.45 var(--mono);white-space:nowrap}
+.tip b{display:block;margin-bottom:2px}
+.tip i,.lg i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.lg{display:flex;flex-wrap:wrap;gap:4px 14px;margin:8px 0 0;font:500 11.5px var(--mono);color:var(--mute)}
+.bars{display:flex;flex-direction:column;gap:3px}
+.brow{display:grid;grid-template-columns:minmax(84px,150px) 1fr 66px;align-items:center;gap:8px;font:12px var(--mono)}
+.bl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mute)}
+.bt{position:relative;height:14px;background:var(--panel2);border-radius:4px}
+.bt .mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--faint)}
+.bt .bar{position:absolute;top:2px;bottom:2px;border-radius:3px}
+.bar.pos{background:var(--good)}.bar.neg{background:var(--bad)}
+.bv{text-align:right}
+
+@media (max-width:760px){
+  .charts{grid-template-columns:minmax(0,1fr)}
+}
 @media (max-width:640px){
-  .wrap{padding:12px 16px}
-  h1{font-size:19px}
+  .wrap{padding:12px 16px 32px}
+  h1{font-size:20px}
   .nm{display:none}
   .fund .btn{flex:1}
   .kpi b{font-size:15px}
+  .brow{grid-template-columns:minmax(70px,110px) 1fr 62px}
 }
 </style>
 </head>
@@ -136,13 +185,15 @@ const SPLIT = [['index', 'Index ETFs', 0.4], ['value', 'Value', 0.4], ['mom', 'M
 const ETF_NAME = {GOLDBEES: 'Nippon India ETF Gold BeES', ITBEES: 'Nippon India ETF Nifty IT', ALPHA: 'Kotak Nifty Alpha 50 ETF',
   JUNIORBEES: 'Nippon India ETF Nifty Next 50 Junior BeES', MON100: 'Motilal Oswal Nasdaq 100 ETF',
   HNGSNGBEES: 'Nippon India ETF Hang Seng BeES', FMCGIETF: 'ICICI Prudential Nifty FMCG ETF'};
-/* [challenger, default]: Composite Dual Momentum. Score = 0.5 x R6M + 0.5 x R12M (in %).
+/* [challenger, default, label]: Composite Dual Momentum. Score = 0.5 x R6M + 0.5 x R12M (in %).
    The slot holds the challenger only if (relative) its score beats the default's AND (absolute) its score is > 0;
-   otherwise the default (GOLDBEES). */
-const PAIRS = [['ITBEES', 'GOLDBEES'], ['ALPHA', 'GOLDBEES']];
+   otherwise the default (GOLDBEES).
+   EVERY slot is its own position with its own equal share of the ETF part: when both slots pick GOLDBEES the fund holds
+   GOLDBEES twice (2x weight), shown as "GOLDBEES (IT/Gold)" and "GOLDBEES (ALPHA/Gold)". */
+const PAIRS = [['ITBEES', 'GOLDBEES', 'IT/Gold'], ['ALPHA', 'GOLDBEES', 'ALPHA/Gold']];
 const W6 = 0.5, W12 = 0.5;   // composite weights
 const TAX = 0.15;            // 15% of the profit on every ETF sold in a switch
-const ALWAYS = ['JUNIORBEES', 'MON100', 'HNGSNGBEES', 'FMCGIETF', 'ALPHA'];
+const ALWAYS = ['JUNIORBEES', 'MON100', 'HNGSNGBEES', 'FMCGIETF', 'ALPHA'];   // each one position (slots + these = 7 equal positions)
 const MOM_TOP = 15;
 
 /* ---------- small helpers ---------- */
@@ -220,52 +271,103 @@ async function screens(etf) {
   w.eval('setHistorical(false, null, true)');
   return {now, back};
 }
-let ETF_P = null;
+let ETF_P = null, DAILY_P = null;
 const etfData = () => ETF_P = ETF_P || fetch('builder_etf.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null);
+/* daily ETF closes (data/prices -> public/etf_daily.json, written by fetch_etf_history.py); optional: without it the charts use the 13 monthly closes */
+const dailyData = () => DAILY_P = DAILY_P || fetch('etf_daily.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null);
 
 /* ---------- index part: Composite Dual Momentum per pair slot ---------- */
+/* -> positions: one per slot + one per always-held ETF, each an equal share. The same ETF can appear in several positions. */
 function etfPick(sc) {
-  const notes = [], set = [];
-  PAIRS.forEach(([c, d]) => {
+  const notes = [], positions = [];
+  PAIRS.forEach(([c, d, tag], i) => {
     const mc = sc[c], md = sc[d];
     const win = num(mc) && mc > 0 && (!num(md) || mc > md) ? c : d;    // absolute (>0) and relative (> default)
-    notes.push({c, d, mc, md, win}); set.push(win);
+    notes.push({c, d, tag, mc, md, win}); positions.push({key: 'S' + (i + 1), sym: win, tag});
   });
-  ALWAYS.forEach(x => set.push(x));
-  return {list: [...new Set(set)], notes};
+  ALWAYS.forEach(x => positions.push({key: 'A:' + x, sym: x, tag: null}));
+  return {positions, notes, list: positions.map(p => p.sym)};
 }
+const posLabel = p => p.tag ? `${p.sym} (${p.tag})` : p.sym;
 
-/* ---------- index part, 1-year backtest: the ETF pairs are re-scored EVERY MONTH ----------
+/* ---------- index part, 1-year backtest ----------
    builder_etf.json carries, per ETF, compM[k] (composite momentum 0.5*R6M + 0.5*R12M) and pxM[k] (adjusted close), k = 12 … 0.
-   Each month the rule above picks the slot ETFs, the unique list is held equal weight and rebalanced at the next month point.
-   A switch = a slot changes ETF. Every ETF that leaves the portfolio is sold and TAX (15%) is charged on its profit
-   (value - cost basis, losses give no tax); the rest is re-invested after tax. Plain rebalancing of ETFs that stay is tax-free. */
+   Each month point the rule above picks the positions; they are held equal weight and rebalanced at the next month point.
+   A switch = a slot changes ETF: the ETF it sells is taxed (TAX x profit, losses give no tax); the rest is re-invested.
+   Plain rebalancing of positions that stay is tax-free.
+   With etf_daily.json (daily adjusted closes) the value moves day by day, so the curve, total return and max drawdown are
+   daily; without it the same maths runs on the 13 monthly closes. Both give the same month-end numbers. */
 function hasMonthly(E) { return Object.keys(E).some(s => E[s] && Array.isArray(E[s].pxM) && E[s].pxM.length === 13); }
-function etfBacktest(E, dates) {
-  const rows = [], held = {}; let scored = 0, switches = 0, prev = null, taxPaid = 0, V = 1, pos = {}, gross = 1;
+const ffill = a => { let l = null; return a.map(v => { if (num(v) && v > 0) l = v; return l; }); };
+function buildPanel(E, bench, md, daily) {
+  const syms = Object.keys(E);
+  if (daily && Array.isArray(daily.dates) && daily.dates.length > 30 && daily.adj && daily.dates[0] <= md[12]) {
+    const nul = () => new Array(daily.dates.length).fill(null), px = {};
+    syms.forEach(s => { px[s] = ffill(daily.adj[s] || nul()); });
+    return {axis: daily.dates, px, bx: ffill(daily.adj.NIFTY500 || nul()), daily: true};
+  }
+  const axis = md.slice().reverse(), px = {}, nul = () => axis.map(() => null);
+  syms.forEach(s => { const p = E[s] && E[s].pxM; px[s] = p ? ffill(p.slice().reverse()) : nul(); });
+  const bp = bench && bench.pxM;
+  return {axis, px, bx: bp ? ffill(bp.slice().reverse()) : nul(), daily: false};
+}
+function etfSim(E, panel, md) {
+  const {axis, px} = panel, n = axis.length;
+  const at = k => { let j = -1; for (let i = 0; i < n; i++) { if (axis[i] <= md[k]) j = i; else break; } return Math.max(j, 0); };
+  const I = []; for (let k = 0; k <= 12; k++) I[k] = at(k);
+  const rows = [], held = {}, pos = {}, nav = new Array(n).fill(null);
+  let V = 1, taxPaid = 0, switches = 0, scored = 0, prev = null;
+  const total = () => Object.keys(pos).reduce((s, key) => s + pos[key].v, 0);
+  nav[I[12]] = 1;
   for (let k = 12; k >= 1; k--) {
     const sc = {}; Object.keys(E).forEach(s => { const v = E[s] && E[s].compM; sc[s] = v && num(v[k]) ? v[k] : null; });
     const pk = etfPick(sc);
     if (PAIRS.some(([c, d]) => num(sc[c]) && num(sc[d]))) scored++;
-    const wins = pk.notes.map(n => n.win);
+    const wins = pk.notes.map(x => x.win);
     if (prev) switches += wins.filter((w, i) => w !== prev[i]).length;
     prev = wins;
-    /* sell what leaves the list, pay tax on its profit */
+    /* sell what leaves a position (a slot that changes ETF), pay tax on its profit */
     let tax = 0;
-    Object.keys(pos).forEach(s => { if (!pk.list.includes(s)) { tax += TAX * Math.max(0, pos[s].v - pos[s].b); V -= TAX * Math.max(0, pos[s].v - pos[s].b); delete pos[s]; } });
+    Object.keys(pos).forEach(key => {
+      const p = pk.positions.find(q => q.key === key);
+      if (!p || p.sym !== pos[key].sym) { const t = TAX * Math.max(0, pos[key].v - pos[key].b); tax += t; V -= t; delete pos[key]; }
+    });
     taxPaid += tax;
-    /* equal-weight rebalance to the new list (stay-ETFs: tax-free; basis moves with the amount bought / sold) */
-    const tgt = V / pk.list.length;
-    pk.list.forEach(s => { const o = pos[s]; pos[s] = o ? {v: tgt, b: tgt >= o.v ? o.b + (tgt - o.v) : o.b * tgt / o.v} : {v: tgt, b: tgt}; });
-    const before = V;
-    const rets = pk.list.map(s => { const p = E[s] && E[s].pxM, a = p && p[k], b = p && p[k - 1]; return num(a) && num(b) && a > 0 ? (b / a - 1) * 100 : null; });
-    pk.list.forEach((s, i) => { pos[s].v *= 1 + (rets[i] || 0) / 100; });   // an ETF without a price counts 0%
-    V = pk.list.reduce((a, s) => a + pos[s].v, 0);
-    const mr = (V / before - 1) * 100;
-    pk.list.forEach((s, i) => { const h = held[s] = held[s] || {months: 0, g: 1}; h.months++; h.g *= 1 + (rets[i] || 0) / 100; });
-    rows.push({k, date: dates && dates[k], list: pk.list, notes: pk.notes, ret: mr, tax});
+    /* equal weight over ALL positions (stay-positions: tax-free; basis moves with the amount bought / sold) */
+    const tgt = V / pk.positions.length;
+    pk.positions.forEach(p => { const o = pos[p.key]; pos[p.key] = o ? {sym: p.sym, v: tgt, b: tgt >= o.v ? o.b + (tgt - o.v) : o.b * tgt / o.v} : {sym: p.sym, v: tgt, b: tgt}; });
+    const before = V, a = I[k], z = I[k - 1];
+    nav[a] = V;                                              // value right after the month-point trades and tax
+    for (let i = a + 1; i <= z; i++) {
+      Object.keys(pos).forEach(key => { const p = px[pos[key].sym], x0 = p && p[i - 1], x1 = p && p[i]; if (num(x0) && num(x1) && x0 > 0) pos[key].v *= x1 / x0; });
+      nav[i] = total();
+    }
+    V = total();
+    [...new Set(pk.positions.map(p => p.sym))].forEach(s => {            // per ETF, once a month (even when held in 2 slots)
+      const p = px[s], x0 = p && p[a], x1 = p && p[z], r = num(x0) && num(x1) && x0 > 0 ? x1 / x0 - 1 : 0;
+      const h = held[s] = held[s] || {months: 0, g: 1}; h.months++; h.g *= 1 + r;
+    });
+    rows.push({k, date: md[k], positions: pk.positions, notes: pk.notes, ret: (V / before - 1) * 100, tax});
   }
-  return {rows, ret: (V - 1) * 100, held, scored, switches, taxPaid: taxPaid * 100};
+  return {rows, ret: (V - 1) * 100, held, scored, switches, taxPaid: taxPaid * 100, nav, i0: I[12], i1: I[0], daily: panel.daily};
+}
+function drawdown(levels) {
+  let peak = -Infinity, mdd = 0;
+  const dd = levels.map(v => { if (!num(v) || v <= 0) return null; peak = Math.max(peak, v); const d = (v / peak - 1) * 100; mdd = Math.min(mdd, d); return d; });
+  return {dd, mdd};
+}
+/* everything the charts need, from one simulation */
+function backtestFull() {
+  const E = (DATA.etf && DATA.etf.etf) || {}, md = DATA.etf && DATA.etf.monthDates;
+  if (!hasMonthly(E) || !md || md.length !== 13) return null;
+  const panel = buildPanel(E, DATA.etf.bench, md, DATA.daily), sim = etfSim(E, panel, md);
+  const {i0, i1} = sim, axis = panel.axis.slice(i0, i1 + 1);
+  const lvl = a => a.slice(i0, i1 + 1), rel = a => { const b = a[i0]; return lvl(a).map(v => num(v) && num(b) && b > 0 ? (v / b - 1) * 100 : null); };
+  const sleeveLv = lvl(sim.nav), etf = {};
+  Object.keys(E).forEach(s => { const L = lvl(panel.px[s]); etf[s] = {rel: rel(panel.px[s]), dd: drawdown(L), ret: rel(panel.px[s]).slice(-1)[0]}; });
+  const bench = {rel: rel(panel.bx), dd: drawdown(lvl(panel.bx))}; bench.ret = bench.rel.slice(-1)[0];
+  return {sim, panel, axis, E, etf, bench,
+    sleeve: {rel: sleeveLv.map(v => num(v) ? (v - 1) * 100 : null), dd: drawdown(sleeveLv)}};
 }
 
 /* ---------- allocation ---------- */
@@ -284,7 +386,8 @@ function allocate(fund, lists) {
 }
 
 /* ---------- page ---------- */
-let DATA = null, TAB = 'now', LAST = null;
+let DATA = null, TAB = 'now', LAST = null, BTX = null, CH = {};
+const OPENST = {};      // which sleeves the user opened / closed (kept across tabs and re-builds)
 const fundVal = () => +String($('#fund').value).replace(/[^\d.]/g, '') || 0;
 function paintSplit() {
   const f = fundVal();
@@ -294,34 +397,150 @@ function lists(when) {
   const D = DATA, E = (D.etf && D.etf.etf) || {}, S = when === 'now' ? D.now : D.back;
   const key = when === 'now' ? 'r3' : 'r3Back', sc = (S && S.etfScore) || {};
   const pk = etfPick(sc);
-  const index = pk.list.map(sym => { const e = E[sym] || {};
-    return {sym, name: ETF_NAME[sym] || sym, price: e.ltp, r3: e[key], mom: sc[sym], ret: e.ret1y, etf: true}; });
+  const index = pk.positions.map(p => { const e = E[p.sym] || {};
+    return {key: p.key, sym: p.sym, label: posLabel(p), name: ETF_NAME[p.sym] || p.sym, price: e.ltp, r3: e[key], mom: sc[p.sym], ret: e.ret1y, etf: true}; });
   const stock = s => ({sym: s.sym, name: s.name, ind: s.ind, price: s.cmp, pe: s.pe, mom: s.mom, score: s.score, url: s.url, ret: s.ret});
   return {pk, index, value: S ? S.value.map(stock) : [], mom: S ? S.mom.map(stock) : []};
 }
 function symCell(x) {
-  return x.url ? `<a class="sym" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer" title="Open on Screener.in">${esc(x.sym)}</a>` : `<b>${esc(x.sym)}</b>`;
+  const lab = x.label || x.sym, tag = x.label && x.label !== x.sym ? ` <span class="tag">${esc(x.label.slice(x.sym.length))}</span>` : '';
+  return x.url ? `<a class="sym" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer" title="Open on Screener.in">${esc(x.sym)}</a>` : `<b>${esc(x.sym)}</b>${tag}`;
 }
 const ms = v => num(v) ? fmt(v, 1) : '–';
 function pairNotes(pk) {
-  return `<div class="pairs">${pk.notes.map(n => `<span>Composite 6M/12M ${esc(n.c)} ${ms(n.mc)} vs ${esc(n.d)} ${ms(n.md)}${' (needs > 0 and > ' + esc(n.d) + ')'} → <b>${esc(n.win)}</b></span>`).join('')}
-    <span>Always: ${ALWAYS.map(esc).join(', ')} · each ETF once, equal weight</span></div>`;
+  return `<div class="pairs">${pk.notes.map(n => `<span>Slot ${esc(n.tag)} · composite 6M/12M ${esc(n.c)} ${ms(n.mc)} vs ${esc(n.d)} ${ms(n.md)}${' (needs > 0 and > ' + esc(n.d) + ')'} → <b>${esc(n.win)}</b></span>`).join('')}
+    <span>Always: ${ALWAYS.map(esc).join(', ')} · every slot and every always-held ETF is one equal position (${pk.positions.length} in all)</span></div>`;
 }
+/* "GOLDBEES sits in 2 slots (2x weight): 44 units · ₹10,000" */
+function dupNote(rows, withFund) {
+  const g = {};
+  rows.forEach(r => { const o = g[r.sym] = g[r.sym] || {n: 0, qty: 0, amt: 0}; o.n++; o.qty += r.qty || 0; o.amt += r.invested || 0; });
+  const t = Object.entries(g).filter(([, v]) => v.n > 1).map(([s, v]) => `<b>${esc(s)}</b> is held in ${v.n} slots (${v.n}× weight)${withFund ? `: ${fmt(v.qty, 0)} units · ${rs(v.amt)} in total` : ''}`);
+  return t.length ? `<p class="note">${t.join(' · ')}.</p>` : '';
+}
+const isOpen = (k, dflt) => (TAB + ':' + k in OPENST) ? OPENST[TAB + ':' + k] : dflt;
+function sleeve(k, title, small, inner, dflt) {
+  return `<details class="sleeve" data-k="${esc(k)}"${isOpen(k, dflt) ? ' open' : ''}><summary><span class="st">${esc(title)}</span><small>${small}</small></summary><div class="sbody">${inner}</div></details>`;
+}
+const toolbar = lead => `<div class="toolbar"><span>${lead}</span><button type="button" class="btn sm" data-all="1">Expand all</button><button type="button" class="btn sm" data-all="0">Collapse all</button></div>`;
+
+/* ----- bars (diverging, HTML) ----- */
+function bars(items) {
+  const vals = items.filter(x => num(x.v));
+  if (!vals.length) return '';
+  const m = Math.max(...vals.map(x => Math.abs(x.v)), 1e-9);
+  return `<div class="bars">${items.map(x => {
+    const w = num(x.v) ? Math.abs(x.v) / m * 50 : 0, up = !(x.v < 0);
+    return `<div class="brow"><span class="bl" title="${esc(x.title || x.label)}">${esc(x.label)}</span><span class="bt"><i class="mid"></i>${num(x.v) ? `<i class="bar ${up ? 'pos' : 'neg'}" style="left:${up ? 50 : 50 - w}%;width:${w}%"></i>` : ''}</span><span class="bv ${num(x.v) ? (up ? 'pos' : 'neg') : ''}">${num(x.v) ? pct(x.v) : '–'}</span></div>`;
+  }).join('')}</div>`;
+}
+
+/* ----- line charts (SVG drawn at the real width, so text stays readable on a phone) ----- */
+const fd = (iso, o) => new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', o || {day: 'numeric', month: 'short', year: 'numeric'});
+function lineSvg(W, axis, series, o) {
+  o = o || {};
+  const H = o.h || 230, L = 46, R = 12, T = 10, B = 24, w = Math.max(W - L - R, 60), h = H - T - B, n = axis.length;
+  let lo = Infinity, hi = -Infinity;
+  series.forEach(s => s.vals.forEach(v => { if (num(v)) { if (v < lo) lo = v; if (v > hi) hi = v; } }));
+  if (!isFinite(lo) || n < 2) return {html: '<p class="empty">No price data for this chart yet.</p>', m: null};
+  lo = Math.min(lo, 0); hi = Math.max(hi, 0);
+  if (o.top0) hi = 0;
+  if (hi - lo < 1e-6) { hi += 1; lo -= 1; }
+  const pad = (hi - lo) * 0.05; if (!o.top0) hi += pad; lo -= pad;
+  const X = i => L + i / (n - 1) * w, Y = v => T + (hi - v) / (hi - lo) * h, dp = hi - lo >= 20 ? 0 : 1;
+  let g = '';
+  for (let t = 0; t <= 4; t++) {
+    const v = lo + (hi - lo) * t / 4, y = Y(v).toFixed(1);
+    g += `<line class="gl" x1="${L}" x2="${W - R}" y1="${y}" y2="${y}"/><text class="ax" x="${L - 6}" y="${(+y + 3.5).toFixed(1)}" text-anchor="end">${v.toFixed(dp)}%</text>`;
+  }
+  if (lo < 0 && hi > 0) g += `<line class="zl" x1="${L}" x2="${W - R}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}"/>`;
+  const nt = W < 420 ? 3 : 5;
+  for (let t = 0; t < nt; t++) {
+    const i = Math.round(t * (n - 1) / (nt - 1));
+    g += `<text class="ax" x="${X(i).toFixed(1)}" y="${H - 7}" text-anchor="${t === 0 ? 'start' : t === nt - 1 ? 'end' : 'middle'}">${fd(axis[i], {month: 'short', year: '2-digit'})}</text>`;
+  }
+  const path = s => { let d = '', pen = false; s.vals.forEach((v, i) => { if (!num(v)) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1); pen = true; }); return d; };
+  series.forEach(s => {
+    const d = path(s);
+    if (o.area && d) g += `<path d="${d}L${X(n - 1).toFixed(1)} ${Y(0).toFixed(1)}L${X(0).toFixed(1)} ${Y(0).toFixed(1)}Z" style="fill:${s.color};opacity:.16;stroke:none"/>`;
+    g += `<path d="${d}" fill="none" style="stroke:${s.color};stroke-width:${s.w || 1.8};${s.dash ? 'stroke-dasharray:5 4;' : ''}stroke-linejoin:round"/>`;
+  });
+  g += `<line class="xh" x1="-10" x2="-10" y1="${T}" y2="${H - B}"/>`;
+  return {html: `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img">${g}</svg><div class="tip"></div>`, m: {axis, series, L, w, n, dp, T, H, B}};
+}
+function drawCharts() {
+  document.querySelectorAll('.chart[data-ch]').forEach(el => {
+    const f = CH[el.dataset.ch]; if (!f) return;
+    const W = Math.floor(el.clientWidth) || 640, r = f(W);
+    el.innerHTML = r.html; el._m = r.m;
+    el.onpointerleave = () => { const t = el.querySelector('.tip'), x = el.querySelector('.xh'); if (t) t.style.display = 'none'; if (x) { x.setAttribute('x1', -10); x.setAttribute('x2', -10); } };
+    el.onpointermove = ev => {
+      const m = el._m; if (!m) return;
+      const rect = el.getBoundingClientRect(), px = ev.clientX - rect.left;
+      const i = Math.max(0, Math.min(m.n - 1, Math.round((px - m.L) / m.w * (m.n - 1)))), x = m.L + i / (m.n - 1) * m.w;
+      const xh = el.querySelector('.xh'), tip = el.querySelector('.tip');
+      xh.setAttribute('x1', x); xh.setAttribute('x2', x);
+      tip.innerHTML = `<b>${fd(m.axis[i])}</b>` + m.series.filter(s => num(s.vals[i])).map(s => `<div><i style="background:${s.color}"></i>${esc(s.name)} ${pct(s.vals[i])}</div>`).join('');
+      tip.style.display = 'block';
+      tip.style.left = (x > rect.width / 2 ? Math.max(0, x - tip.offsetWidth - 10) : x + 10) + 'px'; tip.style.top = '6px';
+    };
+  });
+}
+let RZ = null;
+window.addEventListener('resize', () => { clearTimeout(RZ); RZ = setTimeout(drawCharts, 120); });
+
+/* ----- the backtest charts block ----- */
+function chartsBlock(BT, r, tot) {
+  const A = BT.axis, col = i => `var(--c${i + 1})`;
+  const syms = Object.keys(BT.etf);
+  CH = {
+    ret: W => lineSvg(W, A, [{name: 'NIFTY 500', vals: BT.bench.rel, color: 'var(--faint)', dash: true, w: 1.5},
+                             {name: 'Index ETF sleeve (after tax)', vals: BT.sleeve.rel, color: 'var(--brass)', w: 2.4}]),
+    dd: W => lineSvg(W, A, [{name: 'NIFTY 500', vals: BT.bench.dd.dd, color: 'var(--faint)', dash: true, w: 1.5},
+                            {name: 'Index ETF sleeve', vals: BT.sleeve.dd.dd, color: 'var(--bad)', w: 2}], {area: true, top0: true, h: 200}),
+    etfs: W => lineSvg(W, A, syms.map((s, i) => ({name: s, vals: BT.etf[s].rel, color: col(i), w: 1.6})), {h: 250})
+  };
+  const sleeveBars = bars([{label: 'Index ETFs', v: r.index}, {label: 'Value', v: r.value}, {label: 'Momentum', v: r.mom},
+    {label: 'Mix 40/40/20', v: tot, title: 'Whole portfolio'}, {label: 'NIFTY 500', v: DATA.back && num(DATA.back.bench) ? DATA.back.bench : (BT.bench.ret)}]);
+  const ddBars = bars([{label: 'Index sleeve', v: BT.sleeve.dd.mdd}, {label: 'NIFTY 500', v: BT.bench.dd.mdd}]
+    .concat(syms.map(s => ({label: s, v: BT.etf[s].dd.mdd, title: ETF_NAME[s] || s}))));
+  const nDays = BT.panel.daily ? BT.axis.length : null;
+  return `<div class="charts">
+    <div class="cc"><h3>Return by part</h3><p class="cap">1 year, equal weight inside each part</p>${sleeveBars}</div>
+    <div class="cc"><h3>Worst fall from a peak</h3><p class="cap">Max drawdown over the year</p>${ddBars}</div>
+    <div class="cc wide"><h3>Index ETF part — total return</h3><p class="cap">Monthly re-check, 15% tax on switches, vs NIFTY 500 · max drawdown ${pct(BT.sleeve.dd.mdd)}</p><div class="chart" data-ch="ret"></div>
+      <div class="lg"><span><i style="background:var(--brass)"></i>Index ETF part</span><span><i style="background:var(--faint)"></i>NIFTY 500</span></div></div>
+    <div class="cc wide"><h3>Drawdown from the last peak</h3><p class="cap">How far below its own high the index ETF part sat, day by day</p><div class="chart" data-ch="dd"></div></div>
+    <div class="cc wide"><h3>Each ETF on its own — total return</h3><p class="cap">Buy and hold from ${fd(BT.axis[0])}</p><div class="chart" data-ch="etfs"></div>
+      <div class="lg">${syms.map((s, i) => `<span><i style="background:${col(i)}"></i>${esc(s)} ${pct(BT.etf[s].ret)}</span>`).join('')}</div></div>
+  </div>
+  <p class="note" style="margin:-6px 0 14px">${nDays ? `Curves use ${nDays} daily closes (data/prices → etf_daily.json).` : 'Curves use the 13 monthly closes in builder_etf.json (run fetch_etf_history.py once for day-by-day curves).'}
+    Value and momentum stocks are priced only at the start and the end of the year, so they get bars, not curves.</p>`;
+}
+
 function indexMonthly(BT, sh) {
-  const cell = (n) => `${esc(n.win)} <small>(${esc(n.c)} ${ms(n.mc)} vs ${esc(n.d)} ${ms(n.md)})</small>`;
-  const heldRows = Object.entries(BT.held).sort((a, b) => b[1].months - a[1].months)
-    .map(([s, h]) => `<tr><td><b>${esc(s)}</b></td><td class="nm">${esc(ETF_NAME[s] || s)}</td><td class="r">${h.months} of 12</td><td class="r">${pill((h.g - 1) * 100)}</td></tr>`).join('');
-  const monthRows = BT.rows.map(x => `<tr><td>${esc(x.date || ('−' + x.k + ' mo'))}</td>${x.notes.map(n => `<td>${cell(n)}</td>`).join('')}<td class="r">${x.list.length}</td><td class="r">${pill(x.ret)}</td></tr>`).join('');
-  const cov = BT.scored < 12 ? `<p class="note">Composite scores were available for ${BT.scored} of 12 months; in the others the default (${esc(PAIRS[0][1])}) is held.</p>` : '';
-  return `<section class="sleeve"><h2>Index ETFs <small>${Math.round(sh * 100)}% · re-checked monthly · ${pct(BT.ret)} after 15% tax (${BT.switches} switch${BT.switches === 1 ? '' : 'es'})</small></h2>
-    <p class="rule">Composite Dual Momentum (score = 0.5 × 6M + 0.5 × 12M return): each month a slot holds the challenger only if its score is above 0 and above ${esc(PAIRS[0][1])}'s, otherwise ${esc(PAIRS[0][1])}. After every switch the sold ETF's profit is taxed at 15% (tax paid over the year: ${fmt(BT.taxPaid, 2)}% of the starting amount). ${esc(ALWAYS.join(', '))} are always held; each ETF once, equal weight, rebalanced monthly.</p>${cov}
-    <div class="tw"><table><thead><tr><th>Month</th>${PAIRS.map(([c, d], i) => `<th>Slot ${i + 1}: ${esc(c)} vs ${esc(d)}</th>`).join('')}<th class="r">ETFs</th><th class="r">Sleeve return</th></tr></thead><tbody>${monthRows}</tbody></table></div>
-    <div class="tw" style="margin-top:10px"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Months held</th><th class="r">Return while held</th></tr></thead><tbody>${heldRows}</tbody></table></div></section>`;
+  const sim = BT.sim, n0 = sim.rows[0] ? sim.rows[0].positions.length : 0;
+  const cell = n => `${esc(n.win)} <small>(${esc(n.c)} ${ms(n.mc)} vs ${esc(n.d)} ${ms(n.md)})</small>`;
+  const heldRows = Object.entries(sim.held).sort((a, b) => b[1].months - a[1].months).map(([s, h]) => {
+    const e = BT.etf[s];
+    return `<tr><td><b>${esc(s)}</b></td><td class="nm">${esc(ETF_NAME[s] || s)}</td><td class="r">${h.months} of 12</td><td class="r">${pill((h.g - 1) * 100)}</td><td class="r">${e ? pill(e.ret) : '–'}</td><td class="r">${e ? pct(e.dd.mdd) : '–'}</td></tr>`;
+  }).join('');
+  const monthRows = sim.rows.map(x => `<tr><td>${esc(x.date || ('−' + x.k + ' mo'))}</td>${x.notes.map(n => `<td>${cell(n)}</td>`).join('')}<td class="r">${x.positions.length}</td><td class="r">${x.tax > 0 ? fmt(x.tax * 100, 2) + '%' : '–'}</td><td class="r">${pill(x.ret)}</td></tr>`).join('');
+  const cov = sim.scored < 12 ? `<p class="note">Composite scores were available for ${sim.scored} of 12 months; in the others the default (${esc(PAIRS[0][1])}) is held.</p>` : '';
+  const gold = {}; sim.rows.forEach(x => x.positions.forEach(p => { gold[p.sym] = Math.max(gold[p.sym] || 0, x.positions.filter(q => q.sym === p.sym).length); }));
+  const dups = Object.entries(gold).filter(([, c]) => c > 1).map(([s, c]) => `${esc(s)} up to ${c}×`).join(', ');
+  return `<p class="rule">Composite Dual Momentum (score = 0.5 × 6M + 0.5 × 12M return): each month a slot holds the challenger only if its score is above 0 and above ${esc(PAIRS[0][1])}'s, otherwise ${esc(PAIRS[0][1])}. Each slot and each always-held ETF (${esc(ALWAYS.join(', '))}) is one equal position, so an ETF chosen by both slots counts twice${dups ? ' (' + dups + ' here)' : ''}; rebalanced monthly. After every switch the sold ETF's profit is taxed at 15% (tax paid over the year: ${fmt(sim.taxPaid, 2)}% of the starting amount).</p>${cov}
+    <div class="tw"><table><thead><tr><th>Month</th>${PAIRS.map(([c, d], i) => `<th>Slot ${i + 1}: ${esc(c)} vs ${esc(d)}</th>`).join('')}<th class="r">Positions</th><th class="r">Tax</th><th class="r">Sleeve return</th></tr></thead><tbody>${monthRows}</tbody></table></div>
+    <div class="sub">By ETF</div>
+    <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Months held</th><th class="r">Return while held</th><th class="r">Year return*</th><th class="r">Max DD*</th></tr></thead><tbody>${heldRows}</tbody></table></div>
+    <p class="note">* Buy and hold of that ETF over the whole year, whether or not the rules held it.</p>`;
 }
+
 function paint() {
   const out = $('#out');
   if (!DATA) { out.innerHTML = ''; return; }
   const fund = fundVal();
+  CH = {};
   if (TAB === 'now') {
     const L = lists('now'), A = allocate(fund || 0, L);
     LAST = {fund, A, date: DATA.now.date};
@@ -332,6 +551,7 @@ function paint() {
         <div class="kpi"><span>Cash left</span><b>${fund ? rs(A.cash) : '–'}</b></div>
         <div class="kpi"><span>Holdings</span><b>${L.index.length + L.value.length + L.mom.length}</b></div>
         <div class="kpi"><span>Data as of</span><b>${esc(DATA.now.date || '–')}</b></div></div>`
+      + toolbar('Click a header to open or close a part')
       + A.parts.map(p => {
         const extraH = p.k === 'index' ? '<th class="r">Composite</th><th class="r">3M</th>' : p.k === 'value' ? '<th class="r">Score</th><th class="r">PE</th>' : '<th class="r">Momentum</th><th class="r">PE</th>';
         const extra = x => p.k === 'index' ? `<td class="r">${ms(x.mom)}</td><td class="r">${pill(x.r3)}</td>` : p.k === 'value' ? `<td class="r">${fmt(x.score, 0)}</td><td class="r">${fmt(x.pe, 1)}</td>`
@@ -339,19 +559,21 @@ function paint() {
         const rule = p.k === 'index' ? pairNotes(L.pk) + (etfMiss ? '<p class="note">ETF prices are not in yet: they come with the next weekly price update (part 1). Amounts are shown; units appear once prices are in.</p>' : '')
           : p.k === 'value' ? '<p class="rule">Every non-PSU stock that passes the Deep value screen (All lists: NIFTY 500, Smallcap 500, Microcap 250), equal weight.</p>'
           : `<p class="rule">Momentum screen (All lists, PSU stocks left out), highest momentum first, ties by highest PE: top ${MOM_TOP}, equal weight.</p>`;
-        return `<section class="sleeve"><h2>${p.label} <small>${Math.round(p.share * 100)}% · ${fund ? rs(p.amt) : ''} · ${p.rows.length} holdings${fund && p.rows.length ? ' · ' + rs(p.amt / p.rows.length) + ' each' : ''}</small></h2>${rule}
-          <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Price ₹</th>${extraH}<th class="r">Units</th><th class="r">Amount ₹</th></tr></thead><tbody>${
+        const table = `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Price ₹</th>${extraH}<th class="r">Units</th><th class="r">Amount ₹</th></tr></thead><tbody>${
           p.rows.length ? p.rows.map(x => `<tr><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td><td class="r">${fmt(x.price, 2)}</td>${extra(x)}
             <td class="r ${x.qty === 0 ? 'zero' : ''}" ${x.qty === 0 ? 'title="Price is above this holding\'s share of the fund"' : ''}>${fund && x.qty != null ? fmt(x.qty, 0) : '–'}</td><td class="r">${fund && x.invested != null ? fmt(x.invested, 0) : '–'}</td></tr>`).join('')
-          : `<tr><td colspan="7" class="empty">Nothing passes this screen today.</td></tr>`}</tbody></table></div></section>`;
+          : `<tr><td colspan="7" class="empty">Nothing passes this screen today.</td></tr>`}</tbody></table></div>`;
+        const small = `${Math.round(p.share * 100)}% · ${fund ? rs(p.amt) + ' · ' : ''}${p.rows.length} holdings${fund && p.rows.length ? ' · ' + rs(p.amt / p.rows.length) + ' each' : ''}`;
+        return sleeve(p.k, p.label, small, rule + table + (p.k === 'index' ? dupNote(p.rows, !!fund) : ''), true);
       }).join('');
     $('#csv').disabled = !fund;
   } else {
     const B = DATA.back;
     if (!B || !B.hasPrice) { out.innerHTML = '<p class="empty">The 1-year backtest needs prices from 1 year back (prices.csv); they are not available yet.</p>'; return; }
     const L = lists('back');
-    const EM = (DATA.etf && DATA.etf.etf) || {}, BT = hasMonthly(EM) ? etfBacktest(EM, DATA.etf.monthDates) : null;
-    const r = {index: BT ? BT.ret : avg(L.index.map(x => x.ret)), value: avg(L.value.map(x => x.ret)), mom: avg(L.mom.map(x => x.ret))};
+    if (BTX === null) BTX = backtestFull() || false;
+    const BT = BTX || null;
+    const r = {index: BT ? BT.sim.ret : avg(L.index.map(x => x.ret)), value: avg(L.value.map(x => x.ret)), mom: avg(L.mom.map(x => x.ret))};
     const tot = SPLIT.reduce((s, [k, , sh]) => s + sh * (num(r[k]) ? r[k] : 0), 0);
     const bench = num(B.bench) ? B.bench : (DATA.etf && DATA.etf.bench ? DATA.etf.bench.ret1y : null);
     const f = fund || 0;
@@ -360,24 +582,33 @@ function paint() {
         <div class="kpi"><span>Mix return</span><b class="${tot >= 0 ? 'pos' : 'neg'}">${pct(tot)}</b></div>
         <div class="kpi"><span>NIFTY 500</span><b>${pct(bench)}</b></div>
         ${SPLIT.map(([k, label]) => `<div class="kpi"><span>${label}</span><b class="${(r[k] || 0) >= 0 ? 'pos' : 'neg'}">${pct(r[k])}</b></div>`).join('')}
+        ${BT ? `<div class="kpi"><span>Index max drawdown</span><b class="neg">${pct(BT.sleeve.dd.mdd)}</b></div>` : ''}
         ${f ? `<div class="kpi"><span>${rs(f)} would be</span><b>${rs(f * (1 + tot / 100))}</b></div>` : ''}</div>`
+      + (BT ? chartsBlock(BT, r, tot) : '')
+      + toolbar('Each part, opened by its header')
       + SPLIT.map(([k, label, sh]) => {
-        if (k === 'index' && BT) return indexMonthly(BT, sh);
+        if (k === 'index' && BT) {
+          const n0 = BT.sim.rows[0] ? BT.sim.rows[0].positions.length : L.index.length;
+          return sleeve(k, label, `${Math.round(sh * 100)}% · ${n0} holdings then · average ${pct(r[k])}`, indexMonthly(BT, sh), false);
+        }
         const rows = L[k];
         const rule = k === 'index' ? pairNotes(L.pk) : '';
-        return `<section class="sleeve"><h2>${label} <small>${Math.round(sh * 100)}% · ${rows.length} holdings then · average ${pct(r[k])}</small></h2>${rule}
-          <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">${k === 'value' ? 'Score then' : 'Momentum then'}</th><th class="r">Return since</th></tr></thead><tbody>${
+        const sorted = rows.slice().sort((a, b) => (num(b.ret) ? b.ret : -1e9) - (num(a.ret) ? a.ret : -1e9));
+        const chart = k === 'index' ? '' : `<div class="sub">Return since, best to worst</div>${bars(sorted.map(x => ({label: x.sym, v: x.ret, title: x.name})))}<div class="sub">Detail</div>`;
+        const table = `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">${k === 'value' ? 'Score then' : 'Momentum then'}</th><th class="r">Return since</th></tr></thead><tbody>${
           rows.length ? rows.map(x => `<tr><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td>
             <td class="r">${k === 'value' ? fmt(x.score, 0) : ms(x.mom)}</td><td class="r">${pill(x.ret)}</td></tr>`).join('')
-          : '<tr><td colspan="4" class="empty">Nothing passed this screen then.</td></tr>'}</tbody></table></div></section>`;
+          : '<tr><td colspan="4" class="empty">Nothing passed this screen then.</td></tr>'}</tbody></table></div>`;
+        return sleeve(k, label, `${Math.round(sh * 100)}% · ${rows.length} holdings then · average ${pct(r[k])}`, rule + chart + table, false);
       }).join('')
-      + (L.index.some(x => !num(x.ret)) ? '<p class="note">ETFs without prices count as 0% inside the index part.</p>' : '');
+      + (L.index.some(x => !num(x.ret)) && !BT ? '<p class="note">ETFs without prices count as 0% inside the index part.</p>' : '');
   }
+  drawCharts();
 }
 function csv() {
   if (!LAST || !LAST.fund) return;
   const lines = [['Part', 'Symbol', 'Name', 'Price', 'Units', 'Amount'].join(',')];
-  LAST.A.parts.forEach(p => p.rows.forEach(x => lines.push([p.label, x.sym, '"' + String(x.name || '').replace(/"/g, '""') + '"', num(x.price) ? x.price : '', x.qty == null ? '' : x.qty, x.invested == null ? '' : Math.round(x.invested)].join(','))));
+  LAST.A.parts.forEach(p => p.rows.forEach(x => lines.push([p.label, x.label || x.sym, '"' + String(x.name || '').replace(/"/g, '""') + '"', num(x.price) ? x.price : '', x.qty == null ? '' : x.qty, x.invested == null ? '' : Math.round(x.invested)].join(','))));
   lines.push(['Cash left', '', '', '', '', Math.round(LAST.A.cash)].join(','));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([lines.join('\n')], {type: 'text/csv'}));
@@ -397,6 +628,12 @@ $('#csv').addEventListener('click', csv);
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   TAB = b.dataset.tab; document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b)); paint();
 }));
+/* remember which parts are open; "Expand all / Collapse all" */
+$('#out').addEventListener('toggle', e => { const d = e.target; if (d && d.matches && d.matches('details.sleeve')) OPENST[TAB + ':' + d.dataset.k] = d.open; }, true);
+$('#out').addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('[data-all]'); if (!b) return;
+  document.querySelectorAll('#out details.sleeve').forEach(d => { d.open = b.dataset.all === '1'; });
+});
 paintSplit();
 
 (async () => {
@@ -407,9 +644,9 @@ paintSplit();
   if (!admin) { $('#gate').innerHTML = 'The Portfolio builder is for admins only. <a href="fundamentals">Back to Fundamentals</a>'; return; }
   document.documentElement.classList.add('pb-admin'); $('#gate').remove();
   try {
-    const etf = await etfData();
-    DATA = Object.assign({etf}, await screens(etf));
-    status(`Ready · data as of ${DATA.now.date}${DATA.back ? ' · backtest from ' + DATA.back.date : ''}`);
+    const [etf, daily] = await Promise.all([etfData(), dailyData()]);
+    DATA = Object.assign({etf, daily}, await screens(etf));
+    status(`Ready · data as of ${DATA.now.date}${DATA.back ? ' · backtest from ' + DATA.back.date : ''}${daily ? ' · ' + daily.dates.length + ' daily ETF closes' : ''}`);
     paint();
   } catch (e) { status(e.message || 'Could not load the screens.', true); }
 })();
