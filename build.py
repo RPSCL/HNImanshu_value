@@ -908,23 +908,29 @@ def write_builder_etf(out: Path) -> int:
     return len(data["etf"])
 
 
+ETF_SYMS_B = ["GOLDBEES", "ITBEES", "ALPHA", "JUNIORBEES", "MON100", "HNGSNGBEES", "FMCGIETF"]   # 4-decimal columns in builder_daily.json
+
+
 def write_builder_daily(out: Path) -> int:
     """etf_prices/daily_close.csv (saved by fetch_prices.py, committed to the repo) → public/builder_daily.json for the
-    Portfolio Builder's backtest charts (total return, drawdown):
-      {"dates": ["YYYY-MM-DD", …], "px": {"GOLDBEES": [adjusted close per date, null where missing], …, "NIFTY500": […]}}
-    Nothing is fetched here, so every build can use the saved prices. No saved file yet → no output (the page falls back
-    to the 13 monthly points in builder_etf.json). Returns the number of days written."""
+    Portfolio Builder's day-by-day portfolio chart:
+      {"dates": ["YYYY-MM-DD", …], "px": {"GOLDBEES": [adjusted close per date, null before listing], …, "NIFTY500": […], "<STOCK>": […]}}
+    ETFs + NIFTY500 come with cron.yml mode 4 / part 1, the stocks with the Saturday price parts (a stock not saved yet is drawn as a
+    straight line from its start to its end price by the page). Nothing is fetched here, so every build can use the saved prices.
+    No saved file yet → no output (the page falls back to the 13 monthly points in builder_etf.json). Returns the days written."""
     src = BASE / "etf_prices" / "daily_close.csv"
     if not src.exists():
         print("  builder_daily.json: etf_prices/daily_close.csv not there yet — run cron.yml mode 4 (ETF only) once")
         return 0
     try:
-        df = pd.read_csv(src, index_col="date").sort_index().ffill()          # a holiday gap in one ETF carries its last close
+        df = pd.read_csv(src, index_col="date", low_memory=False).sort_index().ffill()     # a holiday gap carries the last close
         df.index = df.index.astype(str)
-        px = {c: [None if v != v else round(float(v), 4) for v in df[c]] for c in df.columns}
+        df = df.dropna(axis=1, how="all")
+        etf_cols = set(["NIFTY500"] + list(ETF_SYMS_B))
+        px = {c: [None if v != v else round(float(v), 4 if c in etf_cols else 2) for v in df[c]] for c in df.columns}
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps({"dates": list(df.index), "px": px}, separators=(",", ":")), encoding="utf-8")
-        print(f"  builder_daily.json: {len(df)} days × {len(df.columns)} series ({df.index[0]} … {df.index[-1]})")
+        print(f"  builder_daily.json: {len(df)} days × {len(df.columns)} series ({df.index[0]} … {df.index[-1]}), {out.stat().st_size / 1e6:.1f} MB")
         return len(df)
     except Exception as e:
         print(f"  [WARN] builder_daily.json not written ({e})")
