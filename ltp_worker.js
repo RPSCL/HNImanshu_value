@@ -10,6 +10,11 @@
 //   3. Not more than once every COOLDOWN_MIN minutes (asks GitHub when the last run started).
 //   4. Starts .github/workflows/ltp.yml on main (workflow_dispatch). The run takes about 1–2 minutes.
 //
+// POST /builder  (PF Builder page, admins only): body {"symbols": ["TCS", ...]} = the stocks of the builder's 1-year-back list.
+//   Same login check, but always admin-only (ALLOW_ALL_USERS does not apply) and open any time of day. Starts
+//   .github/workflows/builder_prices.yml with those symbols, which downloads their prices day by day for the backtest chart.
+//   If that workflow is already running it answers {running: true} and the page just keeps waiting.
+//
 // Clock: a Cloudflare Cron Trigger (Worker → Settings → Trigger events → Cron: */10 3-10 * * MON-FRI) wakes this Worker
 //   every 10 minutes; it starts ltp.yml only between 09:00 and 15:40 IST, Monday to Friday. Cloudflare's timer is
 //   on time, unlike GitHub's own schedule, which often runs late or skips.
@@ -20,6 +25,7 @@
 
 const REPO = "RPSCL/HNImanshu_value";
 const WORKFLOW = "ltp.yml";
+const BUILDER_WORKFLOW = "builder_prices.yml";
 const BRANCH = "main";
 const FIREBASE_KEY = "AIzaSyD1oA953pXZxBAuOR9ObSk6vAmKf1gyVbE";
 const PROJECT = "hnimanshu";
@@ -34,6 +40,7 @@ const inHours = (ms) => {                              // ms = a UTC timestamp
 	return day !== 0 && day !== 6 && min >= AUTO_FROM && min <= AUTO_TILL;
 };
 
+const SYMBOL_OK = /^[A-Z0-9&_-]{1,24}$/;            // what fetch_prices.py accepts as a stock symbol
 const gh = (env, path, init = {}) => fetch(`https://api.github.com/repos/${REPO}${path}`, {...init, headers: {
 	Authorization: `Bearer ${env.GH_TOKEN}`, Accept: "application/vnd.github+json",
 	"X-GitHub-Api-Version": "2022-11-28", "User-Agent": "hnimanshu-ltp-worker", ...(init.headers || {}),
@@ -69,9 +76,10 @@ export default {
 		};
 		const reply = (status, body) => new Response(JSON.stringify(body), {status, headers: {...cors, "Content-Type": "application/json"}});
 		if (req.method === "OPTIONS") return new Response(null, {status: 204, headers: cors});
-		if (req.method !== "POST" || new URL(req.url).pathname !== "/run") return reply(404, {error: "not found"});
+		const path = new URL(req.url).pathname;
+		if (req.method !== "POST" || (path !== "/run" && path !== "/builder")) return reply(404, {error: "not found"});
 		if (!ORIGINS.includes(origin)) return reply(403, {error: "wrong site"});
-		if (!inHours(Date.now())) return reply(403, {error: "market closed, live prices run 09:00–15:40 IST, Mon–Fri"});
+		if (path === "/run" && !inHours(Date.now())) return reply(403, {error: "market closed, live prices run 09:00–15:40 IST, Mon–Fri"});
 
 		// 1. who is this? (Google verifies the token)
 		const idToken = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
@@ -84,12 +92,26 @@ export default {
 
 		// 2. admin?
 		let admin = user.email === MAIN_ADMIN;
-		if (!admin && !ALLOW_ALL_USERS) {
+		if (!admin && (!ALLOW_ALL_USERS || path === "/builder")) {
 			const r = await fetch(`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/hni_admins/${encodeURIComponent(user.localId)}`,
 				{headers: {Authorization: `Bearer ${idToken}`}});
 			admin = r.ok;                                        // 200 = the admin document exists (rules let a user read their own)
 		}
-		if (!admin && !ALLOW_ALL_USERS) return reply(403, {error: "admins only"});
+		if (!admin && (!ALLOW_ALL_USERS || path === "/builder")) return reply(403, {error: "admins only"});
+
+		// PF Builder: start the day-by-day price run for the stocks the page sent
+		if (path === "/builder") {
+			let body = {};
+			try { body = await req.json(); } catch (e) {}
+			const syms = [...new Set((Array.isArray(body.symbols) ? body.symbols : []).map(x => String(x).trim().toUpperCase()))];
+			if (!syms.length || syms.length > 80 || !syms.every(x => SYMBOL_OK.test(x))) return reply(400, {error: "bad symbol list"});
+			const runs = await gh(env, `/actions/workflows/${BUILDER_WORKFLOW}/runs?per_page=1`);
+			const last = runs.ok ? ((await runs.json()).workflow_runs || [])[0] : null;
+			if (last && last.status !== "completed") return reply(429, {error: "already running", running: true});
+			const go = await gh(env, `/actions/workflows/${BUILDER_WORKFLOW}/dispatches`, {method: "POST", body: JSON.stringify({ref: BRANCH, inputs: {symbols: syms.join(",")}})});
+			if (go.status !== 204) return reply(502, {error: `GitHub said ${go.status}`});
+			return reply(200, {ok: true, symbols: syms.length});
+		}
 
 		// 3. cooldown: the last run of ltp.yml
 		const b = await busy(env, COOLDOWN_MIN);

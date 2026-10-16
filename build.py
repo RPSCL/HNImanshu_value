@@ -915,8 +915,9 @@ def write_builder_daily(out: Path) -> int:
     """etf_prices/daily_close.csv (saved by fetch_prices.py, committed to the repo) → public/builder_daily.json for the
     Portfolio Builder's day-by-day portfolio chart:
       {"dates": ["YYYY-MM-DD", …], "px": {"GOLDBEES": [adjusted close per date, null before listing], …, "NIFTY500": […], "<STOCK>": […]}}
-    ETFs + NIFTY500 come with cron.yml mode 4 / part 1, the stocks with the Saturday price parts (a stock not saved yet is drawn as a
-    straight line from its start to its end price by the page). Nothing is fetched here, so every build can use the saved prices.
+    ETFs + NIFTY500 come with cron.yml mode 4 / price part 1; the stocks of the page's 1-year-back list come from builder_prices.yml
+    (fetch_prices.py --history, started by the page itself). "tried" = the stocks that run asked for. A stock without saved prices is
+    drawn by the page as a straight line from its start to its end price. Nothing is fetched here, so every build can use the saved prices.
     No saved file yet → no output (the page falls back to the 13 monthly points in builder_etf.json). Returns the days written."""
     src = BASE / "etf_prices" / "daily_close.csv"
     if not src.exists():
@@ -928,8 +929,13 @@ def write_builder_daily(out: Path) -> int:
         df = df.dropna(axis=1, how="all")
         etf_cols = set(["NIFTY500"] + list(ETF_SYMS_B))
         px = {c: [None if v != v else round(float(v), 4 if c in etf_cols else 2) for v in df[c]] for c in df.columns}
+        tried = []                                       # stocks the last history run asked for (the page does not ask again for ones Angel could not give)
+        try:
+            tried = list(json.loads((BASE / "etf_prices" / "requested.json").read_text(encoding="utf-8")).get("requested", []))
+        except Exception:
+            pass
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps({"dates": list(df.index), "px": px}, separators=(",", ":")), encoding="utf-8")
+        out.write_text(json.dumps({"dates": list(df.index), "tried": tried, "px": px}, separators=(",", ":")), encoding="utf-8")
         print(f"  builder_daily.json: {len(df)} days × {len(df.columns)} series ({df.index[0]} … {df.index[-1]}), {out.stat().st_size / 1e6:.1f} MB")
         return len(df)
     except Exception as e:
@@ -1059,10 +1065,14 @@ def build(deploy=False):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="HNImanshu Stock Screener Build")
     ap.add_argument("--deploy", action="store_true", help="Deploy to Firebase after build")
+    ap.add_argument("--daily-only", action="store_true",
+                    help="only rewrite public/builder_daily.json from etf_prices/daily_close.csv (builder_prices.yml)")
     ap.add_argument("--etf-only", action="store_true",
                     help="only rewrite public/builder_etf.json (ETF prices + momentum) from prices.csv; "
                          "no screener / fundamentals rebuild (cron.yml mode 4)")
     args = ap.parse_args()
+    if args.daily_only:
+        sys.exit(0 if write_builder_daily(OUTPUT.parent / "builder_daily.json") else 1)
     if args.etf_only:
         n = write_builder_etf(OUTPUT.parent / "builder_etf.json")
         write_builder_daily(OUTPUT.parent / "builder_daily.json")
