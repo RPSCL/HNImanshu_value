@@ -288,6 +288,7 @@ jobs:
           [ -f EQUITY_L.csv ] && git add EQUITY_L.csv                         # NSE's list of every listed company
           [ -f Nifty_Others_Fundamentals.csv ] && git add Nifty_Others_Fundamentals.csv   # written by others.yml
           [ -f prices.csv ] && git add prices.csv          # Angel prices (Saturday, in thirds; ETF rows also by mode 4)
+          [ -d etf_prices ] && git add etf_prices            # ETF raw candles + 365 days of daily closes (Portfolio Builder charts)
           [ -f etf_weekly_momentum.csv ] && git add etf_weekly_momentum.csv   # weekly composite momentum of the ETF ratios
           [ -f old_csv.zip ] && git add old_csv.zip
           # dated CSVs now live inside old_csv.zip → remove any loose ones from git
