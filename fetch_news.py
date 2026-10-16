@@ -47,6 +47,9 @@ def session():
     return _local.s
 
 
+ABORT = threading.Event()   # set at the first "now 0.0 calls/s": Google is blocking us, so stop fetching and let the workflow build + deploy
+
+
 class Pace:
     """Spaces calls 1/RATE s apart across all threads. On a 429 / 503 everyone pauses (30 s, then 60 s, …)."""
     def __init__(self, rate):
@@ -57,7 +60,7 @@ class Pace:
             now = time.monotonic()
             t = max(self.next, now)
             self.next = t + self.gap
-        time.sleep(max(0.0, t - now))
+        ABORT.wait(max(0.0, t - now))             # a sleep that ends at once when the run is given up
 
     def slow_down(self):
         with self.lock:
@@ -65,7 +68,11 @@ class Pace:
             pause = min(30 * self.hits, 120)
             self.next = max(self.next, time.monotonic() + pause)
             self.gap *= 1.5                       # stay slower for the rest of the run
-        print(f"⏸ Google asked to slow down; pausing {pause}s, now {1 / self.gap:.1f} calls/s", flush=True)
+        shown = f"{1 / self.gap:.1f}"
+        print(f"⏸ Google asked to slow down; pausing {pause}s, now {shown} calls/s", flush=True)
+        if shown == "0.0" and not ABORT.is_set():                # the first 0.0 calls/s: no point going on (it once ran 5 hours like this)
+            ABORT.set()
+            print("🛑 Google keeps refusing (0.0 calls/s): stopping the news fetch here; what is done is kept, the build + deploy go on.", flush=True)
 
 
 PACE = Pace(RATE)
@@ -76,6 +83,8 @@ def google_news(query):
     url = RSS_URL.format(q=quote(query), d=NEWS_DAYS)
     for attempt in range(MAX_RETRIES):
         PACE.wait()
+        if ABORT.is_set():
+            return None                                        # given up: not "no news", just not asked
         try:
             r = session().get(url, timeout=15)
             if r.status_code in (429, 503):
@@ -201,6 +210,8 @@ def save_state(st):
 # ══════════════════════════════════════════════
 
 def fetch_stock(symbol, name):
+    if ABORT.is_set():
+        return None
     # "Infosys Limited" → "infosys": headlines rarely say "Limited", so match on the name without it
     core      = re.sub(r"\b(limited|ltd\.?|the)\b", " ", name.lower()).replace("&", " and ")
     name_low  = " ".join(core.split())
@@ -211,6 +222,8 @@ def fetch_stock(symbol, name):
     query = name
 
     articles = google_news(query)                          # one call; retries only on errors
+    if articles is None:                                   # run given up while this one was waiting
+        return None
 
     if not articles:
         return pd.DataFrame()
@@ -361,6 +374,7 @@ def main():
 
     accumulated = []
     done = found = 0
+    asked = []                                                     # stocks really asked this run (the others stay "least recently fetched")
     t0 = time.time()
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
@@ -368,12 +382,20 @@ def main():
 
         for f in as_completed(futures, timeout=TASK_TIMEOUT * total):
             sym, name = futures[f]
-            done += 1
+            if f.cancelled():
+                continue
 
             try:
                 df = f.result(timeout=TASK_TIMEOUT)
             except Exception:
                 df = pd.DataFrame()
+
+            if df is None:                                         # given up (0.0 calls/s): not asked, not counted
+                if ABORT.is_set():
+                    pool.shutdown(wait=False, cancel_futures=True)  # drop everything still queued
+                continue
+            done += 1
+            asked.append(sym)
 
             if df is not None and not df.empty:
                 # Filter by BOTH link and (stockname, news) to catch all dups
@@ -418,12 +440,14 @@ def main():
     existing_df = trim_and_dedup(existing_df, cutoff)
     existing_df.to_csv(outfile, index=False, encoding="utf-8-sig")
     stamp = datetime.now(IST).strftime("%Y-%m-%d %H:%M")         # these were asked this run, news or not
-    for s, _ in stocks:
+    for s in asked:
         state[s] = stamp
     keep = {s for s, _ in all_stocks}
     save_state({k: v for k, v in state.items() if k in keep})
 
     elapsed = time.time() - t0
+    if ABORT.is_set():
+        print(f"\n⚠️ Stopped early (Google throttling): {done} of {total} stocks asked, {total - done} left for the next run.", flush=True)
     print(f"\n✅ Done | {found} new rows | total {len(existing_df)} | time {elapsed/60:.1f} min", flush=True)
 
 
