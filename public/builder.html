@@ -85,8 +85,8 @@ tbody tr:hover td{background:var(--hover)}
 .disc{margin:26px 0 8px;padding:12px 14px;border:1px dashed var(--line);border-radius:10px;font-size:12px;color:var(--faint)}
 .eng{position:absolute;left:-10000px;top:0;width:1280px;height:900px;border:0;visibility:hidden}
 /* ---- PF Builder: sections, charts ---- */
-:root{--c-bench:#7aa2d6;--c-g:#e0b840;--c-j:#78cc90;--c-m:#9b8cf0;--c-h:#d48ae0;--c-f:#e09878;--c-a:#5fc9c9;--c-i:#c8c8c8}
-:root[data-theme=day]{--c-bench:#1f4e8c;--c-g:#8a5a00;--c-j:#0b6b24;--c-m:#4a3fb0;--c-h:#8a2a9c;--c-f:#a03a14;--c-a:#0a6a6a;--c-i:#444}
+:root{--dd:#ff6b5e;--c-bench:#7aa2d6;--c-g:#e0b840;--c-j:#78cc90;--c-m:#9b8cf0;--c-h:#d48ae0;--c-f:#e09878;--c-a:#5fc9c9;--c-i:#c8c8c8}
+:root[data-theme=day]{--dd:#b3261e;--c-bench:#1f4e8c;--c-g:#8a5a00;--c-j:#0b6b24;--c-m:#4a3fb0;--c-h:#8a2a9c;--c-f:#a03a14;--c-a:#0a6a6a;--c-i:#444}
 header{padding:8px 0 14px}
 h1{margin:22px 0 6px}
 .how{margin:0 0 16px;border:1px solid var(--line);border-radius:10px;background:var(--panel);max-width:860px}
@@ -114,11 +114,6 @@ details.sec>.body{padding:0 14px 14px}
 .cc{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
 .cc h3{margin:0 0 2px;font:600 14px var(--sans)}
 .cc .sub{margin:0 0 8px;font:500 11.5px var(--mono);color:var(--faint)}
-.leg{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
-.leg button{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;background:none;color:var(--faint);font:500 11.5px var(--mono);padding:3px 10px;cursor:pointer}
-.leg button i{width:9px;height:9px;border-radius:50%;background:var(--faint)}
-.leg button.on{color:var(--ink);border-color:var(--mute)}
-.leg button.on i{background:var(--cc)}
 .chart{position:relative;width:100%}
 .chart svg{display:block;width:100%;overflow:visible}
 .chart text{font:10.5px var(--mono);fill:var(--faint)}
@@ -128,22 +123,13 @@ details.sec>.body{padding:0 14px 14px}
 .tip{position:absolute;z-index:3;pointer-events:none;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font:11.5px/1.5 var(--mono);white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.25)}
 .tip b{display:block;color:var(--faint);font-weight:500;margin-bottom:2px}
 .tip i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
-.brow{display:grid;grid-template-columns:132px 1fr 64px;align-items:center;gap:8px;padding:3px 0;font:12px var(--mono)}
-.brow .bl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.brow .bl em{font-style:normal;color:var(--faint);font-size:10.5px;margin-left:4px}
-.bt{position:relative;height:14px}
-.bt .bz{position:absolute;top:-2px;bottom:-2px;width:1px;background:var(--faint)}
-.bt .bb{position:absolute;top:1px;height:12px;border-radius:2px}
-.bb.pos{background:var(--good)}.bb.neg{background:var(--bad)}
-.brow .bv{text-align:right}
-.scroll{max-height:520px;overflow:auto;padding-right:4px}
-.mini th,.mini td{padding:6px 10px}
+.fund .pc input{width:84px;text-align:right}
+.fund .pc input[readonly]{color:var(--mute);background:transparent;border-style:dashed}
+.fund .pc input.bad{border-color:var(--bad)}
 .lead2{color:var(--mute);font-size:12.5px;margin:0 0 12px}
-.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
 @media (max-width:640px){
   .wrap{padding:12px 16px}
-  .brow{grid-template-columns:96px 1fr 56px}
-  h1{font-size:19px}
+    h1{font-size:19px}
   .nm{display:none}
   .fund .btn{flex:1}
   .kpi b{font-size:15px}
@@ -163,15 +149,18 @@ details.sec>.body{padding:0 14px 14px}
   <h1>PF builder</h1>
   <p class="lead" id="gate" style="display:block">Checking admin access…</p>
   <details class="how lead"><summary>How it works</summary>
-    <p>Enter a fund amount. It is split <b>40% index ETFs</b>, <b>40% value stocks</b> (Deep value screen) and
-    <b>20% momentum stocks</b> (top 15 of the Momentum screen), equal weight inside each part, using the same data and
-    screens as Fundamentals. <b>PSU stocks are never picked</b> (value or momentum). The index part holds two ETF/Gold slots
+    <p>Enter a fund amount. It is split between <b>index ETFs</b>, <b>value stocks</b> (Deep value screen) and
+    <b>momentum stocks</b> (top 15 of the Momentum screen), equal weight inside each part, using the same data and
+    screens as Fundamentals. The split is 40 / 40 / 20 by default: type the ETF % and the Value % and Momentum gets the rest. <b>PSU stocks are never picked</b> (value or momentum). The index part holds two ETF/Gold slots
     (IT/Gold and ALPHA/Gold): a slot holds Gold while its ETF is not stronger, so Gold can be held twice (2× weight).
     The backtest applies the same rules as they stood 1 year ago, and re-checks the ETF pairs every month.</p></details>
 
   <div class="card">
     <form class="fund" id="fundForm" autocomplete="off">
       <label>Fund value (₹)<input id="fund" inputmode="numeric" placeholder="e.g. 10,00,000" aria-label="Fund value in rupees"></label>
+      <label class="pc">Index ETFs %<input id="pEtf" inputmode="decimal" aria-label="Index ETFs percent"></label>
+      <label class="pc">Value %<input id="pVal" inputmode="decimal" aria-label="Value stocks percent"></label>
+      <label class="pc">Momentum %<input id="pMom" readonly tabindex="-1" aria-label="Momentum percent, the rest"></label>
       <button class="btn primary" id="go" type="submit">Build</button>
       <button class="btn" id="csv" type="button" disabled>Download CSV</button>
     </form>
@@ -192,7 +181,9 @@ details.sec>.body{padding:0 14px 14px}
 
 <script>
 /* ---------- rules ---------- */
-const SPLIT = [['index', 'Index ETFs', 0.4], ['value', 'Value', 0.4], ['mom', 'Momentum', 0.2]];
+let SPLIT = [['index', 'Index ETFs', 0.4], ['value', 'Value', 0.4], ['mom', 'Momentum', 0.2]];   // Momentum = 100 − ETF % − Value % (the two boxes)
+const SPLIT_DEF = [40, 40];
+function setSplit(e, v) { SPLIT = [['index', 'Index ETFs', e / 100], ['value', 'Value', v / 100], ['mom', 'Momentum', (100 - e - v) / 100]]; }
 const ETF_NAME = {GOLDBEES: 'Nippon India ETF Gold BeES', ITBEES: 'Nippon India ETF Nifty IT', ALPHA: 'Kotak Nifty Alpha 50 ETF',
   JUNIORBEES: 'Nippon India ETF Nifty Next 50 Junior BeES', MON100: 'Motilal Oswal Nasdaq 100 ETF',
   HNGSNGBEES: 'Nippon India ETF Hang Seng BeES', FMCGIETF: 'ICICI Prudential Nifty FMCG ETF'};
@@ -369,81 +360,84 @@ function etfBacktest(E, dates, D) {
   return {rows, ret: (V - 1) * 100, held, scored, switches, taxPaid: taxPaid * 100, curve: {dates: cd, v: cv}, at, mode: at ? 'daily' : 'monthly'};
 }
 
-/* ---------- charts: series, drawdown, SVG line chart, bars ---------- */
+/* ---------- the portfolio chart: whole portfolio, day by day ---------- */
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const fdate = (d, long) => { const m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(d || ''); return m ? (long ? m[3] + ' ' : '') + MON[+m[2] - 1] + ' ' + (long ? m[1] : m[1].slice(2)) : (d || ''); };
-const ETF_COL = {GOLDBEES: 'var(--c-g)', JUNIORBEES: 'var(--c-j)', MON100: 'var(--c-m)', HNGSNGBEES: 'var(--c-h)', FMCGIETF: 'var(--c-f)', ALPHA: 'var(--c-a)', ITBEES: 'var(--c-i)'};
-const rebase = a => { const b = a.find(num); return a.map(v => num(v) && b ? v / b * 100 : null); };
+const pc = s => +(s * 100).toFixed(1) + '%';
 function maxDD(v) { let pk = -Infinity, w = 0, wi = -1; v.forEach((x, i) => { if (!num(x)) return; if (x > pk) pk = x; const d = (x / pk - 1) * 100; if (d < w) { w = d; wi = i; } }); return {dd: w, i: wi}; }
 function ddSeries(v) { let pk = -Infinity; return v.map(x => { if (!num(x)) return null; if (x > pk) pk = x; return (x / pk - 1) * 100; }); }
-/* every series on the sleeve's dates, rebased to 100 */
-function seriesSet(BT, E, D, bench) {
-  const T = {dates: BT.curve.dates, mode: BT.mode, s: {}, meta: {}};
-  const add = (key, label, color, vals, w) => { if (vals && vals.some(num)) { T.s[key] = rebase(vals); T.meta[key] = {label, color, w: w || 1.6}; } };
-  add('sleeve', 'Index ETFs (mix)', 'var(--brass)', BT.curve.v, 2.6);
-  if (BT.at) {
-    const i0 = BT.at[12], i1 = BT.at[0], cut = k => D.px[k] ? D.px[k].slice(i0, i1 + 1) : null;
-    add('bench', 'NIFTY 500', 'var(--c-bench)', cut('NIFTY500'), 2);
-    Object.keys(BT.held).forEach(s => add(s, s, ETF_COL[s] || 'var(--mute)', cut(s)));
-  } else {
-    const mo = o => o && Array.isArray(o.pxM) && o.pxM.length === 13 ? o.pxM.slice().reverse() : null;      // k = 12 … 0 → oldest first
-    add('bench', 'NIFTY 500', 'var(--c-bench)', mo(bench), 2);
-    Object.keys(BT.held).forEach(s => add(s, s, ETF_COL[s] || 'var(--mute)', mo(E[s])));
-  }
-  return T;
-}
 function niceTicks(lo, hi, n) {
   const span = hi - lo || 1, st0 = span / (n - 1), mag = Math.pow(10, Math.floor(Math.log10(st0))), r = st0 / mag;
   const st = (r < 1.5 ? 1 : r < 3 ? 2 : r < 7 ? 5 : 10) * mag, a = Math.floor(lo / st + 1e-9) * st, t = [];
   for (let v = a; v <= hi + st * 0.999; v += st) { t.push(+v.toFixed(8)); if (v >= hi) break; }
   return t;
 }
-function lineChart(host, T, keys, o) {
-  const W = Math.max(260, host.clientWidth || 600), H = o.h || 250, m = {l: 46, r: 10, t: 8, b: 22}, n = T.dates.length;
-  let lo = Infinity, hi = -Infinity;
-  keys.forEach(k => T.s[k].forEach(v => { if (num(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }));
-  if (o.zero != null) { lo = Math.min(lo, o.zero); hi = Math.max(hi, o.zero); }
-  if (!isFinite(lo) || n < 2) { host.innerHTML = '<p class="empty">No data to draw.</p>'; return; }
+const rsC = v => Math.abs(v) >= 1e7 ? '₹' + fmt(v / 1e7, 2) + 'Cr' : Math.abs(v) >= 1e5 ? '₹' + fmt(v / 1e5, 2) + 'L' : '₹' + fmt(v, 0);
+/* Portfolio value per day from the fund at the start date: Index ETFs = the monthly-rechecked sleeve (daily, after tax), Value and
+   Momentum = equal-weight buy-and-hold of the picks (daily closes from builder_daily.json). A pick without saved daily closes
+   is drawn as a straight line from its start to its end price (counted in P.lines). */
+function portfolio(BT, L, F, D, bench) {
+  const dates = BT.curve.dates, n = dates.length, i0 = BT.at ? BT.at[12] : 0;
+  let lines = 0, real = 0;
+  const grow = (sym, ret) => {
+    const p = BT.at && D && D.px && D.px[sym], a = p && p[i0];
+    if (p && num(a) && a > 0) { let last = a; real++; return dates.map((_, i) => { const v = p[i0 + i]; if (num(v)) last = v; return last / a; }); }
+    lines++; const r = num(ret) ? ret / 100 : 0; return dates.map((_, i) => 1 + r * i / (n - 1));
+  };
+  const avgOf = list => { if (!list.length) return dates.map(() => 1); const g = list.map(x => grow(x.sym, x.ret)); return dates.map((_, i) => g.reduce((s, a) => s + a[i], 0) / g.length); };
+  const sh = {}; SPLIT.forEach(([k, , s]) => { sh[k] = s; });
+  const vA = avgOf(L.value), mA = avgOf(L.mom);
+  const total = dates.map((_, i) => F * (sh.index * BT.curve.v[i] / 100 + sh.value * vA[i] + sh.mom * mA[i]));
+  let nifty = null;
+  const np = BT.at && D && D.px && D.px.NIFTY500 ? D.px.NIFTY500.slice(i0, i0 + n) : (!BT.at && bench && Array.isArray(bench.pxM) && bench.pxM.length === 13 ? bench.pxM.slice().reverse() : null);
+  if (np && num(np[0]) && np[0] > 0) { let last = np[0]; nifty = np.map(v => { if (num(v)) last = v; return F * last / np[0]; }); }
+  const dd = ddSeries(total), mx = maxDD(total), avgDD = dd.reduce((s, v) => s + (v || 0), 0) / dd.length;
+  return {dates, total, nifty, dd, mx, avgDD, F, lines, real, daily: !!BT.at};
+}
+function pfChart(host, P) {
+  const W = Math.max(280, host.clientWidth || 700), m = {l: 58, r: 12, t: 8, b: 22}, H1 = 250, GAP = 34, H2 = 110, H = m.t + H1 + GAP + H2 + m.b, n = P.dates.length;
+  if (n < 2) { host.innerHTML = '<p class="empty">No data to draw.</p>'; return; }
+  const X = i => m.l + i / (n - 1) * (W - m.l - m.r);
+  let lo = Math.min(P.F, ...P.total), hi = Math.max(P.F, ...P.total);
+  if (P.nifty) { lo = Math.min(lo, ...P.nifty); hi = Math.max(hi, ...P.nifty); }
   const tk = niceTicks(lo, hi, 5); lo = tk[0]; hi = tk[tk.length - 1];
-  const X = i => m.l + i / (n - 1) * (W - m.l - m.r), Y = v => m.t + (1 - (v - lo) / (hi - lo)) * (H - m.t - m.b);
-  const path = vals => { let d = '', pen = false; vals.forEach((v, i) => { if (!num(v)) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1); pen = true; }); return d; };
-  const xt = []; const nt = Math.min(6, n); for (let j = 0; j < nt; j++) xt.push(Math.round(j * (n - 1) / (nt - 1)));
-  let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.label || 'chart')}">`;
-  tk.forEach(v => { svg += `<line class="gl" x1="${m.l}" x2="${W - m.r}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text x="${m.l - 6}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end">${o.fy(v)}</text>`; });
-  if (o.zero != null) svg += `<line class="z" x1="${m.l}" x2="${W - m.r}" y1="${Y(o.zero).toFixed(1)}" y2="${Y(o.zero).toFixed(1)}"/>`;
-  xt.forEach((i, j) => { svg += `<text x="${X(i).toFixed(1)}" y="${H - 5}" text-anchor="${j === 0 ? 'start' : j === nt - 1 ? 'end' : 'middle'}">${esc(fdate(T.dates[i]))}</text>`; });
-  keys.forEach(k => {
-    const M = T.meta[k], vals = T.s[k];
-    if (o.area && k === 'sleeve') { const pth = path(vals); if (pth) svg += `<path d="${pth}L${X(n - 1).toFixed(1)} ${Y(o.zero).toFixed(1)}L${X(0).toFixed(1)} ${Y(o.zero).toFixed(1)}Z" style="fill:${M.color};opacity:.14;stroke:none"/>`; }
-    svg += `<path d="${path(vals)}" fill="none" style="stroke:${M.color}" stroke-width="${M.w}" stroke-linejoin="round" stroke-linecap="round"/>`;
-  });
-  svg += `<line class="cur" id="cur" y1="${m.t}" y2="${H - m.b}" style="display:none"/></svg><div class="tip" style="display:none"></div>`;
-  host.innerHTML = svg;
+  const Y1 = v => m.t + (1 - (v - lo) / (hi - lo)) * H1;
+  const dMin = Math.min(P.mx.dd, P.avgDD, -0.5), tk2 = niceTicks(dMin * 1.08, 0, 3); const lo2 = tk2[0];
+  const y2t = m.t + H1 + GAP, Y2 = v => y2t + (v / lo2) * H2;
+  const path = (vals, Y) => { let d = '', pen = false; vals.forEach((v, i) => { if (!num(v)) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1); pen = true; }); return d; };
+  const xt = [], nt = Math.min(6, n); for (let j = 0; j < nt; j++) xt.push(Math.round(j * (n - 1) / (nt - 1)));
+  let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Portfolio value and drawdown, day by day">`;
+  tk.forEach(v => { s += `<line class="gl" x1="${m.l}" x2="${W - m.r}" y1="${Y1(v).toFixed(1)}" y2="${Y1(v).toFixed(1)}"/><text x="${m.l - 6}" y="${(Y1(v) + 3.5).toFixed(1)}" text-anchor="end">${rsC(v)}</text>`; });
+  s += `<line class="z" x1="${m.l}" x2="${W - m.r}" y1="${Y1(P.F).toFixed(1)}" y2="${Y1(P.F).toFixed(1)}"/>`;
+  if (P.nifty) s += `<path d="${path(P.nifty, Y1)}" fill="none" style="stroke:var(--c-bench)" stroke-opacity=".5" stroke-width="1.5" stroke-linejoin="round"/>`;
+  s += `<path d="${path(P.total, Y1)}" fill="none" style="stroke:var(--ink)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`;
+  tk2.forEach(v => { s += `<line class="gl" x1="${m.l}" x2="${W - m.r}" y1="${Y2(v).toFixed(1)}" y2="${Y2(v).toFixed(1)}"/><text x="${m.l - 6}" y="${(Y2(v) + 3.5).toFixed(1)}" text-anchor="end">${fmt(v, dMin > -4 ? 1 : 0)}%</text>`; });
+  s += `<path d="${path(P.dd, Y2)}L${X(n - 1).toFixed(1)} ${Y2(0).toFixed(1)}L${X(0).toFixed(1)} ${Y2(0).toFixed(1)}Z" style="fill:var(--dd);opacity:.13"/>`
+    + `<path d="${path(P.dd, Y2)}" fill="none" style="stroke:var(--dd)" stroke-width="1.8" stroke-linejoin="round"/>`
+    + `<line x1="${m.l}" x2="${W - m.r}" y1="${Y2(P.avgDD).toFixed(1)}" y2="${Y2(P.avgDD).toFixed(1)}" style="stroke:var(--dd)" stroke-width="1.3" stroke-dasharray="5 4"/>`
+    + `<text x="${W - m.r - 2}" y="${(Y2(P.avgDD) - 4).toFixed(1)}" text-anchor="end" style="fill:var(--dd)">avg ${pct(P.avgDD)}</text>`;
+  if (P.mx.i >= 0) s += `<circle cx="${X(P.mx.i).toFixed(1)}" cy="${Y2(P.mx.dd).toFixed(1)}" r="3.5" style="fill:var(--dd)"/><text x="${Math.min(X(P.mx.i), W - m.r - 60).toFixed(1)}" y="${(Y2(P.mx.dd) + 13).toFixed(1)}" text-anchor="${X(P.mx.i) > W - m.r - 60 ? 'start' : 'middle'}" style="fill:var(--dd)">max ${pct(P.mx.dd)}</text>`;
+  xt.forEach((i, j) => { s += `<text x="${X(i).toFixed(1)}" y="${H - 5}" text-anchor="${j === 0 ? 'start' : j === nt - 1 ? 'end' : 'middle'}">${esc(fdate(P.dates[i]))}</text>`; });
+  s += `<text x="${m.l + 4}" y="${(y2t - 8).toFixed(1)}">Drawdown from the last peak</text>`;
+  s += `<line class="cur" id="cur" y1="${m.t}" y2="${H - m.b}" style="display:none"/></svg><div class="tip" style="display:none"></div>`;
+  host.innerHTML = s;
   const sv = host.firstChild, tip = host.lastChild, cur = sv.querySelector('#cur');
   const show = ev => {
     const r = sv.getBoundingClientRect(), px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
     const i = Math.max(0, Math.min(n - 1, Math.round((px - m.l) / (W - m.l - m.r) * (n - 1))));
     cur.setAttribute('x1', X(i)); cur.setAttribute('x2', X(i)); cur.style.display = '';
-    tip.innerHTML = `<b>${esc(fdate(T.dates[i], true))}</b>` + keys.map(k => `<div><i style="background:${T.meta[k].color}"></i>${esc(T.meta[k].label)} ${num(T.s[k][i]) ? o.ft(T.s[k][i]) : '–'}</div>`).join('');
+    tip.innerHTML = `<b>${esc(fdate(P.dates[i], true))}</b><div><i style="background:var(--ink)"></i>Portfolio ${rs(P.total[i])} (${pct((P.total[i] / P.F - 1) * 100)})</div>`
+      + (P.nifty ? `<div><i style="background:var(--c-bench)"></i>NIFTY 500 ${rs(P.nifty[i])} (${pct((P.nifty[i] / P.F - 1) * 100)})</div>` : '')
+      + `<div><i style="background:var(--dd)"></i>Drawdown ${pct(P.dd[i])}</div>`;
     tip.style.display = ''; const tw = tip.offsetWidth; tip.style.left = Math.max(0, Math.min(W - tw, X(i) + 12 > W - tw ? X(i) - tw - 12 : X(i) + 12)) + 'px'; tip.style.top = '6px';
   };
   const hide = () => { cur.style.display = 'none'; tip.style.display = 'none'; };
   sv.addEventListener('pointermove', show); sv.addEventListener('pointerdown', show); sv.addEventListener('pointerleave', hide);
 }
-function barRows(items) {                                       // [{label, sub, v}] → horizontal bars around a zero line
-  const vs = items.map(x => x.v).filter(num); if (!vs.length) return '<p class="empty">Nothing to show.</p>';
-  const lo = Math.min(0, ...vs), hi = Math.max(0, ...vs), sp = hi - lo || 1, z = -lo / sp * 100;
-  return items.map(x => {
-    const v = num(x.v) ? x.v : 0, w = Math.abs(v) / sp * 100, l = v >= 0 ? z : z - w;
-    return `<div class="brow"><span class="bl" title="${esc(x.label)}">${x.dot ? `<i class="dot" style="background:${x.dot}"></i>` : ''}${esc(x.label)}${x.sub ? `<em>${esc(x.sub)}</em>` : ''}</span>
-      <span class="bt"><i class="bz" style="left:${z.toFixed(2)}%"></i>${num(x.v) ? `<i class="bb ${v >= 0 ? 'pos' : 'neg'}" style="left:${l.toFixed(2)}%;width:${Math.max(w, 0.4).toFixed(2)}%"></i>` : ''}</span>
-      <span class="bv ${num(x.v) ? (v >= 0 ? 'pos' : 'neg') : ''}">${pct(x.v)}</span></div>`;
-  }).join('');
-}
 
 /* ---------- allocation ---------- */
 function allocate(fund, lists) {
-  const parts = SPLIT.map(([k, label, share]) => {
+  const parts = SPLIT.filter(x => x[2] > 0).map(([k, label, share]) => {
     const items = lists[k] || [], amt = fund * share, each = items.length ? amt / items.length : 0;
     const rows = items.map(x => {
       const qty = num(x.price) && x.price > 0 ? Math.floor(each / x.price) : null;
@@ -457,13 +451,13 @@ function allocate(fund, lists) {
 }
 
 /* ---------- page ---------- */
-let DATA = null, TAB = 'now', LAST = null, SEL = new Set(['sleeve', 'bench']), TS = null;
+let DATA = null, TAB = 'now', LAST = null, READY = '';
 const OPEN = {};                                                 // section open / closed, kept across repaints
 const isOpen = (k, def) => (TAB + k) in OPEN ? OPEN[TAB + k] : def;
 const fundVal = () => +String($('#fund').value).replace(/[^\d.]/g, '') || 0;
 function paintSplit() {
   const f = fundVal();
-  $('#split').innerHTML = SPLIT.map(([, label, s]) => `<span class="chip">${label} <b>${Math.round(s * 100)}%</b>${f ? ' · ' + rs(f * s) : ''}</span>`).join('');
+  $('#split').innerHTML = SPLIT.map(([, label, s]) => `<span class="chip">${label} <b>${+(s * 100).toFixed(1)}%</b>${f ? ' · ' + rs(f * s) : ''}</span>`).join('');
 }
 function lists(when) {
   const D = DATA, E = (D.etf && D.etf.etf) || {}, S = when === 'now' ? D.now : D.back;
@@ -486,75 +480,52 @@ function pairNotes(pk) {
 function section(k, title, small, body, def) {
   return `<details class="sec" data-k="${k}"${isOpen(k, def) ? ' open' : ''}><summary><span class="chev"></span><span class="t">${esc(title)}</span><small>${small}</small></summary><div class="body">${body}</div></details>`;
 }
-function indexBack(BT, T, sh) {
+function indexBack(BT, sh) {
   const cell = n => `${esc(n.label)} <small>(${esc(n.c)} ${ms(n.mc)} vs ${esc(n.d)} ${ms(n.md)})</small>`;
-  const dd = s => { const k = T && T.s[s]; return k ? maxDD(k).dd : null; };
   const heldRows = Object.entries(BT.held).sort((a, b) => b[1].months - a[1].months)
-    .map(([s, h]) => `<tr><td><b>${esc(s)}</b></td><td class="nm">${esc(ETF_NAME[s] || s)}</td><td class="r">${h.months} of 12</td><td class="r">${pill((h.g - 1) * 100)}</td><td class="r">${num(dd(s)) ? pct(dd(s)) : '–'}</td></tr>`).join('');
+    .map(([s, h]) => `<tr><td><b>${esc(s)}</b></td><td class="nm">${esc(ETF_NAME[s] || s)}</td><td class="r">${h.months} of 12</td><td class="r">${pill((h.g - 1) * 100)}</td></tr>`).join('');
   const monthRows = BT.rows.map(x => `<tr><td>${esc(x.date || ('−' + x.k + ' mo'))}</td>${x.notes.map(n => `<td>${cell(n)}</td>`).join('')}<td class="r">${x.rows.length}</td><td class="r">${pill(x.ret)}</td></tr>`).join('');
   const cov = BT.scored < 12 ? `<p class="note">Composite scores were available for ${BT.scored} of 12 months; in the others the default (${esc(PAIRS[0][1])}) is held.</p>` : '';
   return `<p class="rule">Composite Dual Momentum (score = 0.5 × 6M + 0.5 × 12M return): each month a slot holds the challenger only if its score is above 0 and above ${esc(PAIRS[0][1])}'s, otherwise ${esc(PAIRS[0][1])}. When both slots hold ${esc(PAIRS[0][1])} it is held twice (2× weight). After every switch the sold ETF's profit is taxed at 15% (tax paid over the year: ${fmt(BT.taxPaid, 2)}% of the starting amount). ${esc(ALWAYS.join(', '))} are always held; each other ETF once, rebalanced monthly.</p>${cov}
     <div class="tw"><table><thead><tr><th>Month</th>${PAIRS.map(([c, d], i) => `<th>Slot ${i + 1}: ${esc(c)} vs ${esc(d)}</th>`).join('')}<th class="r">Holdings</th><th class="r">Sleeve return</th></tr></thead><tbody>${monthRows}</tbody></table></div>
-    <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Months held</th><th class="r">Return while held</th><th class="r">Max drawdown</th></tr></thead><tbody>${heldRows}</tbody></table></div>`;
+    <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Months held</th><th class="r">Return while held</th></tr></thead><tbody>${heldRows}</tbody></table></div>`;
 }
-const sleeveDot = {index: 'var(--brass)', value: 'var(--good)', mom: 'var(--c-m)'};
-function drawCharts() {
-  if (!TS) return;
-  const keys = Object.keys(TS.s).filter(k => SEL.has(k));
-  const g = $('#chGrowth'), d = $('#chDD');
-  if (g) lineChart(g, TS, keys, {label: 'Growth of 100', zero: 100, fy: v => fmt(v, 0), ft: v => fmt(v, 1) + ' (' + pct(v - 100) + ')'});
-  if (d) {
-    const dT = {dates: TS.dates, meta: TS.meta, s: {}}; Object.keys(TS.s).forEach(k => { dT.s[k] = ddSeries(TS.s[k]); });
-    lineChart(d, dT, keys, {label: 'Drawdown from peak', zero: 0, area: true, h: 200, fy: v => fmt(v, 0) + '%', ft: v => pct(v)});
-  }
-}
+let PF = null;
+function drawCharts() { const h = $('#chPf'); if (h && PF) pfChart(h, PF); }
 function paintBack(fund) {
   const out = $('#out'), B = DATA.back;
-  if (!B || !B.hasPrice) { out.innerHTML = '<p class="empty">The 1-year backtest needs prices from 1 year back (prices.csv); they are not available yet.</p>'; TS = null; return; }
+  PF = null;
+  if (!B || !B.hasPrice) { out.innerHTML = '<p class="empty">The 1-year backtest needs prices from 1 year back (prices.csv); they are not available yet.</p>'; return; }
   const L = lists('back');
   const EM = (DATA.etf && DATA.etf.etf) || {}, BT = hasMonthly(EM) ? etfBacktest(EM, DATA.etf.monthDates, DATA.daily) : null;
   const r = {index: BT ? BT.ret : avg(L.index.map(x => x.ret)), value: avg(L.value.map(x => x.ret)), mom: avg(L.mom.map(x => x.ret))};
   const tot = SPLIT.reduce((s, [k, , sh]) => s + sh * (num(r[k]) ? r[k] : 0), 0);
   const bench = num(B.bench) ? B.bench : (DATA.etf && DATA.etf.bench ? DATA.etf.bench.ret1y : null);
-  const f = fund || 0;
-  TS = BT ? seriesSet(BT, EM, DATA.daily, DATA.etf && DATA.etf.bench) : null;
-  const ddOf = k => TS && TS.s[k] ? maxDD(TS.s[k]) : null, ddS = ddOf('sleeve'), ddB = ddOf('bench');
-  const note = !BT ? 'Monthly ETF data is not in yet: the ETFs are held as picked at the start.'
-    : BT.mode === 'daily' ? `The Index ETFs line is valued day by day from the saved daily closes (${TS.dates.length} trading days). Value and Momentum stocks only have start and end prices, so they appear in the bar charts, not as daily lines.`
-    : 'Daily ETF prices are not saved yet (run the ETF-only price run once), so the lines use the 13 monthly points; max drawdown is understated until then.';
-  /* ---- header numbers ---- */
-  let html = `<p class="lead2">The same rules applied to the data as it stood on <b>${esc(B.date)}</b>, held until ${esc(DATA.now.date)}: value and momentum stocks (PSU left out) without changes; the index ETFs re-checked every month (index return is after 15% tax on switches). Equal weight inside each part; 40 / 40 / 20 between parts.</p>
+  const F = fund || 100000;
+  if (BT) PF = portfolio(BT, L, F, DATA.daily, DATA.etf && DATA.etf.bench);
+  const note = !BT ? 'Monthly ETF data is not in yet, so there is no chart: the ETFs are held as picked at the start.'
+    : (fund ? '' : 'No fund amount entered: the chart starts from ₹1,00,000. ')
+      + (PF.daily ? `Valued on ${PF.dates.length} trading days.` : 'Daily prices are not saved yet (run the ETF-only price run once): the chart uses 13 monthly points and max drawdown is understated.')
+      + (PF.lines ? ` ${PF.lines} of ${PF.lines + PF.real} value / momentum stocks have no saved daily closes yet (they come with the Saturday price runs) and are drawn as a straight line from start to end.` : '')
+      + ' Index ETFs are after 15% tax on switches; value and momentum stocks are bought once and held.';
+  let html = `<p class="lead2">The same rules applied to the data as it stood on <b>${esc(B.date)}</b>, held until ${esc(DATA.now.date)}: value and momentum stocks (PSU left out) without changes; the index ETFs re-checked every month. Equal weight inside each part; ${SPLIT.map(x => +(x[2] * 100).toFixed(1)).join(' / ')} between parts.</p>
     <div class="kpis">
       <div class="kpi"><span>Mix return</span><b class="${tot >= 0 ? 'pos' : 'neg'}">${pct(tot)}</b></div>
       <div class="kpi"><span>NIFTY 500</span><b class="${(bench || 0) >= 0 ? 'pos' : 'neg'}">${pct(bench)}</b></div>
       ${SPLIT.map(([k, label]) => `<div class="kpi"><span>${label}</span><b class="${(r[k] || 0) >= 0 ? 'pos' : 'neg'}">${pct(r[k])}</b></div>`).join('')}
-      ${f ? `<div class="kpi"><span>${rs(f)} would be</span><b>${rs(f * (1 + tot / 100))}</b></div>` : ''}
-      ${ddS ? `<div class="kpi"><span>ETF max drawdown</span><b class="neg">${pct(ddS.dd)}</b></div>` : ''}
-      ${ddB ? `<div class="kpi"><span>NIFTY 500 max DD</span><b class="neg">${pct(ddB.dd)}</b></div>` : ''}</div>`;
-  /* ---- charts ---- */
-  if (TS) {
-    html += `<div class="cc" style="margin-bottom:12px"><h3>Index ETFs: growth of 100</h3><p class="sub">${esc(fdate(TS.dates[0], true))} → ${esc(fdate(TS.dates[TS.dates.length - 1], true))} · after 15% tax on switches · hover for values</p>
-      <div class="leg" id="leg">${Object.keys(TS.s).map(k => `<button type="button" data-k="${esc(k)}" class="${SEL.has(k) ? 'on' : ''}" style="--cc:${TS.meta[k].color}"><i></i>${esc(TS.meta[k].label)}</button>`).join('')}</div>
-      <div class="chart" id="chGrowth"></div></div>
-      <div class="charts two"><div class="cc"><h3>Drawdown from peak</h3><p class="sub">how far below its previous high, day by day</p><div class="chart" id="chDD"></div></div>
-      <div class="cc"><h3>Return and drawdown</h3><p class="sub">over the same period</p><div class="tw"><table class="mini"><thead><tr><th>Series</th><th class="r">Return</th><th class="r">Max DD</th><th class="r">Low on</th></tr></thead><tbody>${
-        Object.keys(TS.s).map(k => { const v = TS.s[k], last = [...v].reverse().find(num), dd = maxDD(v);
-          return `<tr><td><i class="dot" style="background:${TS.meta[k].color}"></i>${esc(TS.meta[k].label)}</td><td class="r">${pill(last - 100)}</td><td class="r">${pct(dd.dd)}</td><td class="r">${dd.i >= 0 ? esc(fdate(TS.dates[dd.i])) : '–'}</td></tr>`; }).join('')}</tbody></table></div></div></div>
-      <p class="note" style="margin:-4px 0 14px">${esc(note)}</p>`;
+      ${fund ? `<div class="kpi"><span>${rs(fund)} would be</span><b>${rs(fund * (1 + tot / 100))}</b></div>` : ''}
+      ${PF ? `<div class="kpi"><span>Max drawdown</span><b class="neg">${pct(PF.mx.dd)}</b></div><div class="kpi"><span>Average drawdown</span><b class="neg">${pct(PF.avgDD)}</b></div>` : ''}</div>`;
+  if (PF) {
+    const end = PF.total[PF.total.length - 1], a = PF.dates[0], z = PF.dates[PF.dates.length - 1];
+    html += `<div class="cc" style="margin-bottom:14px"><h3>Portfolio value, day by day</h3>
+      <p class="sub">${rs(PF.F)} on ${esc(fdate(a, true))} → ${rs(end)} on ${esc(fdate(z, true))} · net ${pct((end / PF.F - 1) * 100)} · max drawdown ${pct(PF.mx.dd)} · average drawdown ${pct(PF.avgDD)}${PF.nifty ? ' · faint line: NIFTY 500' : ''}</p>
+      <div class="chart" id="chPf"></div><p class="note">${esc(note)}</p></div>`;
   } else html += `<p class="note">${esc(note)}</p>`;
-  const uniqEtf = []; L.index.forEach(x => { if (!uniqEtf.some(y => y.sym === x.sym)) uniqEtf.push(x); });
-  const holdItems = [...uniqEtf.map(x => Object.assign({}, x, {sl: 'index'})), ...L.value.map(x => Object.assign({}, x, {sl: 'value'})), ...L.mom.map(x => Object.assign({}, x, {sl: 'mom'}))]
-    .filter(x => num(x.ret)).sort((a, b) => b.ret - a.ret).map(x => ({label: x.sym, sub: x.sl === 'index' ? 'ETF' : x.sl === 'value' ? 'value' : 'mom', v: x.ret, dot: sleeveDot[x.sl]}));
-  html += `<div class="charts two"><div class="cc"><h3>Which part performed</h3><p class="sub">return over the year, each part and the benchmark</p>${barRows([
-      {label: 'Mix (40/40/20)', v: tot, dot: 'var(--ink)'}, {label: 'NIFTY 500', v: bench, dot: 'var(--c-bench)'},
-      {label: 'Index ETFs', sub: '40%', v: r.index, dot: sleeveDot.index}, {label: 'Value', sub: '40%', v: r.value, dot: sleeveDot.value}, {label: 'Momentum', sub: '20%', v: r.mom, dot: sleeveDot.mom}])}</div>
-    <div class="cc"><h3>Every holding</h3><p class="sub">return since the start, best to worst (${holdItems.length} stocks and ETFs)</p><div class="scroll">${barRows(holdItems)}</div></div></div>`;
-  /* ---- sections (collapsed) ---- */
   const all = '<div class="bar"><span class="sp"></span><button type="button" class="btn sm" data-all="1">Expand all</button><button type="button" class="btn sm" data-all="0">Collapse all</button></div>';
-  html += all + SPLIT.map(([k, label, sh]) => {
-    const hdr = k === 'index' && BT ? `${Math.round(sh * 100)}% · ${L.index.length} holdings then · average ${pct(r[k])} after 15% tax (${BT.switches} switch${BT.switches === 1 ? '' : 'es'}) · re-checked monthly`
-      : `${Math.round(sh * 100)}% · ${L[k].length} holdings then · average ${pct(r[k])}`;
-    if (k === 'index' && BT) return section(k, label, hdr, indexBack(BT, TS, sh), false);
+  html += all + SPLIT.filter(x => x[2] > 0).map(([k, label, sh]) => {
+    const hdr = k === 'index' && BT ? `${pc(sh)} · ${L.index.length} holdings then · average ${pct(r[k])} after 15% tax (${BT.switches} switch${BT.switches === 1 ? '' : 'es'}) · re-checked monthly`
+      : `${pc(sh)} · ${L[k].length} holdings then · average ${pct(r[k])}`;
+    if (k === 'index' && BT) return section(k, label, hdr, indexBack(BT, sh), false);
     const rows = L[k];
     const body = (k === 'index' ? pairNotes(L.pk) : '') + `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">${k === 'value' ? 'Score then' : 'Momentum then'}</th><th class="r">Return since</th></tr></thead><tbody>${
       rows.length ? rows.map(x => `<tr><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td>
@@ -577,7 +548,7 @@ function paint() {
         <div class="kpi"><span>Fund</span><b>${rs(fund)}</b></div>
         <div class="kpi"><span>Invested</span><b>${fund ? rs(A.invested) : '–'}</b></div>
         <div class="kpi"><span>Cash left</span><b>${fund ? rs(A.cash) : '–'}</b></div>
-        <div class="kpi"><span>Holdings</span><b>${L.index.length + L.value.length + L.mom.length}</b></div>
+        <div class="kpi"><span>Holdings</span><b>${A.parts.reduce((n, p) => n + p.rows.length, 0)}</b></div>
         <div class="kpi"><span>Data as of</span><b>${esc(DATA.now.date || '–')}</b></div></div>
       <div class="bar"><span class="sp"></span><button type="button" class="btn sm" data-all="1">Expand all</button><button type="button" class="btn sm" data-all="0">Collapse all</button></div>`
       + A.parts.map(p => {
@@ -587,7 +558,7 @@ function paint() {
         const rule = p.k === 'index' ? pairNotes(L.pk) + (etfMiss ? '<p class="note">ETF prices are not in yet: they come with the next weekly price update (part 1). Amounts are shown; units appear once prices are in.</p>' : '')
           : p.k === 'value' ? '<p class="rule">Every non-PSU stock that passes the Deep value screen (All lists: NIFTY 500, Smallcap 500, Microcap 250), equal weight.</p>'
           : `<p class="rule">Momentum screen (All lists, PSU stocks left out), highest momentum first, ties by highest PE: top ${MOM_TOP}, equal weight.</p>`;
-        const hdr = `${Math.round(p.share * 100)}% · ${fund ? rs(p.amt) + ' · ' : ''}${p.rows.length} holdings${fund && p.rows.length ? ' · ' + rs(p.amt / p.rows.length) + ' each' : ''}`;
+        const hdr = `${pc(p.share)} · ${fund ? rs(p.amt) + ' · ' : ''}${p.rows.length} holdings${fund && p.rows.length ? ' · ' + rs(p.amt / p.rows.length) + ' each' : ''}`;
         const body = rule + `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Price ₹</th>${extraH}<th class="r">Units</th><th class="r">Amount ₹</th></tr></thead><tbody>${
           p.rows.length ? p.rows.map(x => `<tr><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td><td class="r">${fmt(x.price, 2)}</td>${extra(x)}
             <td class="r ${x.qty === 0 ? 'zero' : ''}" ${x.qty === 0 ? 'title="Price is above this holding\'s share of the fund"' : ''}>${fund && x.qty != null ? fmt(x.qty, 0) : '–'}</td><td class="r">${fund && x.invested != null ? fmt(x.invested, 0) : '–'}</td></tr>`).join('')
@@ -595,7 +566,6 @@ function paint() {
         return section(p.k, p.label, hdr, body, true);
       }).join('');
     $('#csv').disabled = !fund;
-    TS = null;
   } else paintBack(fund);
 }
 function csv() {
@@ -610,13 +580,28 @@ function csv() {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+function readSplit() {
+  const e = parseFloat($('#pEtf').value), v = parseFloat($('#pVal').value), good = isFinite(e) && isFinite(v) && e >= 0 && v >= 0 && e + v <= 100;
+  $('#pEtf').classList.toggle('bad', !good && !(e >= 0)); $('#pVal').classList.toggle('bad', !good && !(v >= 0));
+  $('#pMom').value = good ? +(100 - e - v).toFixed(2) : '–';
+  $('#go').disabled = !good;
+  if (good) { setSplit(e, v); return [e, v]; }
+  status(isFinite(e) && isFinite(v) && e + v > 100 ? 'Index ETFs % + Value % cannot be more than 100.' : 'Enter the Index ETFs % and the Value % (0 – 100).', true);
+  return null;
+}
+(() => { const sv = (lsGet('pb_split') || '').split(',').map(Number), d = sv.length === 2 && sv.every(x => isFinite(x) && x >= 0) && sv[0] + sv[1] <= 100 ? sv : SPLIT_DEF;
+  $('#pEtf').value = d[0]; $('#pVal').value = d[1]; $('#pMom').value = +(100 - d[0] - d[1]).toFixed(2); setSplit(d[0], d[1]); })();
+['#pEtf', '#pVal'].forEach(id => {
+  $(id).addEventListener('input', () => { if (readSplit()) { if (READY) status(READY); paintSplit(); } });
+  $(id).addEventListener('change', () => { if (readSplit()) { if (READY) status(READY); paintSplit(); lsSet('pb_split', $('#pEtf').value + ',' + $('#pVal').value); paint(); } });
+});
 $('#fund').value = (() => { const v = +lsGet('pb_fund'); return v > 0 ? v.toLocaleString('en-IN') : ''; })();
 $('#fund').addEventListener('input', e => {
   const n = String(e.target.value).replace(/[^\d]/g, '');
   e.target.value = n ? (+n).toLocaleString('en-IN') : '';
   paintSplit();
 });
-$('#fundForm').addEventListener('submit', e => { e.preventDefault(); lsSet('pb_fund', String(fundVal())); paint(); });
+$('#fundForm').addEventListener('submit', e => { e.preventDefault(); if (!readSplit()) return; if (READY) status(READY); lsSet('pb_fund', String(fundVal())); lsSet('pb_split', $('#pEtf').value + ',' + $('#pVal').value); paint(); });
 $('#csv').addEventListener('click', csv);
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   TAB = b.dataset.tab; document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b)); paint();
@@ -626,8 +611,6 @@ $('#out').addEventListener('toggle', e => { const d = e.target; if (d.classList 
 $('#out').addEventListener('click', e => {
   const a = e.target.closest('[data-all]');
   if (a) { const o = a.dataset.all === '1'; $('#out').querySelectorAll('details.sec').forEach(d => { d.open = o; }); return; }
-  const b = e.target.closest('#leg button');
-  if (b) { const k = b.dataset.k; if (SEL.has(k)) { if (SEL.size > 1) SEL.delete(k); } else SEL.add(k); b.classList.toggle('on', SEL.has(k)); drawCharts(); }
 });
 let RS = null; window.addEventListener('resize', () => { clearTimeout(RS); RS = setTimeout(drawCharts, 150); });
 paintSplit();
@@ -640,9 +623,10 @@ paintSplit();
   if (!admin) { $('#gate').innerHTML = 'The Portfolio builder is for admins only. <a href="fundamentals">Back to Fundamentals</a>'; return; }
   document.documentElement.classList.add('pb-admin'); $('#gate').remove();
   try {
+    const dly = dailyData();                       // big file: start it now, awaited with the screens
     const etf = await etfData();
-    DATA = Object.assign({etf, daily: await dailyData()}, await screens(etf));
-    status(`Ready · data as of ${DATA.now.date}${DATA.back ? ' · backtest from ' + DATA.back.date : ''}`);
+    DATA = Object.assign({etf, daily: await dly}, await screens(etf));
+    READY = `Ready · data as of ${DATA.now.date}${DATA.back ? ' · backtest from ' + DATA.back.date : ''}`; if (READY) status(READY);
     paint();
   } catch (e) { status(e.message || 'Could not load the screens.', true); }
 })();
