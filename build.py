@@ -908,6 +908,29 @@ def write_builder_etf(out: Path) -> int:
     return len(data["etf"])
 
 
+def write_builder_daily(out: Path) -> int:
+    """etf_prices/daily_close.csv (saved by fetch_prices.py, committed to the repo) → public/builder_daily.json for the
+    Portfolio Builder's backtest charts (total return, drawdown):
+      {"dates": ["YYYY-MM-DD", …], "px": {"GOLDBEES": [adjusted close per date, null where missing], …, "NIFTY500": […]}}
+    Nothing is fetched here, so every build can use the saved prices. No saved file yet → no output (the page falls back
+    to the 13 monthly points in builder_etf.json). Returns the number of days written."""
+    src = BASE / "etf_prices" / "daily_close.csv"
+    if not src.exists():
+        print("  builder_daily.json: etf_prices/daily_close.csv not there yet — run cron.yml mode 4 (ETF only) once")
+        return 0
+    try:
+        df = pd.read_csv(src, index_col="date").sort_index().ffill()          # a holiday gap in one ETF carries its last close
+        df.index = df.index.astype(str)
+        px = {c: [None if v != v else round(float(v), 4) for v in df[c]] for c in df.columns}
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps({"dates": list(df.index), "px": px}, separators=(",", ":")), encoding="utf-8")
+        print(f"  builder_daily.json: {len(df)} days × {len(df.columns)} series ({df.index[0]} … {df.index[-1]})")
+        return len(df)
+    except Exception as e:
+        print(f"  [WARN] builder_daily.json not written ({e})")
+        return 0
+
+
 def build_fundamentals():
     """Build public/fundamentals.html from the same 3 CSVs (explicit paths, so test_*.csv is never read)."""
     print("\nBuilding Fundamentals page...\n")
@@ -949,6 +972,7 @@ def build(deploy=False):
         data_oth = []
     n_nse = write_nse_list(OUTPUT.parent / "nse_all.json")
     write_builder_etf(OUTPUT.parent / "builder_etf.json")   # Portfolio Builder: ETF prices / 3-month returns
+    write_builder_daily(OUTPUT.parent / "builder_daily.json")   # Portfolio Builder: saved daily ETF closes (backtest charts)
 
     if data_sc250 is None:
         data_sc250 = []
@@ -1035,5 +1059,6 @@ if __name__ == "__main__":
     args = ap.parse_args()
     if args.etf_only:
         n = write_builder_etf(OUTPUT.parent / "builder_etf.json")
+        write_builder_daily(OUTPUT.parent / "builder_daily.json")
         sys.exit(0 if n else 1)          # no ETF priced → fail, so a stale file is never redeployed as "updated"
     build(args.deploy)

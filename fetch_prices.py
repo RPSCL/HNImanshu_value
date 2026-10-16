@@ -64,6 +64,14 @@ BENCH_SYM   = "^NIFTY500"                 # row name used for the benchmark in p
 BENCH_NAMES = {"nifty500"}               # matched against the index's symbol / name, spaces removed, lower case
 # ETFs for the Portfolio Builder (builder.html, index part): fetched with part 1, like the benchmark
 ETF_SYMS    = ["GOLDBEES", "ITBEES", "ALPHA", "JUNIORBEES", "MON100", "HNGSNGBEES", "FMCGIETF"]
+# Saved price history for the Portfolio Builder (committed to the repo, so every build can read it):
+#   etf_prices/raw/<SYMBOL>.csv   every daily candle exactly as Angel returned it (date, open, high, low, close, volume), NOT adjusted
+#   etf_prices/daily_close.csv    one column per ETF + NIFTY500: split-adjusted close, one row per trading day, last 365 days (+ a few
+#                                 days before, so the 1Y-back month point always finds a close on / before it). build.py turns it
+#                                 into public/builder_daily.json for the backtest charts (total return, drawdown).
+ETF_DIR     = BASE / "etf_prices"
+DAILY_CSV   = ETF_DIR / "daily_close.csv"
+DAILY_LEAD  = 10                          # extra days kept before (data date − 365)
 BACK_DAYS   = 365                         # must match fundamentals.BACK_DAYS
 MONTH_DAYS  = [round(k * 365 / 12) for k in range(13)]   # k = 0 (now) … 12 (= 365 days, the 1Y back date): month points for the Portfolio Builder
 PERIODS     = {"3M": 91, "6M": 182, "9M": 273, "1Y": 365, "1_25Y": 456, "1_5Y": 548}   # must match fundamentals.PERIODS
@@ -221,16 +229,20 @@ class Angel:
 		    f"  |  session token received: {'yes' if data.get('jwtToken') or data.get('jwttoken') else 'n/a'}")
 		log("────────────────────────────────────────────────────────")
 
-	def candles(self, token, start: date, end: date):
-		"""Daily candles [(date, open, close, high)] between start and end, fetched in ~1-year chunks."""
+	def candles(self, token, start: date, end: date, raw=None):
+		"""Daily candles [(date, open, close, high)] between start and end, fetched in ~1-year chunks.
+		raw: optional list; every candle is also appended to it as Angel sent it (date, open, high, low, close, volume)."""
 		rows, s = [], start
 		while s <= end:
 			e = min(end, s + timedelta(days=CHUNK_DAYS))
 			rows += self._call(token, s, e)
 			s = e + timedelta(days=1)
-		out = {}
+		out, seen = {}, {}
 		for ts, o, h, l, c, v in rows:
 			out[str(ts)[:10]] = (float(o), float(c), float(h))
+			seen[str(ts)[:10]] = (str(ts)[:10], o, h, l, c, v)
+		if raw is not None:
+			raw.extend(seen[k] for k in sorted(seen))
 		return [(datetime.strptime(k, "%Y-%m-%d").date(), *v) for k, v in sorted(out.items())]
 
 	def _call(self, token, s, e, tries=6):
@@ -320,6 +332,43 @@ def summarise(c, asof: date, with_px=False):
 		row["PX_MONTHLY"] = "|".join("" if v is None else f"{v:.4f}" for v in path)
 	row["STATUS"] = "OK" if "PRICE_1Y" in row else "NOT LISTED ON BACK DATE"   # 1Y status kept for older readers
 	return row
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Saved ETF history (etf_prices/): raw candles + daily split-adjusted closes
+# ─────────────────────────────────────────────────────────────────────────────
+def file_name(sym):
+	return sym.replace("^", "")                                      # ^NIFTY500 → NIFTY500
+
+
+def adjusted_closes(c):
+	"""[(date, close on TODAY's share basis)] from candles (oldest → newest): same split / bonus handling as summarise()."""
+	ev = corporate_actions(c)
+	return [(d, cl * (math.prod(f for e, f, _ in ev if e > d) if ev else 1.0)) for d, _, cl, _ in c]
+
+
+def save_etf_history(raw, closes, asof: date):
+	"""raw {SYM: [(date, o, h, l, c, v)]}, closes {SYM: [(date, adj close)]} → etf_prices/.
+	Raw files are rewritten per symbol that was fetched; daily_close.csv keeps the columns of ETFs not fetched this time."""
+	(ETF_DIR / "raw").mkdir(parents=True, exist_ok=True)
+	for sym, rows in raw.items():
+		pd.DataFrame(rows, columns=["date", "open", "high", "low", "close", "volume"]).to_csv(ETF_DIR / "raw" / f"{file_name(sym)}.csv", index=False)
+	if not closes:
+		return
+	cut = f"{asof - timedelta(days=BACK_DAYS + DAILY_LEAD):%Y-%m-%d}"
+	fresh = pd.DataFrame({file_name(s): pd.Series({f"{d:%Y-%m-%d}": round(v, 4) for d, v in r if f"{d:%Y-%m-%d}" >= cut}) for s, r in closes.items()})
+	if DAILY_CSV.exists():
+		try:
+			old = pd.read_csv(DAILY_CSV, index_col="date")
+			old.index = old.index.astype(str)
+			fresh = fresh.combine_first(old.drop(columns=[c for c in fresh.columns if c in old.columns]).reindex(fresh.index.union(old.index)))
+		except Exception as ex:
+			log(f"  Old {DAILY_CSV.name} not readable, rewriting it ({ex})")
+	fresh = fresh.sort_index()
+	fresh = fresh[fresh.index >= cut]
+	front = [file_name(s) for s in ETF_SYMS + [BENCH_SYM] if file_name(s) in fresh.columns]
+	fresh[front].rename_axis("date").to_csv(DAILY_CSV)
+	log(f"Saved ETF history → {ETF_DIR.name}/: {len(raw)} raw candle files, {DAILY_CSV.name} {fresh.shape[0]} days × {len(front)} columns")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -427,6 +476,7 @@ def main():
 			pass
 
 	api = Angel()
+	etf_raw, etf_close = {}, {}                                      # ETFs + benchmark: kept for etf_prices/
 	now_s = datetime.now(IST).strftime("%Y-%m-%d %H:%M")
 	end = datetime.now(IST).date()
 	n_all = len(todo)
@@ -441,9 +491,13 @@ def main():
 		base.update({"ANGEL_SYMBOL": asym, "ANGEL_TOKEN": tok})
 		tag = f"  [{i:>4}/{n_all}] {s:<14} {asym:<18} token {tok:<8}"
 		try:
-			c = api.candles(tok, start, end)
+			keep = s in ETF_SYMS or s == BENCH_SYM
+			raw = [] if keep else None
+			c = api.candles(tok, start, end, raw)
 			if not c:
 				raise RuntimeError("no candles")
+			if keep:
+				etf_raw[s], etf_close[s] = raw, adjusted_closes(c)
 			row = summarise(c, asof, with_px=(s in ETF_SYMS or s == BENCH_SYM))
 			p1 = f"1Y {row['PRICE_1Y']:>10,.2f} ({row['PRICE_1Y_DATE']})" if row.get("PRICE_1Y") is not None else "1Y        n/a"
 			ca = f"  split/bonus: {row['CORP_ACTIONS']}" if row.get("CORP_ACTIONS") else ""
@@ -508,6 +562,11 @@ def main():
 	cols += ["PX_MONTHLY", "ADJ_FACTOR", "CORP_ACTIONS", "BACK_DATE", "STATUS", "FETCHED_AT"]
 	out = pd.DataFrame(rows).reindex(columns=cols)
 	out.to_csv(OUT_CSV, index=False)
+	if etf_raw:                                                      # raw candles + 365 days of adjusted closes → the repo
+		try:
+			save_etf_history(etf_raw, etf_close, asof)
+		except Exception as ex:
+			log(f"  [WARN] etf_prices/ not saved: {ex}")
 	n_ca = int(out["CORP_ACTIONS"].fillna("").str.len().gt(0).sum())
 	log(f"Done → {OUT_CSV.name}: {n_ok} ok, {n_fail} failed / not mapped, {n_ca} with a split / bonus detected")
 	return 0 if n_ok else 1
