@@ -306,6 +306,12 @@ const ready = new Promise((resolve) => {
         return r.json().catch(() => ({ error: "HTTP " + r.status }));
       },
     };
+    // PF Builder (admin only, checked again by the Worker): download day-by-day prices for these stocks → {ok} | {error, running}
+    window.hniStore.builderPrices = async (symbols) => {
+      const r = await fetch(LTP_HOOK.replace(/\/run$/, "/builder"), { method: "POST",
+        headers: { Authorization: "Bearer " + await u.getIdToken(), "Content-Type": "application/json" }, body: JSON.stringify({ symbols }) });
+      return r.json().catch(() => ({ error: "HTTP " + r.status }));
+    };
     // true / false: is this account an admin? (Portfolio builder button on Fundamentals + the builder page itself)
     window.hniAdmin = (async () => {
       if (u.email === ADMIN_EMAIL) return true;

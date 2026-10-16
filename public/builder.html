@@ -56,10 +56,10 @@ h1{font:600 22px var(--sans);margin:20px 0 4px}
 .tabs{display:flex;gap:4px;margin:22px 0 12px;border-bottom:1px solid var(--line)}
 .tabs button{border:0;background:none;color:var(--mute);font:600 13px var(--mono);padding:10px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
 .tabs button.on{color:var(--ink);border-bottom-color:var(--brass)}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
-.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
-.kpi span{display:block;font:500 11px var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
-.kpi b{font:600 17px var(--mono)}
+.kpis{display:flex;flex-wrap:nowrap;gap:8px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px}
+.kpi{flex:1 0 auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 11px;white-space:nowrap}
+.kpi span{display:block;font:500 10px var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.04em}
+.kpi b{font:600 15px var(--mono)}
 .sleeve{margin:0 0 18px}
 .sleeve h2{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font:600 15px var(--sans);margin:0 0 6px}
 .sleeve h2 small{font:500 12px var(--mono);color:var(--faint)}
@@ -126,13 +126,19 @@ details.sec>.body{padding:0 14px 14px}
 .fund .pc input{width:84px;text-align:right}
 .fund .pc input[readonly]{color:var(--mute);background:transparent;border-style:dashed}
 .fund .pc input.bad{border-color:var(--bad)}
+.prep{display:flex;align-items:center;gap:9px;margin:2px 0 10px;font:600 12.5px var(--mono);color:var(--brass);animation:breathe 2.6s ease-in-out infinite}
+.prep i{width:8px;height:8px;border-radius:50%;background:var(--brass);flex:none}
+.prep.still{animation:none;color:var(--faint)}.prep.still i{background:var(--faint)}
+.prep a{color:inherit;cursor:pointer;text-decoration:underline}
+@keyframes breathe{0%,100%{opacity:.35}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.prep{animation:none}}
 .lead2{color:var(--mute);font-size:12.5px;margin:0 0 12px}
 @media (max-width:640px){
   .wrap{padding:12px 16px}
     h1{font-size:19px}
   .nm{display:none}
   .fund .btn{flex:1}
-  .kpi b{font-size:15px}
+  .kpi b{font-size:14px}
 }
 </style>
 </head>
@@ -203,6 +209,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&am
 const num = v => v != null && isFinite(v);
 const fmt = (v, d = 2) => num(v) ? Number(v).toLocaleString('en-IN', {minimumFractionDigits: d, maximumFractionDigits: d}) : '–';
 const rs = v => num(v) ? '₹' + fmt(v, 0) : '–';
+const rsK = v => !num(v) ? '–' : Math.abs(v) >= 1e7 ? '₹' + +(v / 1e7).toFixed(2) + 'Cr' : Math.abs(v) >= 1e5 ? '₹' + +(v / 1e5).toFixed(2) + 'L' : '₹' + fmt(v, 0);   // 10L, 14.16L, 1Cr
 const pct = v => num(v) ? (v > 0 ? '+' : v < 0 ? '−' : '') + fmt(Math.abs(v), 1) + '%' : '–';
 const pill = v => num(v) ? `<span class="pill ${v >= 0 ? 'pos' : 'neg'}">${pct(v)}</span>` : '–';
 const avg = a => { const x = a.filter(num); return x.length ? x.reduce((s, v) => s + v, 0) / x.length : null; };
@@ -372,7 +379,7 @@ function niceTicks(lo, hi, n) {
   for (let v = a; v <= hi + st * 0.999; v += st) { t.push(+v.toFixed(8)); if (v >= hi) break; }
   return t;
 }
-const rsC = v => Math.abs(v) >= 1e7 ? '₹' + fmt(v / 1e7, 2) + 'Cr' : Math.abs(v) >= 1e5 ? '₹' + fmt(v / 1e5, 2) + 'L' : '₹' + fmt(v, 0);
+const rsC = rsK;
 /* Portfolio value per day from the fund at the start date: Index ETFs = the monthly-rechecked sleeve (daily, after tax), Value and
    Momentum = equal-weight buy-and-hold of the picks (daily closes from builder_daily.json). A pick without saved daily closes
    is drawn as a straight line from its start to its end price (counted in P.lines). */
@@ -491,6 +498,56 @@ function indexBack(BT, sh) {
     <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Months held</th><th class="r">Return while held</th></tr></thead><tbody>${heldRows}</tbody></table></div>`;
 }
 let PF = null;
+/* ---- day-by-day prices for the stocks of the 1-year-back list ----
+   A pick without saved daily prices → the page asks the Worker (POST /builder) to start builder_prices.yml: it downloads the ETFs, the NIFTY 500
+   and those stocks from Angel day by day and redeploys builder_daily.json. Meanwhile the chart is drawn (stocks as straight lines) with
+   "Preparing detailed chart…" breathing above it; the page polls for the new file and redraws by itself. */
+const PREP = {sig: '', state: 'idle', timer: null, t0: 0, msg: ''};     // state: idle | working | still | failed | done
+function missingDaily(D, syms) {
+  if (!D || !Array.isArray(D.dates) || !D.px) return syms.slice();
+  const last = D.dates[D.dates.length - 1], asOf = DATA.etf && DATA.etf.asOf, stale = last && asOf && Date.parse(asOf) - Date.parse(last) > 4 * 864e5;
+  const tried = new Set(D.tried || []);
+  const m = syms.filter(s => !D.px[s] && !tried.has(s));
+  return stale ? (m.length ? m : syms.slice()) : m;
+}
+function prepNote() {
+  const h = $('#prep'); if (!h) return;
+  const st = PREP.state;
+  if (st === 'working') h.outerHTML = '<p class="prep" id="prep"><i></i>Preparing detailed chart…</p>';
+  else if (st === 'still') h.outerHTML = '<p class="prep still" id="prep"><i></i>Still preparing (the price run is slow or waiting its turn). The chart updates by itself, or <a id="prepGo">check again</a>.</p>';
+  else if (st === 'failed') h.outerHTML = `<p class="prep still" id="prep"><i></i>Detailed prices could not be started${PREP.msg ? ' (' + esc(PREP.msg) + ')' : ''}. Stocks are drawn as straight lines. <a id="prepGo">Try again</a></p>`;
+  else h.remove();
+}
+function pollDaily(syms) {
+  clearInterval(PREP.timer);
+  PREP.timer = setInterval(async () => {
+    try {
+      const r = await fetch('builder_daily.json?t=' + Date.now(), {cache: 'no-store'});
+      const D = r.ok ? await r.json() : null;
+      if (D && !missingDaily(D, syms).length) {
+        clearInterval(PREP.timer); PREP.state = 'done'; DATA.daily = D; DAILY_P = Promise.resolve(D);
+        if (TAB === 'back') paint();
+        return;
+      }
+    } catch (e) {}
+    if (Date.now() - PREP.t0 > 14 * 60e3 && PREP.state === 'working') { PREP.state = 'still'; prepNote(); }
+    if (Date.now() - PREP.t0 > 40 * 60e3) clearInterval(PREP.timer);
+  }, 25000);
+}
+async function ensureDaily(syms, force) {
+  const sig = syms.slice().sort().join(',');
+  if (!force && PREP.sig === sig && PREP.state !== 'idle') return;
+  PREP.sig = sig; PREP.state = 'working'; PREP.t0 = Date.now(); PREP.msg = '';
+  let saved = null; try { saved = JSON.parse(lsGet('pb_req') || 'null'); } catch (e) {}
+  const recent = !force && saved && saved.sig === sig && Date.now() - saved.t < 30 * 60e3;     // asked less than 30 min ago: only wait
+  if (!recent) {
+    let res = null;
+    try { res = window.hniStore && window.hniStore.builderPrices ? await window.hniStore.builderPrices(syms) : {error: 'not signed in'}; } catch (e) { res = {error: 'network'}; }
+    if (res && (res.ok || res.running)) lsSet('pb_req', JSON.stringify({sig, t: Date.now()}));
+    else { PREP.state = 'failed'; PREP.msg = (res && res.error) || ''; prepNote(); return; }
+  }
+  prepNote(); pollDaily(syms);
+}
 function drawCharts() { const h = $('#chPf'); if (h && PF) pfChart(h, PF); }
 function paintBack(fund) {
   const out = $('#out'), B = DATA.back;
@@ -503,23 +560,26 @@ function paintBack(fund) {
   const bench = num(B.bench) ? B.bench : (DATA.etf && DATA.etf.bench ? DATA.etf.bench.ret1y : null);
   const F = fund || 100000;
   if (BT) PF = portfolio(BT, L, F, DATA.daily, DATA.etf && DATA.etf.bench);
+  const need = [...L.value, ...L.mom].map(x => x.sym).filter(Boolean);
+  const lack = BT && need.length ? missingDaily(DATA.daily, need) : [];
+  if (BT && !lack.length && PREP.state !== 'working') PREP.state = 'done';
   const note = !BT ? 'Monthly ETF data is not in yet, so there is no chart: the ETFs are held as picked at the start.'
     : (fund ? '' : 'No fund amount entered: the chart starts from ₹1,00,000. ')
-      + (PF.daily ? `Valued on ${PF.dates.length} trading days.` : 'Daily prices are not saved yet (run the ETF-only price run once): the chart uses 13 monthly points and max drawdown is understated.')
-      + (PF.lines ? ` ${PF.lines} of ${PF.lines + PF.real} value / momentum stocks have no saved daily closes yet (they come with the Saturday price runs) and are drawn as a straight line from start to end.` : '')
+      + (PF.daily ? `Valued on ${PF.dates.length} trading days.` : 'Daily prices are not saved yet: the chart uses 13 monthly points and max drawdown is understated.')
+      + (PF.lines ? ` ${PF.lines} of ${PF.lines + PF.real} value / momentum stocks have no daily prices (yet) and are drawn as a straight line from start to end.` : '')
       + ' Index ETFs are after 15% tax on switches; value and momentum stocks are bought once and held.';
   let html = `<p class="lead2">The same rules applied to the data as it stood on <b>${esc(B.date)}</b>, held until ${esc(DATA.now.date)}: value and momentum stocks (PSU left out) without changes; the index ETFs re-checked every month. Equal weight inside each part; ${SPLIT.map(x => +(x[2] * 100).toFixed(1)).join(' / ')} between parts.</p>
     <div class="kpis">
       <div class="kpi"><span>Mix return</span><b class="${tot >= 0 ? 'pos' : 'neg'}">${pct(tot)}</b></div>
       <div class="kpi"><span>NIFTY 500</span><b class="${(bench || 0) >= 0 ? 'pos' : 'neg'}">${pct(bench)}</b></div>
       ${SPLIT.map(([k, label]) => `<div class="kpi"><span>${label}</span><b class="${(r[k] || 0) >= 0 ? 'pos' : 'neg'}">${pct(r[k])}</b></div>`).join('')}
-      ${fund ? `<div class="kpi"><span>${rs(fund)} would be</span><b>${rs(fund * (1 + tot / 100))}</b></div>` : ''}
-      ${PF ? `<div class="kpi"><span>Max drawdown</span><b class="neg">${pct(PF.mx.dd)}</b></div><div class="kpi"><span>Average drawdown</span><b class="neg">${pct(PF.avgDD)}</b></div>` : ''}</div>`;
+      ${fund ? `<div class="kpi"><span>${rsK(fund)} would be</span><b>${rsK(fund * (1 + tot / 100))}</b></div>` : ''}
+      ${PF ? `<div class="kpi"><span>Max drawdown</span><b class="neg">${pct(PF.mx.dd)}</b></div><div class="kpi"><span>Avg drawdown</span><b class="neg">${pct(PF.avgDD)}</b></div>` : ''}</div>`;
   if (PF) {
     const end = PF.total[PF.total.length - 1], a = PF.dates[0], z = PF.dates[PF.dates.length - 1];
     html += `<div class="cc" style="margin-bottom:14px"><h3>Portfolio value, day by day</h3>
-      <p class="sub">${rs(PF.F)} on ${esc(fdate(a, true))} → ${rs(end)} on ${esc(fdate(z, true))} · net ${pct((end / PF.F - 1) * 100)} · max drawdown ${pct(PF.mx.dd)} · average drawdown ${pct(PF.avgDD)}${PF.nifty ? ' · faint line: NIFTY 500' : ''}</p>
-      <div class="chart" id="chPf"></div><p class="note">${esc(note)}</p></div>`;
+      <p class="sub">${rsK(PF.F)} on ${esc(fdate(a, true))} → ${rsK(end)} on ${esc(fdate(z, true))} · net ${pct((end / PF.F - 1) * 100)} · max drawdown ${pct(PF.mx.dd)} · average drawdown ${pct(PF.avgDD)}${PF.nifty ? ' · faint line: NIFTY 500' : ''}</p>
+      ${lack.length || PREP.state === 'working' || PREP.state === 'still' || PREP.state === 'failed' ? '<p class="prep" id="prep"></p>' : ''}<div class="chart" id="chPf"></div><p class="note">${esc(note)}</p></div>`;
   } else html += `<p class="note">${esc(note)}</p>`;
   const all = '<div class="bar"><span class="sp"></span><button type="button" class="btn sm" data-all="1">Expand all</button><button type="button" class="btn sm" data-all="0">Collapse all</button></div>';
   html += all + SPLIT.filter(x => x[2] > 0).map(([k, label, sh]) => {
@@ -535,6 +595,8 @@ function paintBack(fund) {
   }).join('') + (L.index.some(x => !num(x.ret)) ? '<p class="note">ETFs without prices count as 0% inside the index part.</p>' : '');
   out.innerHTML = html;
   drawCharts();
+  if (lack.length && (PREP.state === 'idle' || PREP.sig !== need.slice().sort().join(','))) ensureDaily(need);
+  prepNote();
 }
 function paint() {
   const out = $('#out');
@@ -545,9 +607,9 @@ function paint() {
     LAST = {fund, A, date: DATA.now.date};
     const etfMiss = !DATA.etf || !Object.keys(DATA.etf.etf || {}).length;
     out.innerHTML = `<div class="kpis">
-        <div class="kpi"><span>Fund</span><b>${rs(fund)}</b></div>
-        <div class="kpi"><span>Invested</span><b>${fund ? rs(A.invested) : '–'}</b></div>
-        <div class="kpi"><span>Cash left</span><b>${fund ? rs(A.cash) : '–'}</b></div>
+        <div class="kpi"><span>Fund</span><b>${rsK(fund)}</b></div>
+        <div class="kpi"><span>Invested</span><b>${fund ? rsK(A.invested) : '–'}</b></div>
+        <div class="kpi"><span>Cash left</span><b>${fund ? rsK(A.cash) : '–'}</b></div>
         <div class="kpi"><span>Holdings</span><b>${A.parts.reduce((n, p) => n + p.rows.length, 0)}</b></div>
         <div class="kpi"><span>Data as of</span><b>${esc(DATA.now.date || '–')}</b></div></div>
       <div class="bar"><span class="sp"></span><button type="button" class="btn sm" data-all="1">Expand all</button><button type="button" class="btn sm" data-all="0">Collapse all</button></div>`
@@ -609,6 +671,7 @@ document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click
 /* section open / closed (kept across repaints), expand / collapse all, chart legend */
 $('#out').addEventListener('toggle', e => { const d = e.target; if (d.classList && d.classList.contains('sec')) OPEN[TAB + d.dataset.k] = d.open; }, true);
 $('#out').addEventListener('click', e => {
+  if (e.target.closest('#prepGo')) { const L = lists('back'); ensureDaily([...L.value, ...L.mom].map(x => x.sym).filter(Boolean), true); return; }
   const a = e.target.closest('[data-all]');
   if (a) { const o = a.dataset.all === '1'; $('#out').querySelectorAll('details.sec').forEach(d => { d.open = o; }); return; }
 });
