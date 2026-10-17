@@ -213,7 +213,7 @@ const ALWAYS = ['JUNIORBEES', 'MON100', 'HNGSNGBEES', 'FMCGIETF', 'ALPHA'];
 /* stock selection (Value and Momentum lists): universe, sort key + order, how many. The engine hands over every candidate that passes the
    screen (per universe); picking, sorting and cutting happen here, so any change moves the numbers at once. Sorts use that date's PE / PB /
    scores: today's for Today, the back date's for the backtest. */
-const SORT_KEYS = [['score', 'Value score'], ['mom', 'Momentum score'], ['pe', 'PE'], ['pb', 'PB']];
+const SORT_KEYS = [['score', 'Value score'], ['mom', 'Momentum score'], ['pe', 'PE'], ['pb', 'PB'], ['mcap', 'Market cap'], ['cagr', 'EPS CAGR'], ['vs52', 'Vs 52-week high']];
 const SEL_DEF = {value: {uni: 'all', key: 'score', dir: 'desc', n: 0}, mom: {uni: 'all', key: 'mom', dir: 'desc', n: 15}};   // n = 0: all
 let SELC = JSON.parse(JSON.stringify(SEL_DEF));
 const PAIR_TAG = {ITBEES: 'IT', ALPHA: 'ALPHA'};   // short names in 'GOLDBEES (IT/Gold)', 'GOLDBEES (ALPHA/Gold)'
@@ -226,6 +226,7 @@ const fmt = (v, d = 2) => num(v) ? Number(v).toLocaleString('en-IN', {minimumFra
 const rs = v => num(v) ? '₹' + fmt(v, 0) : '–';
 const rsK = v => !num(v) ? '–' : Math.abs(v) >= 1e7 ? '₹' + +(v / 1e7).toFixed(2) + 'Cr' : Math.abs(v) >= 1e5 ? '₹' + +(v / 1e5).toFixed(2) + 'L' : '₹' + fmt(v, 0);   // 10L, 14.16L, 1Cr
 const pct = v => num(v) ? (v > 0 ? '+' : v < 0 ? '−' : '') + fmt(Math.abs(v), 1) + '%' : '–';
+const crf = v => !num(v) ? '–' : v >= 1e5 ? (v / 1e5).toFixed(2) + 'L Cr' : fmt(v, 0) + ' Cr';
 const pill = v => num(v) ? `<span class="pill ${v >= 0 ? 'pos' : 'neg'}">${pct(v)}</span>` : '–';
 const avg = a => { const x = a.filter(num); return x.length ? x.reduce((s, v) => s + v, 0) / x.length : null; };
 const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
@@ -241,6 +242,7 @@ const HELPER = () => `window.__pb = function (unisJson, etfJson) {
   for (const k in etf) { const m = etf[k] || []; etfScore[k] = ok(m[1]) && ok(m[2]) ? ${W6} * m[1] + ${W12} * m[2] : null; }
   /* every stock as it stands in the mode on screen (BACK = the back date: PE, PB, scores and momentum are all THAT date's numbers) */
   const pick = s => ({sym: s.sym, name: s.name, ind: s.ind, cmp: s.cmp, pe: s.pe, pb: s.pb, mom: s.momS, score: s.score, url: s.url,
+                      mcap: s.mcap, cagr: s.cagr, hi52: s.hi52,
                       ret: BACK ? sv(s, 'ret') : null});
   const vf = Object.assign({}, VF_DEF, (VF_PRESETS.find(p => p.name === 'Deep value') || {}).st);
   const pools = {};
@@ -491,13 +493,15 @@ function lists(when) {
   const pk = etfPick(sc);
   const index = pk.rows.map(r => { const e = E[r.sym] || {};
     return {sym: r.sym, label: r.label, name: ETF_NAME[r.sym] || r.sym, price: e.ltp, r3: e[key], mom: sc[r.sym], ret: e.ret1y, etf: true}; });
-  const stock = s => ({sym: s.sym, name: s.name, ind: s.ind, price: s.cmp, pe: s.pe, pb: s.pb, mom: s.mom, score: s.score, url: s.url, ret: s.ret});
+  const stock = s => ({sym: s.sym, name: s.name, ind: s.ind, price: s.cmp, pe: s.pe, pb: s.pb, mom: s.mom, score: s.score, url: s.url, ret: s.ret,
+    mcap: s.mcap, cagr: s.cagr, vs52: num(s.cmp) && num(s.hi52) && s.hi52 > 0 ? (s.cmp / s.hi52 - 1) * 100 : null});
   const from = k => { const P = (S && S.pools) || {}, c = SELC[k]; return choose((P[c.uni] || P.all || {})[k] || [], c, k).map(stock); };
   return {pk, index, value: from('value'), mom: from('mom')};
 }
 /* universe → sort → top n. Missing values go last whichever way it is sorted; ties: Momentum list = higher PE first (as before), Value list = higher score */
 function choose(pool, c, k) {
-  const val = x => c.key === 'mom' ? (num(x.mom) ? Math.round(x.mom) : null) : (num(x[c.key]) ? x[c.key] : null), sg = c.dir === 'asc' ? 1 : -1;
+  const vs = x => num(x.cmp) && num(x.hi52) && x.hi52 > 0 ? (x.cmp / x.hi52 - 1) * 100 : null;
+  const val = x => c.key === 'vs52' ? vs(x) : c.key === 'mom' ? (num(x.mom) ? Math.round(x.mom) : null) : (num(x[c.key]) ? x[c.key] : null), sg = c.dir === 'asc' ? 1 : -1;
   const pv = x => num(x) ? x : -1e9;
   const a = pool.slice().sort((p, q) => {
     const vp = val(p), vq = val(q);
@@ -626,10 +630,10 @@ function paintBack(fund) {
       : `${pc(sh)} · ${L[k].length} holdings then · average ${pct(r[k])}`;
     if (k === 'index' && BT) return section(k, label, hdr, indexBack(BT, sh), false);
     const rows = L[k];
-    const body = (k === 'index' ? pairNotes(L.pk) : `<p class="rule">${esc(selText(k))} · all figures as they stood on ${esc(B.date)}.</p>`) + `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Value score then</th><th class="r">Momentum then</th><th class="r">PE then</th><th class="r">PB then</th><th class="r">Return since</th></tr></thead><tbody>${
+    const body = (k === 'index' ? pairNotes(L.pk) : `<p class="rule">${esc(selText(k))} · all figures as they stood on ${esc(B.date)}.</p>`) + `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Value score then</th><th class="r">Momentum then</th><th class="r">PE then</th><th class="r">PB then</th><th class="r">Mcap then</th><th class="r">EPS CAGR then</th><th class="r">Vs 52w high then</th><th class="r">Return since</th></tr></thead><tbody>${
       rows.length ? rows.map(x => `<tr><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td>
-        <td class="r">${num(x.score) ? fmt(x.score, 0) : '–'}</td><td class="r">${num(x.mom) ? Math.round(x.mom) : '–'}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td><td class="r">${pill(x.ret)}</td></tr>`).join('')
-      : '<tr><td colspan="7" class="empty">Nothing passed this screen then.</td></tr>'}</tbody></table></div>`;
+        <td class="r">${num(x.score) ? fmt(x.score, 0) : '–'}</td><td class="r">${num(x.mom) ? Math.round(x.mom) : '–'}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td><td class="r">${crf(x.mcap)}</td><td class="r">${num(x.cagr) ? fmt(x.cagr, 1) + '%' : '–'}</td><td class="r">${num(x.vs52) ? fmt(x.vs52, 1) + '%' : '–'}</td><td class="r">${pill(x.ret)}</td></tr>`).join('')
+      : '<tr><td colspan="10" class="empty">Nothing passed this screen then.</td></tr>'}</tbody></table></div>`;
     return section(k, label, hdr, body, false);
   }).join('') + (L.index.some(x => !num(x.ret)) ? '<p class="note">ETFs without prices count as 0% inside the index part.</p>' : '');
   out.innerHTML = html;
@@ -652,9 +656,9 @@ function paint() {
         <div class="kpi"><span>Data as of</span><b>${esc(DATA.now.date || '–')}</b></div></div>
       <div class="bar"><span class="sp"></span><button type="button" class="btn sm" data-all="1">Expand all</button><button type="button" class="btn sm" data-all="0">Collapse all</button></div>`
       + A.parts.map(p => {
-        const extraH = p.k === 'index' ? '<th class="r">Composite</th><th class="r">3M</th>' : p.k === 'value' ? '<th class="r">Score</th><th class="r">PE</th><th class="r">PB</th>' : '<th class="r">Momentum</th><th class="r">PE</th><th class="r">PB</th>';
-        const extra = x => p.k === 'index' ? `<td class="r">${ms(x.mom)}</td><td class="r">${pill(x.r3)}</td>` : p.k === 'value' ? `<td class="r">${fmt(x.score, 0)}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td>`
-          : `<td class="r">${num(x.mom) ? Math.round(x.mom) : '–'}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td>`;
+        const extraH = p.k === 'index' ? '<th class="r">Composite</th><th class="r">3M</th>' : p.k === 'value' ? '<th class="r">Score</th><th class="r">PE</th><th class="r">PB</th><th class="r">Mcap</th><th class="r">EPS CAGR</th><th class="r">Vs 52w high</th>' : '<th class="r">Momentum</th><th class="r">PE</th><th class="r">PB</th><th class="r">Mcap</th><th class="r">EPS CAGR</th><th class="r">Vs 52w high</th>';
+        const extra = x => p.k === 'index' ? `<td class="r">${ms(x.mom)}</td><td class="r">${pill(x.r3)}</td>` : p.k === 'value' ? `<td class="r">${fmt(x.score, 0)}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td><td class="r">${crf(x.mcap)}</td><td class="r">${num(x.cagr) ? fmt(x.cagr, 1) + '%' : '–'}</td><td class="r">${num(x.vs52) ? fmt(x.vs52, 1) + '%' : '–'}</td>`
+          : `<td class="r">${num(x.mom) ? Math.round(x.mom) : '–'}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td><td class="r">${crf(x.mcap)}</td><td class="r">${num(x.cagr) ? fmt(x.cagr, 1) + '%' : '–'}</td><td class="r">${num(x.vs52) ? fmt(x.vs52, 1) + '%' : '–'}</td>`;
         const rule = p.k === 'index' ? pairNotes(L.pk) + (etfMiss ? '<p class="note">ETF prices are not in yet: they come with the next weekly price update (part 1). Amounts are shown; units appear once prices are in.</p>' : '')
           : p.k === 'value' ? `<p class="rule">Non-PSU stocks that pass the Deep value screen · ${esc(selText('value'))} · equal weight.</p>`
           : `<p class="rule">Non-PSU stocks that pass the Momentum screen · ${esc(selText('mom'))} · equal weight.</p>`;
@@ -662,7 +666,7 @@ function paint() {
         const body = rule + `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Price ₹</th>${extraH}<th class="r">Units</th><th class="r">Amount ₹</th></tr></thead><tbody>${
           p.rows.length ? p.rows.map(x => `<tr><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td><td class="r">${fmt(x.price, 2)}</td>${extra(x)}
             <td class="r ${x.qty === 0 ? 'zero' : ''}" ${x.qty === 0 ? 'title="Price is above this holding\'s share of the fund"' : ''}>${fund && x.qty != null ? fmt(x.qty, 0) : '–'}</td><td class="r">${fund && x.invested != null ? fmt(x.invested, 0) : '–'}</td></tr>`).join('')
-          : `<tr><td colspan="8" class="empty">Nothing passes this screen today.</td></tr>`}</tbody></table></div>`;
+          : `<tr><td colspan="11" class="empty">Nothing passes this screen today.</td></tr>`}</tbody></table></div>`;
         return section(p.k, p.label, hdr, body, true);
       }).join('');
     $('#csv').disabled = !fund;
