@@ -132,6 +132,15 @@ details.sec>.body{padding:0 14px 14px}
 .prep a{color:inherit;cursor:pointer;text-decoration:underline}
 @keyframes breathe{0%,100%{opacity:.35}50%{opacity:1}}
 @media (prefers-reduced-motion:reduce){.prep{animation:none}}
+.sel{display:grid;gap:8px;margin-top:12px}
+.selrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.selrow>b{flex:none;width:92px;font:600 12px var(--mono);color:var(--mute)}
+.selrow select,.selrow input{height:32px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink);font:500 12px var(--mono);padding:0 8px;outline:none;max-width:100%}
+.selrow input{width:64px;text-align:right}
+.selrow select:focus,.selrow input:focus{border-color:var(--brass)}
+.selrow label{display:flex;align-items:center;gap:6px;font:500 11px var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.04em}
+.cch{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;justify-content:space-between}
+.cch .rh{font:500 11.5px var(--mono);color:var(--faint);margin:0 0 6px}
 .lead2{color:var(--mute);font-size:12.5px;margin:0 0 12px}
 @media (max-width:640px){
   .wrap{padding:12px 16px}
@@ -157,7 +166,7 @@ details.sec>.body{padding:0 14px 14px}
   <details class="how lead"><summary>How it works</summary>
     <p>Enter a fund amount. It is split between <b>index ETFs</b>, <b>value stocks</b> (Deep value screen) and
     <b>momentum stocks</b> (top 15 of the Momentum screen), equal weight inside each part, using the same data and
-    screens as Fundamentals. The split is 40 / 40 / 20 by default: type the ETF % and the Value % and Momentum gets the rest. <b>PSU stocks are never picked</b> (value or momentum). The index part holds two ETF/Gold slots
+    screens as Fundamentals. The split is 40 / 40 / 20 by default: type the ETF % and the Value % and Momentum gets the rest. For the Value and Momentum parts you can pick the list (universe), what to sort by (value score, momentum score, PE or PB, either way) and how many stocks to take; the sort always uses the numbers of the date shown (today, or 1 year back in the backtest). <b>PSU stocks are never picked</b> (value or momentum). The index part holds two ETF/Gold slots
     (IT/Gold and ALPHA/Gold): a slot holds Gold while its ETF is not stronger, so Gold can be held twice (2× weight).
     The backtest applies the same rules as they stood 1 year ago, and re-checks the ETF pairs every month.</p></details>
 
@@ -171,6 +180,7 @@ details.sec>.body{padding:0 14px 14px}
       <button class="btn" id="csv" type="button" disabled>Download CSV</button>
     </form>
     <div class="split" id="split"></div>
+    <div class="sel" id="sel"></div>
     <p class="status" id="status" role="status">Loading the screens…</p>
   </div>
 
@@ -200,7 +210,12 @@ const PAIRS = [['ITBEES', 'GOLDBEES'], ['ALPHA', 'GOLDBEES']];
 const W6 = 0.5, W12 = 0.5;   // composite weights
 const TAX = 0.15;            // 15% of the profit on every ETF sold in a switch
 const ALWAYS = ['JUNIORBEES', 'MON100', 'HNGSNGBEES', 'FMCGIETF', 'ALPHA'];
-const MOM_TOP = 15;
+/* stock selection (Value and Momentum lists): universe, sort key + order, how many. The engine hands over every candidate that passes the
+   screen (per universe); picking, sorting and cutting happen here, so any change moves the numbers at once. Sorts use that date's PE / PB /
+   scores: today's for Today, the back date's for the backtest. */
+const SORT_KEYS = [['score', 'Value score'], ['mom', 'Momentum score'], ['pe', 'PE'], ['pb', 'PB']];
+const SEL_DEF = {value: {uni: 'all', key: 'score', dir: 'desc', n: 0}, mom: {uni: 'all', key: 'mom', dir: 'desc', n: 15}};   // n = 0: all
+let SELC = JSON.parse(JSON.stringify(SEL_DEF));
 const PAIR_TAG = {ITBEES: 'IT', ALPHA: 'ALPHA'};   // short names in 'GOLDBEES (IT/Gold)', 'GOLDBEES (ALPHA/Gold)'
 
 /* ---------- small helpers ---------- */
@@ -219,21 +234,24 @@ const status = (t, err) => { const s = $('#status'); s.textContent = t; s.classL
 
 /* ---------- the screens: Fundamentals itself, running hidden inside this page (same login, same engine) ---------- */
 /* Code run inside that page: the Deep value list and the Momentum list, today or (BACK) as of the back date */
-const HELPER = () => `window.__pb = function (top, etfJson) {
-  GF.uni = 'all'; GF.psu = true; GF.semi = false;               // the 3 lists, PSU stocks hidden = never picked, now or in the backtest (not saved to its settings)
-  setMode(); computeScores();
+const HELPER = () => `window.__pb = function (unisJson, etfJson) {
+  GF.psu = true; GF.semi = false;                               // PSU stocks hidden = never picked, now or in the backtest (not saved to its settings)
   /* ETFs: composite momentum = W6 x 6M + W12 x 12M return (etf[k] = [3M, 6M, 12-1M]) */
   const etfScore = {}, etf = JSON.parse(etfJson || '{}');
   for (const k in etf) { const m = etf[k] || []; etfScore[k] = ok(m[1]) && ok(m[2]) ? ${W6} * m[1] + ${W12} * m[2] : null; }
-  const pv = x => x == null || !isFinite(x) ? -1e9 : x;
-  const pick = s => ({sym: s.sym, name: s.name, ind: s.ind, cmp: s.cmp, pe: s.pe, mom: s.momS, score: s.score, url: s.url,
+  /* every stock as it stands in the mode on screen (BACK = the back date: PE, PB, scores and momentum are all THAT date's numbers) */
+  const pick = s => ({sym: s.sym, name: s.name, ind: s.ind, cmp: s.cmp, pe: s.pe, pb: s.pb, mom: s.momS, score: s.score, url: s.url,
                       ret: BACK ? sv(s, 'ret') : null});
   const vf = Object.assign({}, VF_DEF, (VF_PRESETS.find(p => p.name === 'Deep value') || {}).st);
-  const value = V().filter(s => s.score != null && s.cmp != null && passVF(s, vf));
-  const mom = V().filter(s => ok(s.momS) && s.cmp != null && passVF(s, MOM_DEF))
-    .sort((a, b) => Math.round(b.momS) - Math.round(a.momS) || pv(b.pe) - pv(a.pe)).slice(0, top);
+  const pools = {};
+  JSON.parse(unisJson).forEach(u => {                           // one candidate pool per universe: all lists, or one list
+    GF.uni = u; setMode(); computeScores.S = null; computeScores();
+    pools[u] = {value: V().filter(s => s.score != null && s.cmp != null && passVF(s, vf)).map(pick),          // pass the Deep value screen
+                mom: V().filter(s => ok(s.momS) && s.cmp != null && passVF(s, MOM_DEF)).map(pick)};          // pass the Momentum screen
+  });
+  GF.uni = 'all'; setMode(); computeScores.S = null; computeScores();
   return JSON.stringify({back: BACK, date: BACK ? D.then.date : D.asOf, hasPrice: BACK ? !!D.then.hasPrice : true,
-    bench: BACK && D.then.bench ? D.then.bench.ret : null, value: value.map(pick), mom: mom.map(pick), etfScore});
+    bench: BACK && D.then.bench ? D.then.bench.ret : null, lists: D.lists, pools, etfScore});
 };`;
 let ENG = null;
 function engine() {
@@ -268,13 +286,14 @@ async function screens(etf) {
   status('Working out today\'s lists…');
   w.eval('setHistorical(false, null, true)');
   await waitFor(() => w.eval('!BACK'));
-  const now = JSON.parse(w.__pb(MOM_TOP, moms('mom')));
+  const unis = ['all'].concat(JSON.parse(w.eval('JSON.stringify(D.lists)')));
+  const now = JSON.parse(w.__pb(JSON.stringify(unis), moms('mom')));
   status('Working out the lists as they stood 1 year ago…');
   w.eval("setHistorical(true, '1Y', true)");
   let back = null;
   try {
     await waitFor(() => w.eval("BACK && D.then && (D.then.key || '1Y') === '1Y' && !!D.then.stocks"));
-    back = JSON.parse(w.__pb(MOM_TOP, moms('momBack')));
+    back = JSON.parse(w.__pb(JSON.stringify(unis), moms('momBack')));
   } catch (e) { back = null; }
   w.eval('setHistorical(false, null, true)');
   return {now, back};
@@ -472,9 +491,25 @@ function lists(when) {
   const pk = etfPick(sc);
   const index = pk.rows.map(r => { const e = E[r.sym] || {};
     return {sym: r.sym, label: r.label, name: ETF_NAME[r.sym] || r.sym, price: e.ltp, r3: e[key], mom: sc[r.sym], ret: e.ret1y, etf: true}; });
-  const stock = s => ({sym: s.sym, name: s.name, ind: s.ind, price: s.cmp, pe: s.pe, mom: s.mom, score: s.score, url: s.url, ret: s.ret});
-  return {pk, index, value: S ? S.value.map(stock) : [], mom: S ? S.mom.map(stock) : []};
+  const stock = s => ({sym: s.sym, name: s.name, ind: s.ind, price: s.cmp, pe: s.pe, pb: s.pb, mom: s.mom, score: s.score, url: s.url, ret: s.ret});
+  const from = k => { const P = (S && S.pools) || {}, c = SELC[k]; return choose((P[c.uni] || P.all || {})[k] || [], c, k).map(stock); };
+  return {pk, index, value: from('value'), mom: from('mom')};
 }
+/* universe → sort → top n. Missing values go last whichever way it is sorted; ties: Momentum list = higher PE first (as before), Value list = higher score */
+function choose(pool, c, k) {
+  const val = x => c.key === 'mom' ? (num(x.mom) ? Math.round(x.mom) : null) : (num(x[c.key]) ? x[c.key] : null), sg = c.dir === 'asc' ? 1 : -1;
+  const pv = x => num(x) ? x : -1e9;
+  const a = pool.slice().sort((p, q) => {
+    const vp = val(p), vq = val(q);
+    if ((vp == null) !== (vq == null)) return vp == null ? 1 : -1;
+    if (vp !== vq && vp != null) return sg * (vp - vq);
+    return k === 'mom' ? pv(q.pe) - pv(p.pe) || pv(q.mom) - pv(p.mom) : pv(q.score) - pv(p.score) || String(p.sym).localeCompare(q.sym);
+  });
+  return c.n > 0 ? a.slice(0, c.n) : a;
+}
+const sortName = c => (SORT_KEYS.find(x => x[0] === c.key) || [0, c.key])[1] + (c.dir === 'asc' ? ', low to high' : ', high to low');
+const uniName = u => u === 'all' ? 'All lists' : u;
+const selText = k => `${uniName(SELC[k].uni)} · by ${sortName(SELC[k])} · ${SELC[k].n > 0 ? 'top ' + SELC[k].n : 'all that pass'}`;
 function symCell(x) {
   return x.url ? `<a class="sym" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer" title="Open on Screener.in">${esc(x.sym)}</a>` : `<b>${esc(x.label || x.sym)}</b>`;
 }
@@ -562,7 +597,10 @@ function paintBack(fund) {
   if (BT) PF = portfolio(BT, L, F, DATA.daily, DATA.etf && DATA.etf.bench);
   const need = [...L.value, ...L.mom].map(x => x.sym).filter(Boolean);
   const lack = BT && need.length ? missingDaily(DATA.daily, need) : [];
+  const needSig = need.slice().sort().join(',');
+  if (PREP.sig && PREP.sig !== needSig && PREP.state !== 'idle') { clearInterval(PREP.timer); PREP.state = 'idle'; }    // the list changed: that fetch is for another list
   if (BT && !lack.length && PREP.state !== 'working') PREP.state = 'done';
+  else if (lack.length && PREP.state === 'done') PREP.state = 'idle';
   const note = !BT ? 'Monthly ETF data is not in yet, so there is no chart: the ETFs are held as picked at the start.'
     : (fund ? '' : 'No fund amount entered: the chart starts from ₹1,00,000. ')
       + (PF.daily ? `Valued on ${PF.dates.length} trading days.` : 'Daily prices are not saved yet: the chart uses 13 monthly points and max drawdown is understated.')
@@ -577,8 +615,9 @@ function paintBack(fund) {
       ${PF ? `<div class="kpi"><span>Max drawdown</span><b class="neg">${pct(PF.mx.dd)}</b></div><div class="kpi"><span>Avg drawdown</span><b class="neg">${pct(PF.avgDD)}</b></div>` : ''}</div>`;
   if (PF) {
     const end = PF.total[PF.total.length - 1], a = PF.dates[0], z = PF.dates[PF.dates.length - 1];
-    html += `<div class="cc" style="margin-bottom:14px"><h3>Portfolio value, day by day</h3>
-      <p class="sub">${rsK(PF.F)} on ${esc(fdate(a, true))} → ${rsK(end)} on ${esc(fdate(z, true))} · net ${pct((end / PF.F - 1) * 100)} · max drawdown ${pct(PF.mx.dd)} · average drawdown ${pct(PF.avgDD)}${PF.nifty ? ' · faint line: NIFTY 500' : ''}</p>
+    const askBtn = lack.length && PREP.state !== 'working' ? `<div><button type="button" class="btn sm primary" id="refreshChart">Refresh chart</button></div>` : '';
+    html += `<div class="cc" style="margin-bottom:14px"><div class="cch"><div><h3>Portfolio value, day by day</h3>
+      <p class="sub">${rsK(PF.F)} on ${esc(fdate(a, true))} → ${rsK(end)} on ${esc(fdate(z, true))} · net ${pct((end / PF.F - 1) * 100)} · max drawdown ${pct(PF.mx.dd)} · average drawdown ${pct(PF.avgDD)}${PF.nifty ? ' · faint line: NIFTY 500' : ''}</p>${lack.length && PREP.state !== 'working' ? `<p class="rh">${lack.length} of ${need.length} stocks have no daily prices: drawn as straight lines. Refresh chart downloads them (3–5 min).</p>` : ''}</div>${askBtn}</div>
       ${lack.length || PREP.state === 'working' || PREP.state === 'still' || PREP.state === 'failed' ? '<p class="prep" id="prep"></p>' : ''}<div class="chart" id="chPf"></div><p class="note">${esc(note)}</p></div>`;
   } else html += `<p class="note">${esc(note)}</p>`;
   const all = '<div class="bar"><span class="sp"></span><button type="button" class="btn sm" data-all="1">Expand all</button><button type="button" class="btn sm" data-all="0">Collapse all</button></div>';
@@ -587,15 +626,14 @@ function paintBack(fund) {
       : `${pc(sh)} · ${L[k].length} holdings then · average ${pct(r[k])}`;
     if (k === 'index' && BT) return section(k, label, hdr, indexBack(BT, sh), false);
     const rows = L[k];
-    const body = (k === 'index' ? pairNotes(L.pk) : '') + `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">${k === 'value' ? 'Score then' : 'Momentum then'}</th><th class="r">Return since</th></tr></thead><tbody>${
+    const body = (k === 'index' ? pairNotes(L.pk) : `<p class="rule">${esc(selText(k))} · all figures as they stood on ${esc(B.date)}.</p>`) + `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Value score then</th><th class="r">Momentum then</th><th class="r">PE then</th><th class="r">PB then</th><th class="r">Return since</th></tr></thead><tbody>${
       rows.length ? rows.map(x => `<tr><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td>
-        <td class="r">${k === 'value' ? fmt(x.score, 0) : ms(x.mom)}</td><td class="r">${pill(x.ret)}</td></tr>`).join('')
-      : '<tr><td colspan="4" class="empty">Nothing passed this screen then.</td></tr>'}</tbody></table></div>`;
+        <td class="r">${num(x.score) ? fmt(x.score, 0) : '–'}</td><td class="r">${num(x.mom) ? Math.round(x.mom) : '–'}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td><td class="r">${pill(x.ret)}</td></tr>`).join('')
+      : '<tr><td colspan="7" class="empty">Nothing passed this screen then.</td></tr>'}</tbody></table></div>`;
     return section(k, label, hdr, body, false);
   }).join('') + (L.index.some(x => !num(x.ret)) ? '<p class="note">ETFs without prices count as 0% inside the index part.</p>' : '');
   out.innerHTML = html;
   drawCharts();
-  if (lack.length && (PREP.state === 'idle' || PREP.sig !== need.slice().sort().join(','))) ensureDaily(need);
   prepNote();
 }
 function paint() {
@@ -614,17 +652,17 @@ function paint() {
         <div class="kpi"><span>Data as of</span><b>${esc(DATA.now.date || '–')}</b></div></div>
       <div class="bar"><span class="sp"></span><button type="button" class="btn sm" data-all="1">Expand all</button><button type="button" class="btn sm" data-all="0">Collapse all</button></div>`
       + A.parts.map(p => {
-        const extraH = p.k === 'index' ? '<th class="r">Composite</th><th class="r">3M</th>' : p.k === 'value' ? '<th class="r">Score</th><th class="r">PE</th>' : '<th class="r">Momentum</th><th class="r">PE</th>';
-        const extra = x => p.k === 'index' ? `<td class="r">${ms(x.mom)}</td><td class="r">${pill(x.r3)}</td>` : p.k === 'value' ? `<td class="r">${fmt(x.score, 0)}</td><td class="r">${fmt(x.pe, 1)}</td>`
-          : `<td class="r">${num(x.mom) ? Math.round(x.mom) : '–'}</td><td class="r">${fmt(x.pe, 1)}</td>`;
+        const extraH = p.k === 'index' ? '<th class="r">Composite</th><th class="r">3M</th>' : p.k === 'value' ? '<th class="r">Score</th><th class="r">PE</th><th class="r">PB</th>' : '<th class="r">Momentum</th><th class="r">PE</th><th class="r">PB</th>';
+        const extra = x => p.k === 'index' ? `<td class="r">${ms(x.mom)}</td><td class="r">${pill(x.r3)}</td>` : p.k === 'value' ? `<td class="r">${fmt(x.score, 0)}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td>`
+          : `<td class="r">${num(x.mom) ? Math.round(x.mom) : '–'}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td>`;
         const rule = p.k === 'index' ? pairNotes(L.pk) + (etfMiss ? '<p class="note">ETF prices are not in yet: they come with the next weekly price update (part 1). Amounts are shown; units appear once prices are in.</p>' : '')
-          : p.k === 'value' ? '<p class="rule">Every non-PSU stock that passes the Deep value screen (All lists: NIFTY 500, Smallcap 500, Microcap 250), equal weight.</p>'
-          : `<p class="rule">Momentum screen (All lists, PSU stocks left out), highest momentum first, ties by highest PE: top ${MOM_TOP}, equal weight.</p>`;
+          : p.k === 'value' ? `<p class="rule">Non-PSU stocks that pass the Deep value screen · ${esc(selText('value'))} · equal weight.</p>`
+          : `<p class="rule">Non-PSU stocks that pass the Momentum screen · ${esc(selText('mom'))} · equal weight.</p>`;
         const hdr = `${pc(p.share)} · ${fund ? rs(p.amt) + ' · ' : ''}${p.rows.length} holdings${fund && p.rows.length ? ' · ' + rs(p.amt / p.rows.length) + ' each' : ''}`;
         const body = rule + `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Price ₹</th>${extraH}<th class="r">Units</th><th class="r">Amount ₹</th></tr></thead><tbody>${
           p.rows.length ? p.rows.map(x => `<tr><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td><td class="r">${fmt(x.price, 2)}</td>${extra(x)}
             <td class="r ${x.qty === 0 ? 'zero' : ''}" ${x.qty === 0 ? 'title="Price is above this holding\'s share of the fund"' : ''}>${fund && x.qty != null ? fmt(x.qty, 0) : '–'}</td><td class="r">${fund && x.invested != null ? fmt(x.invested, 0) : '–'}</td></tr>`).join('')
-          : `<tr><td colspan="7" class="empty">Nothing passes this screen today.</td></tr>`}</tbody></table></div>`;
+          : `<tr><td colspan="8" class="empty">Nothing passes this screen today.</td></tr>`}</tbody></table></div>`;
         return section(p.k, p.label, hdr, body, true);
       }).join('');
     $('#csv').disabled = !fund;
@@ -671,11 +709,34 @@ document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click
 /* section open / closed (kept across repaints), expand / collapse all, chart legend */
 $('#out').addEventListener('toggle', e => { const d = e.target; if (d.classList && d.classList.contains('sec')) OPEN[TAB + d.dataset.k] = d.open; }, true);
 $('#out').addEventListener('click', e => {
+  if (e.target.closest('#refreshChart')) { const L = lists('back'); ensureDaily([...L.value, ...L.mom].map(x => x.sym).filter(Boolean), true); return; }
   if (e.target.closest('#prepGo')) { const L = lists('back'); ensureDaily([...L.value, ...L.mom].map(x => x.sym).filter(Boolean), true); return; }
   const a = e.target.closest('[data-all]');
   if (a) { const o = a.dataset.all === '1'; $('#out').querySelectorAll('details.sec').forEach(d => { d.open = o; }); return; }
 });
 let RS = null; window.addEventListener('resize', () => { clearTimeout(RS); RS = setTimeout(drawCharts, 150); });
+function paintSel() {
+  const lists = ['all'].concat((DATA && DATA.now && DATA.now.lists) || []);
+  const row = (k, label) => {
+    const c = SELC[k];
+    return `<div class="selrow" data-k="${k}"><b>${label}</b>
+      <label>List<select data-f="uni">${lists.map(u => `<option value="${esc(u)}"${u === c.uni ? ' selected' : ''}>${esc(uniName(u))}</option>`).join('')}</select></label>
+      <label>Sort<select data-f="key">${SORT_KEYS.map(([v, t]) => `<option value="${v}"${v === c.key ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+      <label><select data-f="dir"><option value="desc"${c.dir === 'desc' ? ' selected' : ''}>High → low</option><option value="asc"${c.dir === 'asc' ? ' selected' : ''}>Low → high</option></select></label>
+      <label>Top<input data-f="n" inputmode="numeric" placeholder="all" value="${c.n > 0 ? c.n : ''}" aria-label="How many stocks, blank = all"></label></div>`;
+  };
+  $('#sel').innerHTML = row('value', 'Value stocks') + row('mom', 'Momentum');
+}
+$('#sel').addEventListener('change', e => {
+  const f = e.target.dataset && e.target.dataset.f, k = e.target.closest('.selrow') && e.target.closest('.selrow').dataset.k;
+  if (!f || !k) return;
+  SELC[k][f] = f === 'n' ? Math.max(0, parseInt(String(e.target.value).replace(/\D/g, ''), 10) || 0) : e.target.value;
+  if (f === 'n') e.target.value = SELC[k].n > 0 ? SELC[k].n : '';
+  lsSet('pb_sel', JSON.stringify(SELC));
+  if (DATA) paint();                                  // every change moves the lists, the returns and the chart at once
+});
+try { const sv = JSON.parse(lsGet('pb_sel') || 'null'); if (sv) ['value', 'mom'].forEach(k => { if (sv[k]) Object.assign(SELC[k], {uni: String(sv[k].uni || 'all'), key: SORT_KEYS.some(x => x[0] === sv[k].key) ? sv[k].key : SELC[k].key, dir: sv[k].dir === 'asc' ? 'asc' : 'desc', n: Math.max(0, parseInt(sv[k].n, 10) || 0)}); }); } catch (e) {}
+paintSel();
 paintSplit();
 
 (async () => {
@@ -689,6 +750,7 @@ paintSplit();
     const dly = dailyData();                       // big file: start it now, awaited with the screens
     const etf = await etfData();
     DATA = Object.assign({etf, daily: await dly}, await screens(etf));
+    paintSel();
     READY = `Ready · data as of ${DATA.now.date}${DATA.back ? ' · backtest from ' + DATA.back.date : ''}`; if (READY) status(READY);
     paint();
   } catch (e) { status(e.message || 'Could not load the screens.', true); }
