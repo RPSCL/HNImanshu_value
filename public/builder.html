@@ -30,10 +30,12 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--san
 a{color:inherit}
 .wrap{max-width:1100px;margin:0 auto;padding:16px}
 header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:6px 0 14px;border-bottom:1px solid var(--line)}
-.logo{display:flex;align-items:center;gap:10px;text-decoration:none}
-.logo i{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:var(--brassbg);color:var(--brass);font:700 18px var(--mono);font-style:normal}
-.logo b{font:600 15px var(--mono);letter-spacing:.02em}
-.logo small{display:block;font:500 10px var(--mono);letter-spacing:.14em;color:var(--faint);text-transform:uppercase}
+.logo{display:flex;align-items:center;gap:9px;text-decoration:none}
+.logo svg{width:32px;height:32px;flex-shrink:0}
+.wm{font:700 13px var(--mono);display:flex;align-items:baseline;gap:1px}
+.wm .hni{color:var(--brass);letter-spacing:2px}
+.wm .manshu{color:var(--faint);font-weight:400;font-size:11px;letter-spacing:.5px}
+.tagline{font:7.5px var(--mono);color:var(--faint);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
 header .sp{flex:1}
 .btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);
   color:var(--ink);font:600 12.5px var(--mono);text-decoration:none;cursor:pointer;white-space:nowrap}
@@ -156,7 +158,7 @@ details.sec>.body{padding:0 14px 14px}
 <script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){var w=document.getElementById("auWait");if(w)w.innerHTML='Login could not load. <a href="./">Back to screener</a>';}},10000);</script>
 <div class="wrap">
   <header>
-    <a class="logo" href="fundamentals"><i>H</i><span><b>HNImanshu</b><small>PF builder</small></span></a>
+    <a class="logo" href="fundamentals" aria-label="HNImanshu Fundamentals"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="7" fill="var(--panel2)"/><text x="16" y="23" font-family="Georgia,serif" font-size="18" font-weight="bold" fill="var(--brass)" text-anchor="middle">H</text></svg><div><div class="wm"><span class="hni">HNI</span><span class="manshu">manshu</span></div><div class="tagline">PF Builder</div></div></a>
     <span class="sp"></span>
     <a class="btn" href="fundamentals">Fundamentals</a>
   </header>
