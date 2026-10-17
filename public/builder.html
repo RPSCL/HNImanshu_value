@@ -245,15 +245,25 @@ const HELPER = () => `window.__pb = function (unisJson, etfJson) {
                       mcap: s.mcap, cagr: s.cagr, hi52: s.hi52,
                       ret: BACK ? sv(s, 'ret') : null});
   const vf = Object.assign({}, VF_DEF, (VF_PRESETS.find(p => p.name === 'Deep value') || {}).st);
+  /* no recent IPOs: a stock needs at least ceil(years back) whole years of prices BEFORE the date it is judged on (Today: 1 year; 1Y back: 1 year
+     before that date). lf = first price day we have (prices.csv LISTED_FROM). Prices are fetched from a fixed start date, so a stock whose first
+     price sits on that start (a few days after it) is older than that and passes. Unknown lf = passes (it has no price, so it is dropped anyway). */
+  const day = 864e5, asOfT = Date.parse(D.asOf), judged = BACK ? asOfT - D.then.days * day : asOfT;
+  const need = BACK ? Math.max(1, Math.ceil(D.then.days / 365)) : 1;
+  const cutISO = new Date(judged - need * 365 * day).toISOString().slice(0, 10);
+  let first = '9999';
+  D.stocks.forEach(s => { if (s.lf && s.lf < first) first = s.lf; });
+  const startISO = new Date(Date.parse(first) + 7 * day).toISOString().slice(0, 10);
+  const young = s => !!(s.lf && s.lf > cutISO && s.lf > startISO);
   const pools = {};
   JSON.parse(unisJson).forEach(u => {                           // one candidate pool per universe: all lists, or one list
     GF.uni = u; setMode(); computeScores.S = null; computeScores();
-    pools[u] = {value: V().filter(s => s.score != null && s.cmp != null && passVF(s, vf)).map(pick),          // pass the Deep value screen
-                mom: V().filter(s => ok(s.momS) && s.cmp != null && passVF(s, MOM_DEF)).map(pick)};          // pass the Momentum screen
+    pools[u] = {value: V().filter(s => !young(s) && s.score != null && s.cmp != null && passVF(s, vf)).map(pick),          // pass the Deep value screen
+                mom: V().filter(s => !young(s) && ok(s.momS) && s.cmp != null && passVF(s, MOM_DEF)).map(pick)};          // pass the Momentum screen
   });
   GF.uni = 'all'; setMode(); computeScores.S = null; computeScores();
   return JSON.stringify({back: BACK, date: BACK ? D.then.date : D.asOf, hasPrice: BACK ? !!D.then.hasPrice : true,
-    bench: BACK && D.then.bench ? D.then.bench.ret : null, lists: D.lists, pools, etfScore});
+    bench: BACK && D.then.bench ? D.then.bench.ret : null, lists: D.lists, pools, etfScore, minHistory: need, cut: cutISO});
 };`;
 let ENG = null;
 function engine() {
@@ -541,6 +551,7 @@ let PF = null;
    A pick without saved daily prices → the page asks the Worker (POST /builder) to start builder_prices.yml: it downloads the ETFs, the NIFTY 500
    and those stocks from Angel day by day and redeploys builder_daily.json. Meanwhile the chart is drawn (stocks as straight lines) with
    "Preparing detailed chart…" breathing above it; the page polls for the new file and redraws by itself. */
+const REQ_MIN = 45;                                  // a request from this computer counts as pending this long (or until its prices arrive)
 const PREP = {sig: '', state: 'idle', timer: null, t0: 0, msg: ''};     // state: idle | working | still | failed | done
 function missingDaily(D, syms) {
   if (!D || !Array.isArray(D.dates) || !D.px) return syms.slice();
@@ -548,6 +559,14 @@ function missingDaily(D, syms) {
   const tried = new Set(D.tried || []);
   const m = syms.filter(s => !D.px[s] && !tried.has(s));
   return stale ? (m.length ? m : syms.slice()) : m;
+}
+/* A request made from this computer (localStorage pb_req = {sig, syms, t}) that has not been answered yet. While it is pending the Refresh
+   button stays disabled, whichever list is on screen, so one browser never starts several price runs. Survives a reload. */
+function pendingReq() {
+  let r = null; try { r = JSON.parse(lsGet('pb_req') || 'null'); } catch (e) {}
+  if (!r || !Array.isArray(r.syms) || Date.now() - r.t > REQ_MIN * 60e3) return null;
+  if (DATA && DATA.daily && !missingDaily(DATA.daily, r.syms).length) { lsSet('pb_req', ''); return null; }          // its prices have arrived
+  return r;
 }
 function prepNote() {
   const h = $('#prep'); if (!h) return;
@@ -564,28 +583,30 @@ function pollDaily(syms) {
       const r = await fetch('builder_daily.json?t=' + Date.now(), {cache: 'no-store'});
       const D = r.ok ? await r.json() : null;
       if (D && !missingDaily(D, syms).length) {
-        clearInterval(PREP.timer); PREP.state = 'done'; DATA.daily = D; DAILY_P = Promise.resolve(D);
+        clearInterval(PREP.timer); PREP.state = 'done'; lsSet('pb_req', ''); DATA.daily = D; DAILY_P = Promise.resolve(D);
         if (TAB === 'back') paint();
         return;
       }
     } catch (e) {}
     if (Date.now() - PREP.t0 > 14 * 60e3 && PREP.state === 'working') { PREP.state = 'still'; prepNote(); }
-    if (Date.now() - PREP.t0 > 40 * 60e3) clearInterval(PREP.timer);
+    if (Date.now() - PREP.t0 > REQ_MIN * 60e3) { clearInterval(PREP.timer); if (PREP.state !== 'done') { PREP.state = 'idle'; lsSet('pb_req', ''); paint(); } }
   }, 25000);
 }
 async function ensureDaily(syms, force) {
+  if (PREP.state === 'working' || pendingReq()) return;                     // one request at a time from this computer
   const sig = syms.slice().sort().join(',');
-  if (!force && PREP.sig === sig && PREP.state !== 'idle') return;
   PREP.sig = sig; PREP.state = 'working'; PREP.t0 = Date.now(); PREP.msg = '';
-  let saved = null; try { saved = JSON.parse(lsGet('pb_req') || 'null'); } catch (e) {}
-  const recent = !force && saved && saved.sig === sig && Date.now() - saved.t < 30 * 60e3;     // asked less than 30 min ago: only wait
-  if (!recent) {
-    let res = null;
-    try { res = window.hniStore && window.hniStore.builderPrices ? await window.hniStore.builderPrices(syms) : {error: 'not signed in'}; } catch (e) { res = {error: 'network'}; }
-    if (res && (res.ok || res.running)) lsSet('pb_req', JSON.stringify({sig, t: Date.now()}));
-    else { PREP.state = 'failed'; PREP.msg = (res && res.error) || ''; prepNote(); return; }
-  }
-  prepNote(); pollDaily(syms);
+  paint();                                                                  // button goes grey at once
+  let res = null;
+  try { res = window.hniStore && window.hniStore.builderPrices ? await window.hniStore.builderPrices(syms) : {error: 'not signed in'}; } catch (e) { res = {error: 'network'}; }
+  if (res && res.ok) lsSet('pb_req', JSON.stringify({sig, syms, t: Date.now()}));
+  else { PREP.state = 'failed'; PREP.msg = res && res.running ? 'another chart is being prepared, try again in a few minutes' : (res && res.error) || ''; paint(); return; }
+  paint(); pollDaily(syms);
+}
+/* page opened again (or a new list chosen) while this computer's earlier request is still running: wait for it, do not ask again */
+function resumeReq() {
+  const r = pendingReq();
+  if (r && PREP.state !== 'working' && PREP.state !== 'still') { PREP.sig = r.sig; PREP.state = 'working'; PREP.t0 = r.t; PREP.msg = ''; pollDaily(r.syms); }
 }
 function drawCharts() { const h = $('#chPf'); if (h && PF) pfChart(h, PF); }
 function paintBack(fund) {
@@ -602,9 +623,10 @@ function paintBack(fund) {
   const need = [...L.value, ...L.mom].map(x => x.sym).filter(Boolean);
   const lack = BT && need.length ? missingDaily(DATA.daily, need) : [];
   const needSig = need.slice().sort().join(',');
-  if (PREP.sig && PREP.sig !== needSig && PREP.state !== 'idle') { clearInterval(PREP.timer); PREP.state = 'idle'; }    // the list changed: that fetch is for another list
-  if (BT && !lack.length && PREP.state !== 'working') PREP.state = 'done';
+  if (lack.length) resumeReq();
+  if (BT && !lack.length && PREP.state !== 'working' && PREP.state !== 'still') PREP.state = 'done';
   else if (lack.length && PREP.state === 'done') PREP.state = 'idle';
+  const locked = PREP.state === 'working' || PREP.state === 'still' || !!pendingReq();
   const note = !BT ? 'Monthly ETF data is not in yet, so there is no chart: the ETFs are held as picked at the start.'
     : (fund ? '' : 'No fund amount entered: the chart starts from ₹1,00,000. ')
       + (PF.daily ? `Valued on ${PF.dates.length} trading days.` : 'Daily prices are not saved yet: the chart uses 13 monthly points and max drawdown is understated.')
@@ -619,9 +641,9 @@ function paintBack(fund) {
       ${PF ? `<div class="kpi"><span>Max drawdown</span><b class="neg">${pct(PF.mx.dd)}</b></div><div class="kpi"><span>Avg drawdown</span><b class="neg">${pct(PF.avgDD)}</b></div>` : ''}</div>`;
   if (PF) {
     const end = PF.total[PF.total.length - 1], a = PF.dates[0], z = PF.dates[PF.dates.length - 1];
-    const askBtn = lack.length && PREP.state !== 'working' ? `<div><button type="button" class="btn sm primary" id="refreshChart">Refresh chart</button></div>` : '';
+    const askBtn = lack.length ? `<div><button type="button" class="btn sm primary" id="refreshChart"${locked ? ' disabled title="The prices of an earlier request are still being prepared"' : ''}>${locked ? 'Preparing…' : 'Refresh chart'}</button></div>` : '';
     html += `<div class="cc" style="margin-bottom:14px"><div class="cch"><div><h3>Portfolio value, day by day</h3>
-      <p class="sub">${rsK(PF.F)} on ${esc(fdate(a, true))} → ${rsK(end)} on ${esc(fdate(z, true))} · net ${pct((end / PF.F - 1) * 100)} · max drawdown ${pct(PF.mx.dd)} · average drawdown ${pct(PF.avgDD)}${PF.nifty ? ' · faint line: NIFTY 500' : ''}</p>${lack.length && PREP.state !== 'working' ? `<p class="rh">${lack.length} of ${need.length} stocks have no daily prices: drawn as straight lines. Refresh chart downloads them (3–5 min).</p>` : ''}</div>${askBtn}</div>
+      <p class="sub">${rsK(PF.F)} on ${esc(fdate(a, true))} → ${rsK(end)} on ${esc(fdate(z, true))} · net ${pct((end / PF.F - 1) * 100)} · max drawdown ${pct(PF.mx.dd)} · average drawdown ${pct(PF.avgDD)}${PF.nifty ? ' · faint line: NIFTY 500' : ''}</p>${lack.length && !locked ? `<p class="rh">${lack.length} of ${need.length} stocks have no daily prices: drawn as straight lines. Refresh chart downloads them (3–5 min).</p>` : ''}</div>${askBtn}</div>
       ${lack.length || PREP.state === 'working' || PREP.state === 'still' || PREP.state === 'failed' ? '<p class="prep" id="prep"></p>' : ''}<div class="chart" id="chPf"></div><p class="note">${esc(note)}</p></div>`;
   } else html += `<p class="note">${esc(note)}</p>`;
   const all = '<div class="bar"><span class="sp"></span><button type="button" class="btn sm" data-all="1">Expand all</button><button type="button" class="btn sm" data-all="0">Collapse all</button></div>';
@@ -706,6 +728,19 @@ $('#fund').addEventListener('input', e => {
   paintSplit();
 });
 $('#fundForm').addEventListener('submit', e => { e.preventDefault(); if (!readSplit()) return; if (READY) status(READY); lsSet('pb_fund', String(fundVal())); lsSet('pb_split', $('#pEtf').value + ',' + $('#pVal').value); paint(); });
+/* every number box: click into it, then ArrowUp / ArrowDown move it by 5 (the fund value by 50,000); blank counts as 0, never below 0 */
+document.addEventListener('keydown', e => {
+  const el = e.target;
+  if ((e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || !el || el.tagName !== 'INPUT' || el.readOnly || el.disabled) return;
+  if (!(el.id === 'fund' || el.id === 'pEtf' || el.id === 'pVal' || (el.dataset && el.dataset.f === 'n'))) return;
+  e.preventDefault();
+  const step = el.id === 'fund' ? 50000 : 5, cur = parseFloat(String(el.value).replace(/,/g, '')) || 0;
+  let v = Math.max(0, cur + (e.key === 'ArrowUp' ? step : -step));
+  if (el.id === 'pEtf' || el.id === 'pVal') v = Math.min(100, v);
+  el.value = el.id === 'fund' ? (v ? v.toLocaleString('en-IN') : '') : (el.dataset.f === 'n' && !v ? '' : String(+v.toFixed(2)));
+  el.dispatchEvent(new Event('input', {bubbles: true}));
+  el.dispatchEvent(new Event('change', {bubbles: true}));
+});
 $('#csv').addEventListener('click', csv);
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   TAB = b.dataset.tab; document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b)); paint();
@@ -713,8 +748,13 @@ document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click
 /* section open / closed (kept across repaints), expand / collapse all, chart legend */
 $('#out').addEventListener('toggle', e => { const d = e.target; if (d.classList && d.classList.contains('sec')) OPEN[TAB + d.dataset.k] = d.open; }, true);
 $('#out').addEventListener('click', e => {
-  if (e.target.closest('#refreshChart')) { const L = lists('back'); ensureDaily([...L.value, ...L.mom].map(x => x.sym).filter(Boolean), true); return; }
-  if (e.target.closest('#prepGo')) { const L = lists('back'); ensureDaily([...L.value, ...L.mom].map(x => x.sym).filter(Boolean), true); return; }
+  if (e.target.closest('#refreshChart')) { if (e.target.closest('#refreshChart').disabled) return; const L = lists('back'); ensureDaily([...L.value, ...L.mom].map(x => x.sym).filter(Boolean), true); return; }
+  if (e.target.closest('#prepGo')) {
+    const L = lists('back'), syms = [...L.value, ...L.mom].map(x => x.sym).filter(Boolean);
+    if (PREP.state === 'failed') { ensureDaily(syms, true); return; }
+    fetch('builder_daily.json?t=' + Date.now(), {cache: 'no-store'}).then(r => r.ok ? r.json() : null).then(D => { if (D) { DATA.daily = D; DAILY_P = Promise.resolve(D); } paint(); }).catch(() => {});   // "check again"
+    return;
+  }
   const a = e.target.closest('[data-all]');
   if (a) { const o = a.dataset.all === '1'; $('#out').querySelectorAll('details.sec').forEach(d => { d.open = o; }); return; }
 });
@@ -745,10 +785,10 @@ paintSplit();
 
 (async () => {
   await waitFor(() => document.documentElement.classList.contains('auth-ok'), 600000);   // auth.js: signed in
-  /* admin only (auth.js: window.hniAdmin = admin@ account, or a hni_admins/{uid} document, same rule as the Users list) */
-  let admin = false;
-  try { await waitFor(() => window.hniAdmin, 20000); admin = !!(await window.hniAdmin); } catch (e) {}
-  if (!admin) { $('#gate').innerHTML = 'The Portfolio builder is for admins only. <a href="fundamentals">Back to Fundamentals</a>'; return; }
+  /* admins and prime members (auth.js: window.hniBuilder = admin@ account, a hni_admins/{uid} document, or a hni_prime/{uid} document) */
+  let allowed = false;
+  try { await waitFor(() => window.hniBuilder || window.hniAdmin, 20000); allowed = !!(await (window.hniBuilder || window.hniAdmin)); } catch (e) {}
+  if (!allowed) { $('#gate').innerHTML = 'PF Builder is for admins and prime members. <a href="fundamentals">Back to Fundamentals</a>'; return; }
   document.documentElement.classList.add('pb-admin'); $('#gate').remove();
   try {
     const dly = dailyData();                       // big file: start it now, awaited with the screens

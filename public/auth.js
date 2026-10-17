@@ -306,7 +306,7 @@ const ready = new Promise((resolve) => {
         return r.json().catch(() => ({ error: "HTTP " + r.status }));
       },
     };
-    // PF Builder (admin only, checked again by the Worker): download day-by-day prices for these stocks → {ok} | {error, running}
+    // PF Builder (admins and prime members, checked again by the Worker): download day-by-day prices for these stocks → {ok} | {error, running}
     window.hniStore.builderPrices = async (symbols) => {
       const r = await fetch(LTP_HOOK.replace(/\/run$/, "/builder"), { method: "POST",
         headers: { Authorization: "Bearer " + await u.getIdToken(), "Content-Type": "application/json" }, body: JSON.stringify({ symbols }) });
@@ -317,6 +317,12 @@ const ready = new Promise((resolve) => {
       if (u.email === ADMIN_EMAIL) return true;
       try { await needFS(); return (await getDoc(doc(db, "hni_admins", u.uid))).exists(); } catch (e) { return false; }
     })();
+    // true / false: is this account a prime member (a hni_prime/{uid} document, written by an admin)? Prime members use the PF Builder like admins
+    window.hniPrime = (async () => {
+      try { await needFS(); return (await getDoc(doc(db, "hni_prime", u.uid))).exists(); } catch (e) { return false; }
+    })();
+    // PF Builder (button on Fundamentals + the page itself): admins and prime members
+    window.hniBuilder = (async () => (await window.hniAdmin) || (await window.hniPrime))();
     window.dispatchEvent(new Event("hni-ready"));
     if (GATED) showUser(u);
     idle(() => { record(u); loadExt(u); }, 1500);
