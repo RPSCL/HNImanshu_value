@@ -887,6 +887,7 @@ def build_all(df, asof, prices=None, bench=None):
         d = pd.to_datetime(d, errors="coerce")
         return pd.notna(d) and abs(d - target) <= tol
     n_farL = 0
+    win0 = price_window_start(prices)
     now, smnow, ltps = [], [], {}
     for r in df.to_dict("records"):                       # plain dicts: much faster than pandas rows
         fin = bool(FIN_RE.search(str(r["INDUSTRY"])))
@@ -894,7 +895,7 @@ def build_all(df, asof, prices=None, bench=None):
         px = prices.get(sym, {})
         g = lambda k: px.get(k) if ok(px.get(k)) else None
         rec0 = build_record(r, F, inputs_now(r, F, asof, fin), fin)
-        rec0["mom"] = momentum(px, "NOW")
+        rec0["mom"] = momentum(px, "NOW") if history_ok(px, asof, 1, win0) else None      # < 1 year of prices (recent IPO): no momentum score
         lf_t = pd.to_datetime(px.get("LISTED_FROM"), errors="coerce")
         lf0 = lf_t.strftime("%Y-%m-%d") if pd.notna(lf_t) else ""     # first price day we have (the PF Builder leaves out recent IPOs with it)
         if lf0:
@@ -921,6 +922,22 @@ def build_all(df, asof, prices=None, bench=None):
     return now, smnow, backs
 
 
+def history_ok(px, judged, years, window_start):
+    """A momentum score needs real history: the stock must have been listed at least `years` whole years before the date it is judged on
+    (no recent IPOs). LISTED_FROM = first price day fetched; prices are fetched from a fixed start (window_start), so a stock first seen
+    within a week of that start is older than that and passes. No LISTED_FROM = unknown, passes (it has no prices anyway)."""
+    lf = pd.to_datetime(px.get("LISTED_FROM"), errors="coerce")
+    if pd.isna(lf) or window_start is None or lf <= window_start + pd.Timedelta(days=7):
+        return True
+    return lf <= pd.Timestamp(judged) - pd.Timedelta(days=365 * years)
+
+
+def price_window_start(prices):
+    v = [pd.to_datetime(p.get("LISTED_FROM"), errors="coerce") for p in prices.values()]
+    v = [x for x in v if pd.notna(x)]
+    return min(v) if v else None
+
+
 def momentum(px, key):
     """[3M, 6M, 12-1M] % returns as of today (key NOW) or a back date, from prices.csv; None if not fetched yet."""
     v = [px.get("MOM_%s_%s" % (key, k)) for k in ("R3", "R6", "R12")]
@@ -936,6 +953,7 @@ def build_back(df, F, asof, key, prices, bench, ltps):
     tol = pd.Timedelta(days=PRICE_TOL_DAYS)
     near = lambda d, t: pd.notna(pd.to_datetime(d, errors="coerce")) and abs(pd.to_datetime(d) - t) <= tol
     then, n_far = [], 0
+    win_b = price_window_start(prices)
     for r in df.to_dict("records"):                       # plain dicts: much faster than pandas rows
         fin = bool(FIN_RE.search(str(r["INDUSTRY"])))
         sym = str(r["SYMBOL"]).upper()
@@ -951,7 +969,8 @@ def build_back(df, F, asof, key, prices, bench, ltps):
         if rec["mcap"] is None:
             rec["mcap"] = num(r["MARKET_CAP_CR"], 0)      # no price then: today's size, only for the Mcap filters
             rec["mcapToday"] = True
-        rec["mom"] = momentum(px, key) if p1 else None   # momentum as of the back date (prices up to then only)
+        yrs = max(1, -(-days // 365))                     # whole years of history needed before the back date (1Y back → 1, 1.5Y back → 2)
+        rec["mom"] = momentum(px, key) if (p1 and history_ok(px, back, yrs, win_b)) else None   # momentum as of the back date (prices up to then only); recent IPOs get none
         if lf is not None and pd.notna(lf):
             rec["lf"] = lf.strftime("%Y-%m-%d")
         rec.update(quality_extras(r, F, back))             # profit gate + growth checks, as known on that date

@@ -36,3 +36,10 @@ Market prices are the same for everybody, so there is ONE shared store (`etf_pri
   as older, which is what it is. This applies to Value and Momentum, today and in the backtest. It needs one build (Actions -> Smart Build & Deploy, run mode -1)
   so the data carries `lf`; until then nothing is excluded.
 - Number boxes: click in, then ArrowUp / ArrowDown move by 5 (ETF %, Value %, Top). Fund value moves by 50,000.
+
+## 4. Update (logo + momentum history)
+- The PF Builder header now uses the same H logo and HNImanshu wordmark as Fundamentals.
+- Momentum score now needs history in the Fundamentals engine itself (fundamentals.py), so recent IPOs (e.g. SENORES, first price 30 Dec 2024)
+  get NO momentum score and drop out of the Momentum screener in the 1Y / 1.25Y / 1.5Y back views, and in the PF Builder. A stock needs
+  ceil(years back) whole years of prices before the date it is judged on (Today: 1). SENORES still has a score Today (it is 1.8 years old).
+  Takes effect after one build (Smart Build & Deploy, mode -1).
