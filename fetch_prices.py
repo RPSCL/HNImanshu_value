@@ -77,6 +77,8 @@ ETF_DIR     = BASE / "etf_prices"
 DAILY_CSV   = ETF_DIR / "daily_close.csv"
 DAILY_LEAD  = 10                          # extra days kept before (data date − 365)
 BACK_DAYS   = 365                         # must match fundamentals.BACK_DAYS
+KEEP_ASKED_DAYS = 60                      # PF Builder stocks nobody asked for in this many days leave the saved prices (ETFs + NIFTY 500 never do)
+MAX_STOCKS      = 300                     # at most this many PF Builder stocks are kept (the least recently asked go first)
 MONTH_DAYS  = [round(k * 365 / 12) for k in range(13)]   # k = 0 (now) … 12 (= 365 days, the 1Y back date): month points for the Portfolio Builder
 PERIODS     = {"3M": 91, "6M": 182, "9M": 273, "1Y": 365, "1_25Y": 456, "1_5Y": 548}   # must match fundamentals.PERIODS
 RATE        = 2.5                         # max candle requests per second, shared by all workers (Angel throttles ~3/s)
@@ -380,16 +382,50 @@ def save_etf_history(raw, closes, asof: date):
 # --history: day-by-day prices of the ETFs + the stocks of the PF Builder's 1-year-back list
 # ─────────────────────────────────────────────────────────────────────────────
 def run_history(symbols_arg):
-	import re, shutil
+	"""PF Builder: day-by-day prices for the ETFs + the stocks somebody asked for. ONE shared store (etf_prices/) serves every user:
+	market prices are the same for everyone, so nothing is kept per user and nothing is wiped. Each run
+	  - fetches the stocks asked for that are not already saved with fresh prices (+ the ETFs / benchmark, always),
+	  - MERGES them into daily_close.csv (other users' stocks stay),
+	  - notes in requested.json when each stock was last asked for, and drops stocks nobody asked for in KEEP_ASKED_DAYS days
+	    (or beyond MAX_STOCKS, oldest first) so the files do not grow for ever."""
+	import re
 	syms, asof = load_symbols()
 	want = [x.strip().upper() for x in str(symbols_arg or "").replace(";", ",").split(",")]
 	stocks = [x for x in dict.fromkeys(want) if x and x not in ETF_SYMS and re.fullmatch(r"[A-Z0-9&_\-]{1,24}", x)][:80]
-	todo = [BENCH_SYM] + ETF_SYMS + stocks
+	ETF_DIR.mkdir(parents=True, exist_ok=True)
+	REQ = ETF_DIR / "requested.json"
+	today = datetime.now(IST).date()
+
+	# what is saved already, and who asked for what, when
+	cache = None
+	if DAILY_CSV.exists():
+		try:
+			cache = pd.read_csv(DAILY_CSV, index_col="date", low_memory=False)
+			cache.index = cache.index.astype(str)
+		except Exception as ex:
+			log(f"  Saved {DAILY_CSV.name} not readable, starting it again ({ex})")
+	asked = {}
+	try:
+		reg = json.loads(REQ.read_text(encoding="utf-8"))
+		asked = {k: str(v) for k, v in (reg.get("asked") or {}).items()}
+		for k in reg.get("requested", []):                               # older files: a plain list, no dates → counts as asked at the file's date
+			asked.setdefault(k, str(reg.get("fetched_at", f"{today}"))[:10])
+	except Exception:
+		pass
+
+	def fresh(sym):                                                      # saved and up to date (its last close is within 4 days of the data date)
+		col = file_name(sym)
+		if cache is None or col not in cache.columns:
+			return False
+		last = cache[col].last_valid_index()
+		return bool(last) and (asof - date.fromisoformat(last)).days <= 4
+	todo_stocks = [x for x in stocks if not fresh(x)]
+	todo = [BENCH_SYM] + ETF_SYMS + todo_stocks
 	etf_start = asof - timedelta(days=max(PERIODS.values()) + 380)       # ETFs: the same long history as always
 	stk_start = asof - timedelta(days=BACK_DAYS + DAILY_LEAD + 10)      # stocks: only the backtest year
 	end = datetime.now(IST).date()
 	keep_from = asof - timedelta(days=BACK_DAYS + DAILY_LEAD)
-	log(f"History run: {len(ETF_SYMS) + 1} ETF / benchmark + {len(stocks)} stocks  |  data date {asof}  |  closes from {keep_from}")
+	log(f"History run: {len(ETF_SYMS) + 1} ETF / benchmark + {len(todo_stocks)} stocks to fetch ({len(stocks) - len(todo_stocks)} already saved)  |  data date {asof}  |  closes from {keep_from}")
 	log("Stocks: " + (", ".join(stocks) if stocks else "(none)"))
 	tmap = build_token_map(scrip_master())
 	api = Angel()
@@ -425,15 +461,33 @@ def run_history(symbols_arg):
 		time.sleep(20)
 		collect([one(s) for s in retry])
 	if not any(s in closes for s in ETF_SYMS + [BENCH_SYM]):
-		log("No ETF got prices: etf_prices/ is left as it was (nothing deleted).")
+		log("No ETF got prices: etf_prices/ is left as it was (nothing changed).")
 		return 1
-	shutil.rmtree(ETF_DIR, ignore_errors=True)                           # delete everything in etf_prices/ (only now that the new prices are in hand) …
-	save_etf_history(raw, closes, asof)                                  # … and write the fresh set
-	(ETF_DIR / "requested.json").write_text(json.dumps({
+	core = set(ETF_SYMS + [BENCH_SYM])
+	save_etf_history({k: v for k, v in raw.items() if k in core}, closes, asof)       # raw candles: ETFs + benchmark only; closes of everything fetched are MERGED in
+
+	# who asked for what: stamp today on every stock of this request, then drop the stale / surplus ones
+	for x in stocks:
+		asked[x] = f"{today}"
+	cutoff = f"{today - timedelta(days=KEEP_ASKED_DAYS)}"
+	keep = sorted([k for k, v in asked.items() if v >= cutoff], key=lambda k: asked[k], reverse=True)[:MAX_STOCKS]
+	dropped = [k for k in asked if k not in keep]
+	asked = {k: asked[k] for k in keep}
+	if DAILY_CSV.exists() and dropped:
+		df = pd.read_csv(DAILY_CSV, index_col="date", low_memory=False)
+		gone = [file_name(k) for k in dropped if file_name(k) in df.columns]
+		if gone:
+			df.drop(columns=gone).to_csv(DAILY_CSV)
+			log(f"Dropped {len(gone)} stocks nobody asked for in {KEEP_ASKED_DAYS} days: {', '.join(gone)}")
+	core_files = {file_name(k) for k in core}
+	for f in (ETF_DIR / "raw").glob("*.csv"):                          # old versions kept a raw file per stock: only ETFs + benchmark have one now
+		if f.stem not in core_files:
+			f.unlink()
+	REQ.write_text(json.dumps({
 		"asof": f"{asof:%Y-%m-%d}", "fetched_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M"),
-		"requested": stocks, "missing": [s for s in stocks if s not in closes]}, indent=1), encoding="utf-8")
-	miss = [s for s in stocks if s not in closes]
-	log(f"History done: {len(closes)} of {len(todo)} symbols saved" + (f"  |  not available: {', '.join(miss)}" if miss else ""))
+		"asked": dict(sorted(asked.items())), "requested": sorted(asked)}, indent=1), encoding="utf-8")
+	miss = [s for s in stocks if s not in closes and not fresh(s)]
+	log(f"History done: {len(closes)} of {len(todo)} symbols fetched, {len(asked)} stocks kept in the shared store" + (f"  |  not available: {', '.join(miss)}" if miss else ""))
 	return 0
 
 

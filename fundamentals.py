@@ -895,6 +895,10 @@ def build_all(df, asof, prices=None, bench=None):
         g = lambda k: px.get(k) if ok(px.get(k)) else None
         rec0 = build_record(r, F, inputs_now(r, F, asof, fin), fin)
         rec0["mom"] = momentum(px, "NOW")
+        lf_t = pd.to_datetime(px.get("LISTED_FROM"), errors="coerce")
+        lf0 = lf_t.strftime("%Y-%m-%d") if pd.notna(lf_t) else ""     # first price day we have (the PF Builder leaves out recent IPOs with it)
+        if lf0:
+            rec0["lf"] = lf0
         qx = quality_extras(r, F, asof)
         rec0.update(qx)
         now.append(rec0)
@@ -905,6 +909,8 @@ def build_all(df, asof, prices=None, bench=None):
         rec_n = build_record(r, F, inputs_sm(r, F, asof, fin, ltp, g("HIGH_52W_NOW") or r["HIGH_52W"]), fin)
         rec_n["pxSrc"] = ltp_src
         rec_n["mom"] = rec0["mom"]
+        if lf0:
+            rec_n["lf"] = lf0
         rec_n.update(qx)
         smnow.append(rec_n)
         ltps[sym] = (ltp, ltp_src)
@@ -946,6 +952,8 @@ def build_back(df, F, asof, key, prices, bench, ltps):
             rec["mcap"] = num(r["MARKET_CAP_CR"], 0)      # no price then: today's size, only for the Mcap filters
             rec["mcapToday"] = True
         rec["mom"] = momentum(px, key) if p1 else None   # momentum as of the back date (prices up to then only)
+        if lf is not None and pd.notna(lf):
+            rec["lf"] = lf.strftime("%Y-%m-%d")
         rec.update(quality_extras(r, F, back))             # profit gate + growth checks, as known on that date
         a, b = inputs_fund(r, F, back, fin, with_trend=False)["fund"], inputs_fund(r, F, asof, fin, with_trend=False)["fund"]
         patG, patL = growth_pct(a["pat"], b["pat"])
@@ -3053,10 +3061,10 @@ async function pfLoadNow() {
   if ((location.hash || '') === '#/portfolio') route(); else pfMarkBags();
 }
 window.addEventListener('hni-ready', () => pfLoad());
-/* Portfolio builder button: shown to admins only (auth.js window.hniAdmin: the admin@ account or a hni_admins/{uid} document) */
+/* PF Builder button: shown to admins and prime members (auth.js window.hniBuilder: admin@ account, hni_admins/{uid} or hni_prime/{uid} document) */
 (function () {
   const b = $('#pfBuilder'); if (!b) return;
-  const show = () => { if (window.hniAdmin) window.hniAdmin.then(a => { b.hidden = !a; }).catch(() => {}); };
+  const show = () => { const w = window.hniBuilder || window.hniAdmin; if (w) w.then(a => { b.hidden = !a; }).catch(() => {}); };
   show(); window.addEventListener('hni-ready', show);
 })();
 /* NSE renamed a held stock (portfolio_ltp.py publishes OLD → NEW): open holdings move to the new symbol by themselves.

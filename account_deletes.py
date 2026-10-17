@@ -5,7 +5,7 @@ account_deletes.py — finishes "Delete user" from the website's Users list.
 The website can remove a user's Firestore records itself, but a login account (Firebase Authentication) can only
 be deleted with the service account. So the Users list also leaves a note in Firestore hni_deletes/{uid}, and this
 script (run by ltp.yml and cron.yml) deletes each noted account for good:
-  Firebase Authentication account, hni_users/{uid}, hni_portfolio/{uid}, hni_admins/{uid}, then the note itself.
+  Firebase Authentication account, hni_users/{uid}, hni_portfolio/{uid}, hni_admins/{uid}, hni_prime/{uid}, then the note itself.
 
 Run
   python account_deletes.py          # GOOGLE_APPLICATION_CREDENTIALS = service-account JSON
@@ -14,7 +14,7 @@ Also imported by portfolio_ltp.py (process(db)).
 import sys
 
 QUEUE = "hni_deletes"
-DOCS = ("hni_users", "hni_portfolio", "hni_admins")
+DOCS = ("hni_users", "hni_portfolio", "hni_admins", "hni_prime")
 
 
 def process(db, log=print):

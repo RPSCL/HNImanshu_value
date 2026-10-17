@@ -10,8 +10,9 @@
 //   3. Not more than once every COOLDOWN_MIN minutes (asks GitHub when the last run started).
 //   4. Starts .github/workflows/ltp.yml on main (workflow_dispatch). The run takes about 1–2 minutes.
 //
-// POST /builder  (PF Builder page, admins only): body {"symbols": ["TCS", ...]} = the stocks of the builder's 1-year-back list.
-//   Same login check, but always admin-only (ALLOW_ALL_USERS does not apply) and open any time of day. Starts
+// POST /builder  (PF Builder page, admins and prime members): body {"symbols": ["TCS", ...]} = the stocks of the builder's 1-year-back list.
+//   Same login check, but only for admins and prime members (a document in Firestore hni_prime/{uid}, written by an admin;
+//   ALLOW_ALL_USERS does not apply) and open any time of day. One shared price store serves everybody: a run adds the stocks asked for to it. Starts
 //   .github/workflows/builder_prices.yml with those symbols, which downloads their prices day by day for the backtest chart.
 //   If that workflow is already running it answers {running: true} and the page just keeps waiting.
 //
@@ -90,14 +91,14 @@ export default {
 		const user = look.ok ? ((await look.json()).users || [])[0] : null;
 		if (!user) return reply(401, {error: "login expired, sign in again"});
 
-		// 2. admin?
+		// 2. admin? (the PF Builder also lets prime members in)
+		const hasDoc = async (col) => (await fetch(`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/${col}/${encodeURIComponent(user.localId)}`,
+			{headers: {Authorization: `Bearer ${idToken}`}})).ok;     // 200 = the document exists (rules let a user read their own)
 		let admin = user.email === MAIN_ADMIN;
-		if (!admin && (!ALLOW_ALL_USERS || path === "/builder")) {
-			const r = await fetch(`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/hni_admins/${encodeURIComponent(user.localId)}`,
-				{headers: {Authorization: `Bearer ${idToken}`}});
-			admin = r.ok;                                        // 200 = the admin document exists (rules let a user read their own)
-		}
-		if (!admin && (!ALLOW_ALL_USERS || path === "/builder")) return reply(403, {error: "admins only"});
+		if (!admin && (!ALLOW_ALL_USERS || path === "/builder")) admin = await hasDoc("hni_admins");
+		if (path === "/builder") {
+			if (!admin && !(await hasDoc("hni_prime"))) return reply(403, {error: "admins and prime members only"});
+		} else if (!admin && !ALLOW_ALL_USERS) return reply(403, {error: "admins only"});
 
 		// PF Builder: start the day-by-day price run for the stocks the page sent
 		if (path === "/builder") {
@@ -107,7 +108,7 @@ export default {
 			if (!syms.length || syms.length > 80 || !syms.every(x => SYMBOL_OK.test(x))) return reply(400, {error: "bad symbol list"});
 			const runs = await gh(env, `/actions/workflows/${BUILDER_WORKFLOW}/runs?per_page=1`);
 			const last = runs.ok ? ((await runs.json()).workflow_runs || [])[0] : null;
-			if (last && last.status !== "completed") return reply(429, {error: "already running", running: true});
+			if (last && last.status !== "completed") return reply(429, {error: "another chart is being prepared, try again in a few minutes", running: true});   // runs one at a time; this request is NOT queued
 			const go = await gh(env, `/actions/workflows/${BUILDER_WORKFLOW}/dispatches`, {method: "POST", body: JSON.stringify({ref: BRANCH, inputs: {symbols: syms.join(",")}})});
 			if (go.status !== 204) return reply(502, {error: `GitHub said ${go.status}`});
 			return reply(200, {ok: true, symbols: syms.length});
