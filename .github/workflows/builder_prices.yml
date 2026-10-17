@@ -1,13 +1,16 @@
 # builder_prices.yml — day-by-day prices for the PF Builder's backtest chart
 #
-# Started by the PF Builder page itself (Cloudflare Worker, POST /builder; admins only) when the 1-year-back list holds stocks
+# Started by the PF Builder page itself (Cloudflare Worker, POST /builder; admins and prime members) when its 1-year-back list holds stocks
 # that have no saved daily prices, or by hand from the Actions tab (symbols = comma separated, e.g. TCS,INFY).
 #
-#   1. fetch_prices.py --history --symbols …  downloads the 7 ETFs + NIFTY 500 + the listed stocks from Angel One, day by day.
-#      Only when the ETFs came through, it deletes everything in etf_prices/ and writes the fresh set (raw candles, daily_close.csv,
-#      requested.json). prices.csv is not touched.
+#   1. fetch_prices.py --history --symbols …  downloads the 7 ETFs + NIFTY 500 + the asked stocks that are not already saved (fresh)
+#      from Angel One, day by day, and MERGES them into the ONE shared store etf_prices/ (daily_close.csv, requested.json = who
+#      asked for what and when). Nothing is deleted when a run starts: every user's stocks stay; stocks nobody asked for in 60 days
+#      (or beyond 300) are dropped. Market prices are the same for everybody, so no per-user folder is needed. prices.csv is not touched.
 #   2. build.py --daily-only                  etf_prices/daily_close.csv → public/builder_daily.json
 #   3. commit etf_prices/ + public/builder_daily.json, deploy to Firebase Hosting (the page polls for the new file and redraws the chart).
+#
+# Runs go one at a time (same lock as Smart Build & Deploy). The Worker refuses a new request while one is running, and the page says so.
 name: PF Builder prices
 
 on:
