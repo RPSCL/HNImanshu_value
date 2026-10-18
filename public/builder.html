@@ -84,14 +84,6 @@ tbody tr:hover td{background:var(--hover)}
 .zero{color:var(--warn)}
 .note{font-size:12px;color:var(--faint);margin:8px 0 0}
 .empty{padding:14px;color:var(--faint)}
-.mem{margin:26px 0 8px}
-.mem h3{margin:0 0 4px;font:600 15px var(--mono)}
-.mem .sub{margin:0 0 10px;color:var(--faint);font:500 12px var(--mono)}
-.mem .mtop{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
-.mem input[type=search]{height:32px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink);font:500 12px var(--mono);padding:0 10px;outline:none;min-width:220px}
-.mem .on{background:var(--brass);border-color:var(--brass);color:var(--bg)}
-.mem td.r,.mem th.r{text-align:right}
-.mem .msg{font:500 12px var(--mono);color:var(--faint)}
 .disc{margin:26px 0 8px;padding:12px 14px;border:1px dashed var(--line);border-radius:10px;font-size:12px;color:var(--faint)}
 .eng{position:absolute;left:-10000px;top:0;width:1280px;height:900px;border:0;visibility:hidden}
 /* ---- PF Builder: sections, charts ---- */
@@ -199,7 +191,6 @@ details.sec>.body{padding:0 14px 14px}
     <button type="button" data-tab="back" role="tab">1-year backtest</button>
   </div>
   <div id="out"></div>
-  <section class="mem" id="members" hidden></section>
 
   <p class="disc">Educational tool. It applies fixed, published rules to screen data and shows what those rules pick;
     it is not investment advice and not a recommendation to buy or sell any security. Prices are the latest weekly
@@ -752,36 +743,6 @@ document.addEventListener('keydown', e => {
   el.dispatchEvent(new Event('input', {bubbles: true}));
   el.dispatchEvent(new Event('change', {bubbles: true}));
 });
-/* Members (admins only): make a user prime or admin, or take it away, with one click */
-const MEM = {rows: null, q: '', busy: false};
-async function memberLoad() {
-  const host = $('#members');
-  try { MEM.rows = (await window.hniStore.members.list()).sort((a, b) => b.lastLogin - a.lastLogin); } catch (e) { host.innerHTML = '<p class="msg">Could not load the users list (' + esc(e.code || e.message || e) + ').</p>'; return; }
-  memberPaint();
-}
-function memberPaint(msg) {
-  const host = $('#members'), q = MEM.q.trim().toLowerCase();
-  const rows = (MEM.rows || []).filter(r => !q || (r.username + ' ' + r.email).toLowerCase().includes(q));
-  const btn = (r, role) => {
-    const on = r[role], lock = r.main && role === 'admin';
-    return `<button type="button" class="btn sm${on ? ' on' : ''}" data-uid="${esc(r.uid)}" data-role="${role}" data-on="${on ? 0 : 1}"${lock || MEM.busy ? ' disabled' : ''}>${role === 'prime' ? 'Prime' : 'Admin'}: ${on ? 'on' : 'off'}</button>`;
-  };
-  host.innerHTML = `<h3>Members</h3><p class="sub">Prime members and admins can use PF Builder. One click turns it on or off for that user (admins only).</p>
-    <div class="mtop"><input type="search" id="memQ" placeholder="Find a user" value="${esc(MEM.q)}" aria-label="Find a user"><span class="msg" id="memMsg">${esc(msg || '')}</span></div>
-    <div class="tw"><table><thead><tr><th>User</th><th>Email</th><th class="r">Last login</th><th class="r">Prime</th><th class="r">Admin</th></tr></thead><tbody>${
-      rows.length ? rows.map(r => `<tr><td>${esc(r.username || '–')}</td><td>${esc(r.email || '–')}</td><td class="r">${r.lastLogin ? esc(new Date(r.lastLogin).toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'})) : '–'}</td><td class="r">${btn(r, 'prime')}</td><td class="r">${btn(r, 'admin')}</td></tr>`).join('')
-      : '<tr><td colspan="5" class="empty">No users found.</td></tr>'}</tbody></table></div>`;
-  const qi = $('#memQ'); if (qi && document.activeElement === document.body && MEM.q) { qi.focus(); qi.setSelectionRange(MEM.q.length, MEM.q.length); }
-}
-$('#members').addEventListener('input', e => { if (e.target.id === 'memQ') { MEM.q = e.target.value; memberPaint(); const qi = $('#memQ'); qi.focus(); qi.setSelectionRange(MEM.q.length, MEM.q.length); } });
-$('#members').addEventListener('click', async e => {
-  const b = e.target.closest('button[data-uid]'); if (!b || MEM.busy) return;
-  const r = MEM.rows.find(x => x.uid === b.dataset.uid), on = b.dataset.on === '1', role = b.dataset.role;
-  if (role === 'admin' && !on && !confirm('Take admin away from ' + (r.username || r.email) + '?')) return;
-  MEM.busy = true; memberPaint('Saving…');
-  try { await window.hniStore.members.set(r.uid, role, on); r[role] = on; MEM.busy = false; memberPaint((r.username || r.email) + ': ' + role + (on ? ' on' : ' off')); }
-  catch (err) { MEM.busy = false; memberPaint('Not saved: ' + (err.code === 'permission-denied' ? 'the Firestore rules do not let admins write this yet (see NOTES)' : (err.message || err))); }
-});
 $('#csv').addEventListener('click', csv);
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   TAB = b.dataset.tab; document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b)); paint();
@@ -831,7 +792,6 @@ paintSplit();
   try { await waitFor(() => window.hniBuilder || window.hniAdmin, 20000); allowed = !!(await (window.hniBuilder || window.hniAdmin)); } catch (e) {}
   if (!allowed) { $('#gate').innerHTML = 'PF Builder is for admins and prime members. <a href="fundamentals">Back to Fundamentals</a>'; return; }
   document.documentElement.classList.add('pb-admin'); $('#gate').remove();
-  try { if (window.hniAdmin && await window.hniAdmin && window.hniStore && window.hniStore.members) { $('#members').hidden = false; memberLoad(); } } catch (e) {}      // real admins only
   try {
     const dly = dailyData();                       // big file: start it now, awaited with the screens
     const etf = await etfData();
