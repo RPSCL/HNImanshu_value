@@ -291,6 +291,8 @@ if (!EMBED) {
 
 // ---------- Prime: purple theme, "Prime · till …" in the menu, the plans popup and payment ----------
 let PRIME = null, planBox = null, planSel = 0, planBusy = false;
+// crown: one outline stroke, white (dark purple in day mode, see auth.css .au-crown)
+const CROWN = '<svg class="au-crown" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg>';
 const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
 const dateTxt = (ms) => new Date(ms).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 const payable = (p) => Math.round(p.pm * p.m * (1 + GST));          // what Razorpay charges, GST included (the Worker works it out the same way)
@@ -322,7 +324,7 @@ function buildPlans() {
     <div class="au-box au-plan" role="dialog" aria-modal="true" aria-labelledby="auPlanT">
       <button class="au-x" type="button" aria-label="Close">×</button>
       <h2 class="au-title" id="auPlanT">Choose a plan</h2>
-      <p class="au-plan-lead"></p>
+      <p class="au-plan-lead">${CROWN}<span></span></p>
       <div class="au-opts" role="radiogroup" aria-labelledby="auPlanT">${PLANS.map((p, k) => `
         <label class="au-opt"><input type="radio" name="auPlan" value="${k}">
           <span class="au-opt-m">${p.m} month${p.m > 1 ? "s" : ""}${p.m > 1 ? `<small>${inr(p.pm * p.m)} for ${p.m} months</small>` : ""}</span>
@@ -346,9 +348,9 @@ function paintPlans() {
   planBox.querySelectorAll(".au-opt").forEach((el, k) => {
     el.classList.toggle("on", k === planSel); $("input", el).checked = k === planSel; $("input", el).disabled = planBusy;
   });
-  $(".au-plan-lead", planBox).textContent = PRIME
+  $(".au-plan-lead span", planBox).textContent = PRIME
     ? (PRIME.until ? `You are Prime till ${dateTxt(PRIME.until)}. New months are added after that.` : "You are Prime with no end date.")
-    : "PF Builder is part of Prime.";
+    : "Telegram alerts, and Portfolio Builder are a part of Prime.";
   const b = $(".au-pay", planBox);
   b.disabled = planBusy;
   if (!planBusy) b.textContent = `Proceed to pay ${inr(payable(p))}`;
@@ -390,7 +392,7 @@ async function pay() {
         name: "HNImanshu", description: `Prime · ${p.m} month${p.m > 1 ? "s" : ""}`,
         prefill: { name: nameOf(u), email: u.email && !u.email.endsWith("@" + USER_DOMAIN) ? u.email : "" },
         notes: { uid: u.uid, months: String(p.m) },
-        theme: { color: "#2ebd6b" },
+        theme: { color: "#5b2d9c" },
         handler: async (res) => {                                      // paid: the Worker checks Razorpay's signature, then extends Prime
           planMsg("Payment received. Switching Prime on…");
           try {
