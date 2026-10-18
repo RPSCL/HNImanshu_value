@@ -790,7 +790,12 @@ paintSplit();
   /* admins and prime members (auth.js: window.hniBuilder = admin@ account, a hni_admins/{uid} document, or a hni_prime/{uid} document) */
   let allowed = false;
   try { await waitFor(() => window.hniBuilder || window.hniAdmin, 20000); allowed = !!(await (window.hniBuilder || window.hniAdmin)); } catch (e) {}
-  if (!allowed) { $('#gate').innerHTML = 'PF Builder is for admins and prime members. <a href="fundamentals">Back to Fundamentals</a>'; return; }
+  if (!allowed) {                                  // not prime (or Prime ended): the plans popup, and a way back to it
+    $('#gate').innerHTML = 'PF Builder is part of Prime. <a href="#" id="seePlans">See plans</a> · <a href="fundamentals">Back to Fundamentals</a>';
+    $('#seePlans').addEventListener('click', e => { e.preventDefault(); if (window.hniPlans) window.hniPlans(); });
+    if (window.hniPlans) window.hniPlans();
+    return;
+  }
   document.documentElement.classList.add('pb-admin'); $('#gate').remove();
   try {
     const dly = dailyData();                       // big file: start it now, awaited with the screens

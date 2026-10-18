@@ -90,3 +90,55 @@ html.au-lock,html.au-lock body{overflow:hidden}                     /* page behi
 
 /* Fundamentals button: disabled (dimmed) from the first tap until the next page or the login box shows */
 [data-auth-link].au-busy{opacity:.45;pointer-events:none}
+
+/* ---------- Prime members and admins: purple page (auth.js puts .hni-pro on <html>) ----------
+   Night: darkest purple instead of charcoal. Day: light purple instead of beige. Only the surfaces change; text and accents stay.
+   html rules = PF Builder (theme on :root), body rules = Screener and Fundamentals (theme on body.night / body.day).
+   --bg2..--border2 are the Screener's names for the same surfaces. */
+html.hni-pro, html.hni-pro body.night{
+  --bg:#0f0918;--panel:#150d20;--panel2:#1b1228;--hover:#231833;--line:#3b2d50;--sdot:#4d3d66;
+  --bg2:#150d20;--bg3:#1b1228;--bg4:#231833;--border:#3b2d50;--border2:#4b3b63}
+html.hni-pro[data-theme=day], html.hni-pro body.day{
+  --bg:#d9cdea;--panel:#cdbfe1;--panel2:#e3d9f0;--hover:#c3b2dc;--line:#7c6c96;--sdot:#8a78a8;
+  --bg2:#cdbfe1;--bg3:#e3d9f0;--bg4:#c3b2dc;--border:#7c6c96;--border2:#5d4f76}
+
+/* avatar ring + "Prime · valid till …" under the name in the menu */
+.au-user.au-prime .au-av{box-shadow:0 0 0 2px var(--au-field),0 0 0 4px #9b6bdf}
+.au-who .au-ptag{display:block;margin-top:5px;white-space:nowrap;font:600 11px var(--au-mono);color:#b892f5}
+body.day .au-who .au-ptag,[data-theme=day] .au-who .au-ptag{color:#5b2d9c}
+.au-menu .au-get{color:#b892f5}
+body.day .au-menu .au-get,[data-theme=day] .au-menu .au-get{color:#5b2d9c}
+
+/* ---------- Prime plans popup ("Choose a plan"), green like the payment screen ---------- */
+.au-plans{--au-go:#2ebd6b;--au-go-ink:#06170d}
+.au-plan{width:min(420px,100%);padding:26px 24px 20px;text-align:center}
+.au-plan .au-title{font:700 21px var(--au-sans);letter-spacing:0;margin:0 0 6px}
+.au-plan .au-x{top:14px;right:14px;width:34px;height:34px;color:#e5484d;font-size:30px;font-weight:300}
+.au-plan .au-x:hover{color:#ff6369;background:transparent}
+.au-plan-lead{margin:0 0 18px;font-size:12.5px;color:var(--au-faint)}
+.au-opts{display:flex;flex-direction:column;gap:12px;text-align:left}
+.au-opt{display:flex;align-items:center;gap:16px;padding:16px 20px;border:1px solid var(--au-line);border-radius:10px;cursor:pointer;
+  transition:border-color .15s,background .15s}
+.au-opt:hover{border-color:color-mix(in srgb,var(--au-go) 45%,var(--au-line))}
+.au-opt.on{border-color:var(--au-go);box-shadow:inset 0 0 0 1px var(--au-go)}
+.au-opt input{appearance:none;-webkit-appearance:none;flex:none;width:22px;height:22px;margin:0;border-radius:50%;
+  background:#fff;border:1.5px solid #9a9a9a;cursor:pointer}
+.au-opt input:checked{border:2px solid var(--au-go);background:radial-gradient(circle,var(--au-go) 0 44%,#fff 49%)}
+.au-opt input:focus-visible{outline:2px solid var(--au-go);outline-offset:2px}
+.au-opt-m{flex:1;font:600 18px var(--au-sans);color:var(--au-ink)}
+.au-opt-m small{display:block;margin-top:2px;font:500 11.5px var(--au-sans);color:var(--au-faint)}
+.au-opt-p{font:500 18px var(--au-sans);color:var(--au-faint);white-space:nowrap}
+.au-gst{margin:16px 0 18px;font-size:13.5px;color:var(--au-faint)}
+.au-pay{width:100%;height:54px;border:0;border-radius:9px;background:var(--au-go);color:var(--au-go-ink);
+  font:700 18px var(--au-sans);cursor:pointer;transition:filter .15s}
+.au-pay:hover{filter:brightness(1.07)}
+.au-pay:disabled{opacity:.65;cursor:progress}
+.au-plan-msg{min-height:16px;margin:10px 0 0;font-size:12.5px;color:var(--au-mute);line-height:1.45}
+.au-plan-msg.ok{color:var(--au-go)}
+.au-plan-msg.bad{color:var(--au-bad)}
+body.day .au-plans,[data-theme=day] .au-plans{--au-go:#1f9d55;--au-go-ink:#fff}
+@media (max-width:700px){
+  .au-plan{padding:22px 16px 16px}
+  .au-opt{padding:14px 14px;gap:12px}
+  .au-opt-m,.au-opt-p{font-size:16px}
+}
