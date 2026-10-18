@@ -1762,7 +1762,7 @@ __AUTH_BODY__<script>
     <button class="btn primary" id="saveHtml">Save as HTML</button>
     <button type="button" class="btn hweek" id="weeklyBtn" title="Weekly updates on Telegram"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#29a9eb"/><path d="M5.4 11.6l11.5-4.4c.5-.2 1 .1.8.9l-2 9.3c-.1.6-.5.8-1.1.5l-3-2.2-1.5 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5.1c.2-.2 0-.3-.4-.1l-6.9 4.4-3-.9c-.6-.2-.7-.6.1-1z" fill="#fff"/></svg>Weekly</button>
     <a class="btn hbag" id="pfBag" href="#/portfolio" title="Portfolio" aria-label="Portfolio"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg><span class="lg">Portfolio</span></a>
-    <a class="btn hbag bld" id="pfBuilder" href="builder" target="_blank" rel="noopener" title="PF Builder (admin)" aria-label="PF Builder" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg><span class="lg">PF Builder</span></a>
+    <a class="btn hbag bld" id="pfBuilder" href="builder" target="_blank" rel="noopener" title="PF Builder" aria-label="PF Builder"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg><span class="lg">PF Builder</span></a>
     <div id="theme-toggle" title="Day / night">
       <span class="toggle-icon moon-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
       <button class="toggle-track" aria-label="Toggle day / night theme"><div class="toggle-thumb"></div></button>
@@ -3080,11 +3080,23 @@ async function pfLoadNow() {
   if ((location.hash || '') === '#/portfolio') route(); else pfMarkBags();
 }
 window.addEventListener('hni-ready', () => pfLoad());
-/* PF Builder button: shown to admins and prime members (auth.js window.hniBuilder: admin@ account, hni_admins/{uid} or hni_prime/{uid} document) */
+/* PF Builder button: every signed-in user sees it. Admins and prime members open the builder (auth.js window.hniBuilder:
+   admin@ account, hni_admins/{uid}, or a hni_prime/{uid} document still in date); everyone else gets the plans popup (window.hniPlans). */
 (function () {
   const b = $('#pfBuilder'); if (!b) return;
-  const show = () => { const w = window.hniBuilder || window.hniAdmin; if (w) w.then(a => { b.hidden = !a; }).catch(() => {}); };
-  show(); window.addEventListener('hni-ready', show);
+  let ok = null;
+  const check = () => { const w = window.hniBuilder || window.hniAdmin; if (w) w.then(a => { ok = !!a; }).catch(() => { ok = false; }); };
+  check(); window.addEventListener('hni-ready', check);
+  b.addEventListener('click', async e => {
+    if (ok === true) return;                                  // allowed: opens in a new tab as before
+    e.preventDefault();
+    if (ok === null) {                                        // tapped before the check finished: wait for it
+      const w = window.hniBuilder || window.hniAdmin;
+      ok = w ? !!(await w.catch(() => false)) : false;
+      if (ok) { location.href = b.href; return; }
+    }
+    if (window.hniPlans) window.hniPlans();
+  });
 })();
 /* NSE renamed a held stock (portfolio_ltp.py publishes OLD → NEW): open holdings move to the new symbol by themselves.
    Closed (locked) records keep their old symbol. */
