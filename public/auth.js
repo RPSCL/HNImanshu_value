@@ -18,7 +18,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 // Firestore and the Realtime Database are loaded only when first needed (not before the page shows):
 // only Auth is needed to open a page, which keeps the first load light on slow (2G) connections.
-let getFirestore, doc, setDoc, getDoc, serverTimestamp;
+let getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, getDocs, deleteDoc;
 let getDatabase, ref, set, onValue, onDisconnect, increment;
 
 // Firebase project "hnimanshu", web app "valueapp" (Project settings → Your apps). These values are public by design;
@@ -52,7 +52,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 let db = null, rtdb = null, FSP = null, RTP = null;
 const needFS = () => FSP = FSP || import("https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js").then((m) => {
-  ({ getFirestore, doc, setDoc, getDoc, serverTimestamp } = m); db = getFirestore(app);
+  ({ getFirestore, doc, setDoc, getDoc, serverTimestamp, collection, getDocs, deleteDoc } = m); db = getFirestore(app);
 });
 const needRT = () => RTP = RTP || (firebaseConfig.databaseURL                                // live online / visitor counters (hni/...)
   ? import("https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js").then((m) => {
@@ -317,6 +317,23 @@ const ready = new Promise((resolve) => {
       if (u.email === ADMIN_EMAIL) return true;
       try { await needFS(); return (await getDoc(doc(db, "hni_admins", u.uid))).exists(); } catch (e) { return false; }
     })();
+    // Admins: who may use the PF Builder, one click each. The Firestore rules decide for real (only admins may write hni_admins / hni_prime).
+    //   members.list() → [{uid, username, email, lastLogin, admin, prime}]   members.set(uid, "prime" | "admin", true | false)
+    window.hniStore.members = {
+      list: async () => {
+        await needFS();
+        const ids = async (c) => new Set((await getDocs(collection(db, c)).catch(() => ({ docs: [] }))).docs.map((d) => d.id));
+        const [users, admins, prime] = await Promise.all([getDocs(collection(db, USERS)), ids("hni_admins"), ids("hni_prime")]);
+        return users.docs.map((d) => { const x = d.data(); return {
+          uid: d.id, username: x.username || "", email: x.email || "", lastLogin: x.lastLogin && x.lastLogin.toMillis ? x.lastLogin.toMillis() : 0,
+          admin: admins.has(d.id) || x.email === ADMIN_EMAIL, prime: prime.has(d.id), main: x.email === ADMIN_EMAIL }; });
+      },
+      set: async (uid, role, on) => {
+        await needFS();
+        const r = doc(db, role === "admin" ? "hni_admins" : "hni_prime", uid);
+        return on ? setDoc(r, { by: u.uid, at: serverTimestamp() }) : deleteDoc(r);
+      },
+    };
     // true / false: is this account a prime member (a hni_prime/{uid} document, written by an admin)? Prime members use the PF Builder like admins
     window.hniPrime = (async () => {
       try { await needFS(); return (await getDoc(doc(db, "hni_prime", u.uid))).exists(); } catch (e) { return false; }
