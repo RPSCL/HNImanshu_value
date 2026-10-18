@@ -4367,7 +4367,13 @@ if (WEB) {                                                  // website: back but
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
 }
-$('#weeklyBtn').addEventListener('click', () => modal('Weekly updates', `<p>Work in progress. Soon you'll get your portfolio summary every week on Telegram.</p>`));
+/* Telegram alerts are part of Prime (like PF Builder): not Prime → the plans popup (auth.js window.hniPlans) */
+$('#weeklyBtn').addEventListener('click', async () => {
+  const w = window.hniBuilder || window.hniAdmin;
+  const ok = w ? !!(await w.catch(() => false)) : false;
+  if (!ok && window.hniPlans) return window.hniPlans();
+  modal('Weekly updates', `<p>Work in progress. Soon you'll get your portfolio summary every week on Telegram.</p>`);
+});
 window.addEventListener('hashchange', route);
 if (isPhone() && !location.hash) history.replaceState(null, '', location.pathname + location.search + '#/value');   // phone: opens on Value screen
 (() => {                                                  // this session's last Historical setting
