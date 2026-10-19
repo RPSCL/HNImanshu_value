@@ -144,3 +144,8 @@ body.day .au-crown,[data-theme=day] .au-crown{color:#3b1475}   /* white would va
   .au-opt{padding:14px 14px;gap:12px}
   .au-opt-m,.au-opt-p{font-size:16px}
 }
+
+/* ---------- free accounts (html.hni-free): the Prime buttons (PF Builder, Weekly on Telegram) in purple ---------- */
+html.hni-free #pfBuilder, html.hni-free #weeklyBtn{border-color:#6d3fc0;background:rgba(109,63,192,.22);color:#e4d6ff}
+html.hni-free #pfBuilder:hover, html.hni-free #weeklyBtn:hover{border-color:#8b5cf6;background:rgba(139,92,246,.32);color:#fff}
+html.hni-free body.day #pfBuilder, html.hni-free body.day #weeklyBtn{border-color:#5b2d9c;background:rgba(91,45,156,.14);color:#3b1475}
