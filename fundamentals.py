@@ -4427,6 +4427,12 @@ if (WEB) {                                                  // website: back but
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
 }
+/* page name under the HNImanshu wordmark (and the tab title): Portfolio on #/portfolio, Fundamentals everywhere else */
+(function () {
+  const t = $('header .brand .tagline');
+  const set = () => { const pf = /^#\/portfolio/.test(location.hash); if (t) t.textContent = pf ? 'Portfolio' : 'Fundamentals'; document.title = 'HNImanshu — ' + (pf ? 'Portfolio' : 'Fundamentals'); };
+  set(); window.addEventListener('hashchange', set);
+})();
 /* Telegram alerts are part of Prime (like PF Builder): not Prime → the plans popup (auth.js window.hniPlans) */
 $('#weeklyBtn').addEventListener('click', async () => {
   const w = window.hniBuilder || window.hniAdmin;
@@ -4473,8 +4479,8 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
 AUTH_WEB = {
     "__AUTH_ATTR__": ' data-auth="required"',
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
-                     '<link rel="stylesheet" href="auth.css">\n'
-                     '<script type="module" src="auth.js"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=6">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=6"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
