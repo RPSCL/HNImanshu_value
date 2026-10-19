@@ -150,6 +150,7 @@ details.sec>.body{padding:0 14px 14px}
 /* Add to portfolio + the cash line under the fund box */
 .btn.addpf{border-color:var(--brass);color:var(--brass)}
 .btn.addpf:hover{background:var(--brassbg)}
+.addpart{display:flex;justify-content:flex-end;margin:0 0 10px}
 .cashav{margin:10px 0 0;font:500 12px var(--mono);color:var(--faint)}
 .cashav b{color:var(--ink)}
 .cashav button{margin-left:8px;border:1px solid var(--line);background:var(--panel2);color:var(--brass);font:600 11.5px var(--mono);padding:3px 9px;border-radius:999px;cursor:pointer}
@@ -233,7 +234,7 @@ details.sec>.body{padding:0 14px 14px}
       <label class="pc">Momentum %<input id="pMom" readonly tabindex="-1" aria-label="Momentum percent, the rest"></label>
       <button class="btn primary" id="go" type="submit">Build</button>
       <button class="btn" id="csv" type="button" disabled>Download CSV</button>
-      <button class="btn addpf" id="addPf" type="button" disabled title="Buy these in your Portfolio, at the LTP, within your cash">Add to portfolio</button>
+      <button class="btn addpf" id="addPf" type="button" disabled title="Buy every pick in your Portfolio, by its weight, at the LTP, within your cash">Add all stocks to portfolio</button>
     </form>
     <p class="cashav" id="cashAv" hidden></p>
     <div class="split" id="split"></div>
@@ -725,7 +726,7 @@ function paint() {
   const fund = fundVal();
   if (TAB === 'now') {
     const L = lists('now'), A = allocate(fund || 0, L);
-    LAST = {fund, A, date: DATA.now.date};
+    LAST = {fund, A, date: DATA.now.date, pk: L.pk};
     const etfMiss = !DATA.etf || !Object.keys(DATA.etf.etf || {}).length;
     out.innerHTML = `<div class="kpis">
         <div class="kpi"><span>Fund</span><b>${rsK(fund)}</b></div>
@@ -746,7 +747,8 @@ function paint() {
           p.rows.length ? p.rows.map(x => `<tr><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td><td class="r">${fmt(x.price, 2)}</td>${extra(x)}
             <td class="r ${x.qty === 0 ? 'zero' : ''}" ${x.qty === 0 ? 'title="Price is above this holding\'s share of the fund"' : ''}>${fund && x.qty != null ? fmt(x.qty, 0) : '–'}</td><td class="r">${fund && x.invested != null ? fmt(x.invested, 0) : '–'}</td></tr>`).join('')
           : `<tr><td colspan="11" class="empty">Nothing passes this screen today.</td></tr>`}</tbody></table></div>`;
-        return section(p.k, p.label, hdr, body, true);
+        const add = fund && p.rows.some(x => x.qty > 0) ? `<div class="addpart"><button type="button" class="btn sm addpf" data-addpart="${p.k}">Add these to portfolio</button></div>` : '';
+        return section(p.k, p.label, hdr, add + body, true);
       }).join('');
     $('#csv').disabled = !fund; $('#addPf').disabled = !fund || !A.parts.some(p => p.rows.some(x => x.qty > 0));
   } else paintBack(fund);
@@ -803,19 +805,26 @@ $('#csv').addEventListener('click', csv);
    The picks (symbol, its share of the fund, the price here) are handed to the Portfolio page in this browser
    (localStorage 'hni_pf_basket'). There they are priced at the LTP, sized to whole units within your cash (charges included),
    shown for a check, and saved as buys only when you confirm. Nothing is bought here. */
-$('#addPf').addEventListener('click', () => {
+const SRC_PART = {value: 'Value', mom: 'Momentum'};
+function addToPortfolio(only) {                              // only = 'index' | 'value' | 'mom', or all parts
   if (!LAST || !LAST.fund) return;
+  const pairs = new Set(((LAST.pk && LAST.pk.notes) || []).map(n => n.win));   // ETFs holding an IT/Gold or ALPHA/Gold slot
   const by = new Map();
-  LAST.A.parts.forEach(p => p.rows.forEach(x => {
+  LAST.A.parts.filter(p => !only || p.k === only).forEach(p => p.rows.forEach(x => {
     if (!(num(x.price) && x.price > 0 && x.target > 0)) return;
-    const o = by.get(x.sym) || {sym: x.sym, name: x.name || x.sym, target: 0, px: x.price, etf: !!x.etf};
-    o.target += x.target; by.set(x.sym, o);                 // GOLDBEES can fill both ETF slots: one buy
+    const part = p.k === 'index' ? (pairs.has(x.sym) ? 'ETF pair' : 'ETF') : SRC_PART[p.k] || p.label;
+    const o = by.get(x.sym) || {sym: x.sym, name: x.name || x.sym, target: 0, px: x.price, etf: !!x.etf, parts: []};
+    o.target += x.target; if (!o.parts.includes(part)) o.parts.push(part); by.set(x.sym, o);   // GOLDBEES can fill both ETF slots: one buy
   }));
-  const items = [...by.values()];
+  const items = [...by.values()].map(o => Object.assign(o, {src: 'PF Builder → ' + o.parts.join(' + ')}));
   if (!items.length) return;
-  try { localStorage.setItem('hni_pf_basket', JSON.stringify({at: Date.now(), fund: LAST.fund, date: LAST.date, items})); } catch (e) { return status('Could not hand the list over (browser storage is off).'); }
+  const scope = only ? (LAST.A.parts.find(p => p.k === only) || {}).label : 'all parts';
+  try { localStorage.setItem('hni_pf_basket', JSON.stringify({at: Date.now(), fund: LAST.fund, date: LAST.date, scope, items})); }
+  catch (e) { return status('Could not hand the list over (browser storage is off).'); }
   location.href = 'fundamentals#/portfolio';
-});
+}
+$('#addPf').addEventListener('click', () => addToPortfolio());
+$('#out').addEventListener('click', e => { const b = e.target.closest('[data-addpart]'); if (b) addToPortfolio(b.dataset.addpart); });
 /* cash in your Portfolio (pay-ins − pay-outs − buys + sells, charges included): one tap puts it in the fund box */
 async function cashLine() {
   const el = $('#cashAv');
