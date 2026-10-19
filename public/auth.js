@@ -1,7 +1,7 @@
 // auth.js — HNImanshu login (username + password, or Google) on Firebase Authentication (project hnimanshu).
 //
 // One file for both pages:
-//   • Screener (index.html): clicking an element with [data-auth-link] (Fundamentals, Portfolio) opens the
+//   • Landing (index.html) and Valuation (valuation.html): clicking an element with [data-auth-link] (Factor Screener, Portfolio) opens the
 //     login popup when nobody is signed in; after a successful login it goes to that link.
 //     Opening the screener with ?login=<path> pops the popup straight away (the Fundamentals gate sends people here).
 //   • Fundamentals (<html data-auth="required">): the page stays hidden until a login is confirmed; no login →
@@ -35,7 +35,8 @@ const firebaseConfig = {
 // then confirmed below once the login is known.
 const PRO_HINT = "hni_pro";
 // signed-in pages: the page links sit in the Navigate overlay, so hide them at once (no flash before the login is known)
-try { if (document.documentElement.dataset.auth === "required" || localStorage.getItem("hni_signed") === "1") document.documentElement.classList.add("hni-nav"); } catch (e) {}
+// (every page but the landing page, which has its own big links: there the Navigate button never shows)
+if (document.documentElement.dataset.page !== "home") document.documentElement.classList.add("hni-nav");
 try {
   const h = localStorage.getItem(PRO_HINT);
   if (h === "1") document.documentElement.classList.add("hni-pro");
@@ -102,7 +103,7 @@ function buildPopup() {
   box.innerHTML = `
     <div class="au-box" role="dialog" aria-modal="true" aria-labelledby="auTitle">
       <button class="au-x" type="button" aria-label="Close">×</button>
-      <h2 class="au-title" id="auTitle">Fundamentals</h2>
+      <h2 class="au-title" id="auTitle">HNImanshu</h2>
       <p class="au-sub">Free. Continue with Google, or log in with your username.</p>
       <button class="au-google" type="button">
         <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
@@ -234,7 +235,7 @@ function paintSlot(u) {
   const b = document.createElement("button");
   b.type = "button"; b.className = "au-login"; b.setAttribute("aria-label", "Login");
   b.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span>Login</span>';
-  b.addEventListener("click", () => openPopup(null));            // after logging in you stay on the screener
+  b.addEventListener("click", () => openPopup(null));            // after logging in you stay on this page
   slot.appendChild(b);
 }
 
@@ -427,29 +428,30 @@ async function pay() {
 const SVG = (inner, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${inner}</svg>`;
 const FORK = SVG('<circle pathLength="1" cx="6" cy="5" r="2.4"/><path pathLength="1" d="M6 7.4v1.6a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V7.4"/><circle pathLength="1" cx="18" cy="5" r="2.4"/><path pathLength="1" d="M12 12v4.6"/><circle pathLength="1" cx="12" cy="19" r="2.4"/>', 'class="hni-fork"');
 const NAV_ICON = {
-  screener: SVG('<path d="M4 6h16M4 12h16M4 18h10"/>'),
-  fundamentals: SVG('<path d="M3 20h18"/><path d="M6 16v-5M11 16V6M16 16v-8M21 16v-3"/>'),
+  valuation: SVG('<path d="M4 6h16M4 12h16M4 18h10"/>'),
+  factor: SVG('<path d="M3 20h18"/><path d="M6 16v-5M11 16V6M16 16v-8M21 16v-3"/>'),
   portfolio: SVG('<path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/>'),
   builder: SVG('<path d="M12 8H5.6L4.5 21H12V8"/><path d="M8.2 8V6.2a3.3 3.3 0 0 1 3.8-3.2"/><g transform="rotate(-40 17 12)"><rect x="14" y="4.6" width="7" height="4.4" rx="1"/><path d="M17.5 9v10.5"/></g>'),
   weekly: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#29a9eb"/><path d="M5.4 11.6l11.5-4.4c.5-.2 1 .1.8.9l-2 9.3c-.1.6-.5.8-1.1.5l-3-2.2-1.5 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5.1c.2-.2 0-.3-.4-.1l-6.9 4.4-3-.9c-.6-.2-.7-.6.1-1z" fill="#fff"/></svg>',
 };
 const NAV = [
-  { k: "screener", t: "Screener", s: "Value screener, every stock ranked", href: "./" },
-  { k: "fundamentals", t: "Fundamentals", s: "Industries, value and momentum screens", href: "fundamentals#/" },
-  { k: "portfolio", t: "Portfolio", s: "Your holdings and P&L", href: "fundamentals#/portfolio" },
+  { k: "valuation", t: "Valuation", s: "Every stock valued and ranked", href: "valuation", open: true },
+  { k: "factor", t: "Factor Screener", s: "Industries, value and momentum screens", href: "factor#/" },
+  { k: "portfolio", t: "Portfolio", s: "Your holdings and P&L", href: "factor#/portfolio" },
   { k: "builder", t: "Portfolio Builder", s: "ETFs + value + momentum, with a backtest", href: "builder", prime: true },
   { k: "weekly", t: "Telegram alerts", s: "Your portfolio summary every week", prime: true },
 ];
 function pageNow() {                                                    // which page this is (left out of the list)
   const p = location.pathname.split("/").pop() || "";
   if (/^builder/.test(p)) return "builder";
-  if (/^fundamentals/.test(p)) return /^#\/portfolio/.test(location.hash) ? "portfolio" : "fundamentals";
-  return "screener";
+  if (/^(factor|fundamentals)/.test(p)) return /^#\/portfolio/.test(location.hash) ? "portfolio" : "factor";
+  if (/^valuation/.test(p)) return "valuation";
+  return "home";
 }
 let navBox = null;
-function mountNav() {                                                   // the button, just left of the avatar (shown on phones only)
-  if (!current || document.querySelector(".hni-navbtn")) return;
-  const av = document.querySelector(".au-user");
+function mountNav() {                                                   // the button, just left of the avatar / Login button
+  if (document.querySelector(".hni-navbtn") || document.documentElement.dataset.page === "home") return;   // the landing page has its own links
+  const av = document.querySelector(".au-user") || document.querySelector(".au-slot .au-login");
   if (!av) return;
   const b = document.createElement("button");
   b.type = "button"; b.className = "hni-navbtn"; b.title = "Navigate to"; b.setAttribute("aria-label", "Navigate to");
@@ -471,6 +473,9 @@ function openNav() {
       if (e.target === navBox || e.target.closest(".au-x")) return closeNav();
       const it = e.target.closest(".hni-nv"); if (!it) return;
       const n = NAV.find((x) => x.k === it.dataset.k);
+      if (!current && !n.open) {                                        // not logged in: log in first, then that page
+        e.preventDefault(); closeNav(); setTimeout(() => openPopup(n.href || "factor#/"), 160); return;
+      }
       if (n.prime && !PRO_NOW) {                                        // Prime page, free account: close this first, then the plans
         e.preventDefault(); closeNav(); setTimeout(openPlans, 160); return;
       }
@@ -487,7 +492,7 @@ function openNav() {
   }
   const here = pageNow();
   $(".hni-nvl", navBox).innerHTML = NAV.filter((n) => n.k !== here).map((n) => {
-    const lock = n.prime && !PRO_NOW;
+    const lock = n.prime && !PRO_NOW && !!current;                       // logged out: the login comes first, plans after
     const tag = n.href ? `a href="${n.href}"` : 'button type="button"';
     // purple tile + crown only for a locked (free account) item; Prime members see it like every other page
     return `<${tag} class="hni-nv${lock ? " pr lock" : ""}" data-k="${n.k}">
@@ -526,7 +531,7 @@ const ready = new Promise((resolve) => {
     }
     if (GATED) document.documentElement.classList.add("auth-ok");   // show the page at once
     else paintSlot(u);                                         // screener: Login button or the user menu
-    if (!u) { markPro(false, null); document.documentElement.classList.remove("hni-nav"); return; }
+    if (!u) { markPro(false, null); if (GATED) document.documentElement.classList.remove("hni-nav"); else mountNav(); return; }
     // Portfolio tab: the page saves / loads the user's holdings through this (Firestore hni_portfolio/{uid}, owner only)
     window.hniStore = {
       load: async () => { await needFS(); const d = await getDoc(doc(db, PORTFOLIO, u.uid)); return d.exists() ? d.data() : {}; },             // {txns, rates} (or old {items})
@@ -600,7 +605,7 @@ if (!GATED) {
   if (want != null) {
     history.replaceState(null, "", location.pathname + location.hash);          // clean the address bar
     ready.then(() => {
-      let target = "fundamentals";                                              // only pages on this site
+      let target = "factor";                                                    // only pages on this site
       try { const t = new URL(want, location.href); if (want && t.origin === location.origin) target = t.pathname + t.hash; } catch (e) {}
       if (current) location.href = target; else openPopup(target);
     });

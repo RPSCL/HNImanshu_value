@@ -7,9 +7,9 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141414'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='18' font-weight='bold' fill='%23a89060' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E">
 <meta name="description" content="Split a fund into index ETFs, value stocks and momentum stocks by fixed rules, with a 1-year backtest.">
 <style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>
-<link rel="stylesheet" href="auth.css?v=8">
+<link rel="stylesheet" href="auth.css?v=9">
 <style>html:not(.pb-admin) .lead,html:not(.pb-admin) .card,html:not(.pb-admin) .tabs,html:not(.pb-admin) #out,html:not(.pb-admin) .disc{display:none}</style>
-<script type="module" src="auth.js?v=8"></script>
+<script type="module" src="auth.js?v=9"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>
@@ -45,7 +45,7 @@ header .global{display:flex;align-items:center;gap:10px}
 :root[data-theme=day] .toggle-track{background:var(--brass)}
 .toggle-thumb{width:14px;height:14px;background:var(--panel2);border-radius:50%;position:absolute;top:3px;left:3px;transition:transform .25s cubic-bezier(.4,0,.2,1);pointer-events:none}
 :root[data-theme=day] .toggle-thumb{transform:translateX(16px)}
-/* header pages: Value Screener · Weekly (Telegram) · Portfolio · Fundamentals; icons only on a phone, all in this tab */
+/* header pages: Valuation · Weekly (Telegram) · Portfolio · Factor Screener (in the Navigate overlay when signed in) */
 .hnav{display:flex;gap:8px;align-items:center}
 .hnav .btn svg{flex:none}
 .hnav .btn:hover{color:var(--brass)}
@@ -200,14 +200,14 @@ details.sec>.body{padding:0 14px 14px}
 <script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){var w=document.getElementById("auWait");if(w)w.innerHTML='Login could not load. <a href="./">Back to screener</a>';}},10000);</script>
 <div class="wrap">
   <header>
-    <a class="logo" href="fundamentals" aria-label="HNImanshu Portfolio Builder"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="7" fill="var(--panel2)"/><text x="16" y="23" font-family="Georgia,serif" font-size="18" font-weight="bold" fill="var(--brass)" text-anchor="middle">H</text></svg><div><div class="wm"><span class="hni">HNI</span><span class="manshu">manshu</span></div><div class="tagline">Portfolio Builder</div></div></a>
+    <a class="logo" href="./" aria-label="HNImanshu home"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="7" fill="var(--panel2)"/><text x="16" y="23" font-family="Georgia,serif" font-size="18" font-weight="bold" fill="var(--brass)" text-anchor="middle">H</text></svg><div><div class="wm"><span class="hni">HNI</span><span class="manshu">manshu</span></div><div class="tagline">Portfolio Builder</div></div></a>
     <span class="sp"></span>
     <div class="global">
     <nav class="hnav" aria-label="Pages">
-      <a class="btn" href="fundamentals#/value" title="Value Screener"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg><span class="lg">Value Screener</span></a>
+      <a class="btn" href="valuation" title="Valuation"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg><span class="lg">Valuation</span></a>
       <button type="button" class="btn" id="weeklyBtn" title="Weekly updates on Telegram"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#29a9eb"/><path d="M5.4 11.6l11.5-4.4c.5-.2 1 .1.8.9l-2 9.3c-.1.6-.5.8-1.1.5l-3-2.2-1.5 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5.1c.2-.2 0-.3-.4-.1l-6.9 4.4-3-.9c-.6-.2-.7-.6.1-1z" fill="#fff"/></svg><span class="lg">Weekly</span></button>
-      <a class="btn" id="pfBag" href="fundamentals#/portfolio" title="Portfolio"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg><span class="lg">Portfolio</span></a>
-      <a class="btn" href="fundamentals" title="Fundamentals"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18"/><path d="M6 16v-5M11 16V6M16 16v-8M21 16v-3"/></svg><span class="lg">Fundamentals</span></a>
+      <a class="btn" id="pfBag" href="factor#/portfolio" title="Portfolio"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg><span class="lg">Portfolio</span></a>
+      <a class="btn" href="factor" title="Factor Screener"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18"/><path d="M6 16v-5M11 16V6M16 16v-8M21 16v-3"/></svg><span class="lg">Factor Screener</span></a>
     </nav>
     <div id="theme-toggle" title="Day / night">
       <span class="toggle-icon moon-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
@@ -222,7 +222,7 @@ details.sec>.body{padding:0 14px 14px}
   <details class="how lead"><summary>How it works</summary>
     <p>Enter a fund amount. It is split between <b>index ETFs</b>, <b>value stocks</b> (Deep value screen) and
     <b>momentum stocks</b> (top 15 of the Momentum screen), equal weight inside each part, using the same data and
-    screens as Fundamentals. The split is 40 / 40 / 20 by default: type the ETF % and the Value % and Momentum gets the rest. For the Value and Momentum parts you can pick the list (universe), what to sort by (value score, momentum score, PE or PB, either way) and how many stocks to take; the sort always uses the numbers of the date shown (today, or 1 year back in the backtest). <b>PSU stocks are never picked</b> (value or momentum). The index part holds two ETF/Gold slots
+    screens as the Factor Screener. The split is 40 / 40 / 20 by default: type the ETF % and the Value % and Momentum gets the rest. For the Value and Momentum parts you can pick the list (universe), what to sort by (value score, momentum score, PE or PB, either way) and how many stocks to take; the sort always uses the numbers of the date shown (today, or 1 year back in the backtest). <b>PSU stocks are never picked</b> (value or momentum). The index part holds two ETF/Gold slots
     (IT/Gold and ALPHA/Gold): a slot holds Gold while its ETF is not stronger, so Gold can be held twice (2× weight).
     The backtest applies the same rules as they stood 1 year ago, and re-checks the ETF pairs every month.</p></details>
 
@@ -328,7 +328,7 @@ function engine() {
   return ENG = ENG || new Promise((resolve, reject) => {
     const f = document.createElement('iframe');
     f.className = 'eng'; f.tabIndex = -1; f.setAttribute('aria-hidden', 'true'); f.title = 'screens';
-    f.src = (/\.html$/.test(location.pathname) ? 'fundamentals.html' : 'fundamentals') + '?embed=1#/method';   // clean URL on the website
+    f.src = (/\.html$/.test(location.pathname) ? 'factor.html' : 'factor') + '?embed=1#/method';   // clean URL on the website
     document.body.appendChild(f);
     const t0 = Date.now();
     const poll = () => {
@@ -821,7 +821,7 @@ function addToPortfolio(only) {                              // only = 'index' |
   const scope = only ? (LAST.A.parts.find(p => p.k === only) || {}).label : 'all parts';
   try { localStorage.setItem('hni_pf_basket', JSON.stringify({at: Date.now(), fund: LAST.fund, date: LAST.date, scope, items})); }
   catch (e) { return status('Could not hand the list over (browser storage is off).'); }
-  location.href = 'fundamentals#/portfolio';
+  location.href = 'factor#/portfolio';
 }
 $('#addPf').addEventListener('click', () => addToPortfolio());
 $('#out').addEventListener('click', e => { const b = e.target.closest('[data-addpart]'); if (b) addToPortfolio(b.dataset.addpart); });
@@ -918,7 +918,7 @@ paintSplit();
   let allowed = false;
   try { await waitFor(() => window.hniBuilder || window.hniAdmin, 20000); allowed = !!(await (window.hniBuilder || window.hniAdmin)); } catch (e) {}
   if (!allowed) {                                  // not prime (or Prime ended): the plans popup, and a way back to it
-    $('#gate').innerHTML = 'PF Builder is part of Prime. <a href="#" id="seePlans">See plans</a> · <a href="fundamentals">Back to Fundamentals</a>';
+    $('#gate').innerHTML = 'PF Builder is part of Prime. <a href="#" id="seePlans">See plans</a> · <a href="factor">Back to Factor Screener</a>';
     $('#seePlans').addEventListener('click', e => { e.preventDefault(); if (window.hniPlans) window.hniPlans(); });
     if (window.hniPlans) window.hniPlans();
     return;
