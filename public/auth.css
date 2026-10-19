@@ -151,23 +151,31 @@ html.hni-free #pfBuilder:hover, html.hni-free #weeklyBtn:hover{border-color:#8b5
 html.hni-free body.day #pfBuilder, html.hni-free body.day #weeklyBtn,
 html.hni-free[data-theme=day] #pfBuilder, html.hni-free[data-theme=day] #weeklyBtn{border-color:#3b1475!important;background:#4c1d95!important;color:#fff!important}
 
-/* ---------- phone: one "Navigate to" button (animated fork) instead of a row of page icons ---------- */
-.hni-navbtn{display:none;flex:none;width:34px;height:34px;padding:0;border-radius:50%;border:1px solid var(--au-acc);background:var(--au-field);
-  color:var(--au-acc);cursor:pointer;align-items:center;justify-content:center}
-.hni-navbtn svg{width:18px;height:18px}
+/* ---------- one "Navigate to" button (animated fork) instead of the page buttons, on phones and computers ----------
+   auth.js adds html.hni-nav once someone is signed in; the page links it replaces are hidden then (they live in its overlay). */
+.hni-navbtn{display:inline-flex;flex:none;align-items:center;gap:7px;height:34px;padding:0 13px 0 10px;border-radius:999px;border:1px solid var(--au-acc);
+  background:var(--au-field);color:var(--au-acc);cursor:pointer;font:600 12.5px var(--au-mono);white-space:nowrap}
+.hni-navbtn:hover{background:color-mix(in srgb,var(--au-acc) 12%,var(--au-field))}
+.hni-navbtn svg{width:18px;height:18px;flex:none}
 .hni-fork *{stroke-dasharray:1;stroke-dashoffset:1;animation:hni-draw 4.2s ease-in-out infinite both}
 .hni-fork :nth-child(2){animation-delay:.35s}.hni-fork :nth-child(3){animation-delay:.7s}
 .hni-fork :nth-child(4){animation-delay:1.05s}.hni-fork :nth-child(5){animation-delay:1.4s}
 @keyframes hni-draw{0%{stroke-dashoffset:1}18%{stroke-dashoffset:0}78%{stroke-dashoffset:0;opacity:1}92%{opacity:.25}100%{stroke-dashoffset:0;opacity:1}}
 @media (prefers-reduced-motion:reduce){.hni-fork *{animation:none;stroke-dashoffset:0}}
+/* the page links it replaces: Fundamentals (Back to Screener, Value Screener, Weekly, Portfolio, PF Builder),
+   PF Builder page (its page buttons), Screener (Portfolio, Fundamentals) */
+html.hni-nav #backBtn, html.hni-nav #pfBackV, html.hni-nav #weeklyBtn, html.hni-nav #pfBag, html.hni-nav #pfBuilder,
+html.hni-nav .hnav, html.hni-nav #pf-btn, html.hni-nav #fund-btn, html.hni-nav #backBtn + .gsep{display:none!important}
 @media (max-width:700px){
-  .hni-navbtn{display:inline-flex}
-  /* the page icons it replaces: Fundamentals (Weekly, Portfolio, PF Builder), PF Builder page, Screener (Portfolio, Fundamentals) */
-  html.hni-nav #weeklyBtn, html.hni-nav #pfBag, html.hni-nav #pfBuilder, html.hni-nav .hnav,
-  html.hni-nav #pf-btn, html.hni-nav #fund-btn{display:none!important}
+  .hni-navbtn{width:34px;padding:0;justify-content:center;border-radius:50%}
+  .hni-navbtn span{display:none}
   header.top .global > .hni-navbtn{position:absolute;top:12px;right:calc(var(--au-right,104px) + 42px)}   /* Fundamentals: left of the avatar */
-  .au-slot .hni-navbtn{margin-right:8px}
+  /* Fundamentals phone header: the "back" row is gone (it moved into the overlay) */
+  html.hni-nav header.top .global{grid-template-areas:"uni psu semi" "l2 l2 l2" "hist hist hist"}
+  html.hni-nav header.top .global::before{display:none}
+  html.hni-nav body.pf-mode header.top .global{grid-template-areas:none;row-gap:0}
 }
+.au-slot .hni-navbtn{margin-right:10px}
 .hni-navsheet .au-box{width:min(400px,100%);padding:18px 16px 14px}
 .hni-navsheet .au-title{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding-left:4px}
 .hni-navsheet .au-title svg{width:16px;height:16px;color:var(--au-acc)}

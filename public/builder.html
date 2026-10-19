@@ -7,9 +7,9 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141414'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='18' font-weight='bold' fill='%23a89060' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E">
 <meta name="description" content="Split a fund into index ETFs, value stocks and momentum stocks by fixed rules, with a 1-year backtest.">
 <style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>
-<link rel="stylesheet" href="auth.css?v=6">
+<link rel="stylesheet" href="auth.css?v=7">
 <style>html:not(.pb-admin) .lead,html:not(.pb-admin) .card,html:not(.pb-admin) .tabs,html:not(.pb-admin) #out,html:not(.pb-admin) .disc{display:none}</style>
-<script type="module" src="auth.js?v=6"></script>
+<script type="module" src="auth.js?v=7"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>
@@ -147,6 +147,13 @@ details.sec>.body{padding:0 14px 14px}
 .tip b{display:block;color:var(--faint);font-weight:500;margin-bottom:2px}
 .tip i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
 .fund .pc input{width:84px;text-align:right}
+/* Add to portfolio + the cash line under the fund box */
+.btn.addpf{border-color:var(--brass);color:var(--brass)}
+.btn.addpf:hover{background:var(--brassbg)}
+.cashav{margin:10px 0 0;font:500 12px var(--mono);color:var(--faint)}
+.cashav b{color:var(--ink)}
+.cashav button{margin-left:8px;border:1px solid var(--line);background:var(--panel2);color:var(--brass);font:600 11.5px var(--mono);padding:3px 9px;border-radius:999px;cursor:pointer}
+.cashav button:hover{border-color:var(--brass)}
 .fund .pc input[readonly]{color:var(--mute);background:transparent;border-style:dashed}
 .fund .pc input.bad{border-color:var(--bad)}
 .prep{display:flex;align-items:center;gap:9px;margin:2px 0 10px;font:600 12.5px var(--mono);color:var(--brass);animation:breathe 2.6s ease-in-out infinite}
@@ -226,7 +233,9 @@ details.sec>.body{padding:0 14px 14px}
       <label class="pc">Momentum %<input id="pMom" readonly tabindex="-1" aria-label="Momentum percent, the rest"></label>
       <button class="btn primary" id="go" type="submit">Build</button>
       <button class="btn" id="csv" type="button" disabled>Download CSV</button>
+      <button class="btn addpf" id="addPf" type="button" disabled title="Buy these in your Portfolio, at the LTP, within your cash">Add to portfolio</button>
     </form>
+    <p class="cashav" id="cashAv" hidden></p>
     <div class="split" id="split"></div>
     <div class="sel" id="sel"></div>
     <p class="status" id="status" role="status">Loading the screens…</p>
@@ -739,7 +748,7 @@ function paint() {
           : `<tr><td colspan="11" class="empty">Nothing passes this screen today.</td></tr>`}</tbody></table></div>`;
         return section(p.k, p.label, hdr, body, true);
       }).join('');
-    $('#csv').disabled = !fund;
+    $('#csv').disabled = !fund; $('#addPf').disabled = !fund || !A.parts.some(p => p.rows.some(x => x.qty > 0));
   } else paintBack(fund);
 }
 function csv() {
@@ -790,6 +799,44 @@ document.addEventListener('keydown', e => {
   el.dispatchEvent(new Event('change', {bubbles: true}));
 });
 $('#csv').addEventListener('click', csv);
+/* ---------- Add to portfolio ----------
+   The picks (symbol, its share of the fund, the price here) are handed to the Portfolio page in this browser
+   (localStorage 'hni_pf_basket'). There they are priced at the LTP, sized to whole units within your cash (charges included),
+   shown for a check, and saved as buys only when you confirm. Nothing is bought here. */
+$('#addPf').addEventListener('click', () => {
+  if (!LAST || !LAST.fund) return;
+  const by = new Map();
+  LAST.A.parts.forEach(p => p.rows.forEach(x => {
+    if (!(num(x.price) && x.price > 0 && x.target > 0)) return;
+    const o = by.get(x.sym) || {sym: x.sym, name: x.name || x.sym, target: 0, px: x.price, etf: !!x.etf};
+    o.target += x.target; by.set(x.sym, o);                 // GOLDBEES can fill both ETF slots: one buy
+  }));
+  const items = [...by.values()];
+  if (!items.length) return;
+  try { localStorage.setItem('hni_pf_basket', JSON.stringify({at: Date.now(), fund: LAST.fund, date: LAST.date, items})); } catch (e) { return status('Could not hand the list over (browser storage is off).'); }
+  location.href = 'fundamentals#/portfolio';
+});
+/* cash in your Portfolio (pay-ins − pay-outs − buys + sells, charges included): one tap puts it in the fund box */
+async function cashLine() {
+  const el = $('#cashAv');
+  try {
+    if (!window.hniStore || !window.hniStore.load) return;
+    const d = await window.hniStore.load() || {}, tx = Array.isArray(d.txns) ? d.txns : [];
+    let cash = 0;
+    tx.forEach(x => {
+      if (x.t === 'in') cash += +x.amt || 0; else if (x.t === 'out') cash -= +x.amt || 0;
+      else if (x.t === 'buy') cash -= (+x.qty || 0) * (+x.px || 0) + (+x.ch || 0);
+      else if (x.t === 'sell') cash += (+x.qty || 0) * (+x.px || 0) - (+x.ch || 0);
+    });
+    cash = Math.floor(cash);
+    el.innerHTML = cash > 0 ? `Cash in your Portfolio <b>${rs(cash)}</b><button type="button" id="useCash">Use as fund</button>`
+                            : 'No free cash in your Portfolio yet. Add to portfolio offers a Pay in for the amount.';
+    el.hidden = false;
+    const u = $('#useCash');
+    if (u) u.addEventListener('click', () => { $('#fund').value = cash.toLocaleString('en-IN'); paintSplit(); lsSet('pb_fund', String(cash)); paint(); });
+  } catch (e) {}
+}
+window.addEventListener('hni-ready', cashLine); if (window.hniStore) cashLine();
 /* day / night: same key as the screener and Fundamentals */
 const themePaint = () => { const day = document.documentElement.dataset.theme === 'day'; document.body.classList.toggle('day', day); document.body.classList.toggle('night', !day); };
 themePaint();

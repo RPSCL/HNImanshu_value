@@ -34,6 +34,8 @@ const firebaseConfig = {
 // Prime members and admins get the purple theme. Painted at once from last visit's answer (no charcoal flash),
 // then confirmed below once the login is known.
 const PRO_HINT = "hni_pro";
+// signed-in pages: the page links sit in the Navigate overlay, so hide them at once (no flash before the login is known)
+try { if (document.documentElement.dataset.auth === "required" || localStorage.getItem("hni_signed") === "1") document.documentElement.classList.add("hni-nav"); } catch (e) {}
 try {
   const h = localStorage.getItem(PRO_HINT);
   if (h === "1") document.documentElement.classList.add("hni-pro");
@@ -451,7 +453,7 @@ function mountNav() {                                                   // the b
   if (!av) return;
   const b = document.createElement("button");
   b.type = "button"; b.className = "hni-navbtn"; b.title = "Navigate to"; b.setAttribute("aria-label", "Navigate to");
-  b.setAttribute("aria-haspopup", "dialog"); b.innerHTML = FORK;
+  b.setAttribute("aria-haspopup", "dialog"); b.innerHTML = FORK + "<span>Navigate</span>";
   b.addEventListener("click", (e) => { e.stopPropagation(); openNav(); });
   av.parentNode.insertBefore(b, av);
   document.documentElement.classList.add("hni-nav");
@@ -523,7 +525,7 @@ const ready = new Promise((resolve) => {
     }
     if (GATED) document.documentElement.classList.add("auth-ok");   // show the page at once
     else paintSlot(u);                                         // screener: Login button or the user menu
-    if (!u) { markPro(false, null); return; }
+    if (!u) { markPro(false, null); document.documentElement.classList.remove("hni-nav"); return; }
     // Portfolio tab: the page saves / loads the user's holdings through this (Firestore hni_portfolio/{uid}, owner only)
     window.hniStore = {
       load: async () => { await needFS(); const d = await getDoc(doc(db, PORTFOLIO, u.uid)); return d.exists() ? d.data() : {}; },             // {txns, rates} (or old {items})
