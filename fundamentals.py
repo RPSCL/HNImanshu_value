@@ -6,7 +6,7 @@ Two ways to run it:
 
   1. From build.py (website):
          import fundamentals
-         fundamentals.build_site([csv1, csv2, csv3], "public/fundamentals.html", minify=minify_html_css)
+         fundamentals.build_site([csv1, csv2, csv3], "public/factor.html", minify=minify_html_css)
      Only the CSV paths passed in are read (so test_*.csv files in the repo are ignored),
      the page gets a "Screener" back button and shares the screener's day / night theme.
 
@@ -1034,7 +1034,7 @@ HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HNImanshu — Fundamentals</title>
+<title>HNImanshu — Factor Screener</title>
 <script>
 /* web fonts never block the page; skipped on 2G / data saver (the phone's own fonts are used instead) */
 (function(){ var c = navigator.connection || {}; if (c.saveData || /2g/.test(c.effectiveType || '')) return;
@@ -1741,15 +1741,15 @@ __AUTH_BODY__<script>
 </script>
 <header class="top">
   <div class="brand">
-    <a class="logo" href="./" id="homeLink" aria-label="HNImanshu screener">
+    <a class="logo" href="./" id="homeLink" aria-label="HNImanshu home">
       <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="7" fill="var(--panel2)"/><text x="16" y="23" font-family="Georgia,serif" font-size="18" font-weight="bold" fill="var(--brass)" text-anchor="middle">H</text></svg>
-      <div><div class="wm"><span class="hni">HNI</span><span class="manshu">manshu</span></div><div class="tagline">Fundamentals</div></div>
+      <div><div class="wm"><span class="hni">HNI</span><span class="manshu">manshu</span></div><div class="tagline">Factor Screener</div></div>
     </a>
     <div class="sub" id="meta"></div>
   </div>
   <div class="global">
-    <a class="btn back" id="pfBackV" href="#/value" title="Return to Value Screener"><svg class="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>Value Screener</a>
-    <a class="btn back" id="backBtn" href="./"><svg class="arr" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg><span class="lg">Back to </span>Screener</a>
+    <a class="btn back" id="pfBackV" href="#/value" title="Return to the Value screen"><svg class="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>Value Screener</a>
+    <a class="btn back" id="backBtn" href="valuation"><svg class="arr" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>Valuation</a>
     <span class="gsep" aria-hidden="true"></span>
     <label class="chip" id="uniChip">List <select id="uniSel"></select></label>
     <label class="chip strike" title="Click to hide PSU stocks (struck through = hidden)"><input type="checkbox" id="hidePSU"><span>PSU</span></label>
@@ -3318,7 +3318,7 @@ const PFC = {
   score: Object.assign(pfKnown(C.score), {label:'Score'}), mom: Object.assign(pfKnown(C.mom), {label:'Mom.'}), trend: pfKnown(C.trend), flags: pfKnown(C.flags),
   ind: pfKnown(C.ind), name: pfKnown(Object.assign({}, C.name, {f: s => `<span class="co">${esc(s.name)}</span>`})),
   msym: Object.assign({}, C.sym, {f: r => pfSymCell(r) + `<div class="pf-co">${fmt(r.qty, 0)} @ ${fmt(r.avg, 2)}</div>` + (r.remark ? `<div class="pf-src">${esc(r.remark)}</div>` : '')}),
-  rem: {k:'rem', label:'Remark', l:1, tip:'Where the stock was added from (PF Builder part, Fundamentals tab or Portfolio)', v:r => r.remark || '', f:r => r.remark ? `<span class="pf-src">${esc(r.remark)}</span>` : NA},
+  rem: {k:'rem', label:'Remark', l:1, tip:'Where the stock was added from (PF Builder part, Factor Screener tab or Portfolio)', v:r => r.remark || '', f:r => r.remark ? `<span class="pf-src">${esc(r.remark)}</span>` : NA},
   /* closed positions */
   csym: Object.assign({}, C.sym, {f: pfSymCell}),
   cqty: {k:'cq', label:'Qty', v:r => r.sQty, f:r => fmt(r.sQty, 0)},
@@ -3947,11 +3947,11 @@ function symPicker(input, onPick) {
 }
 /* Buy / Sell form (new, or edit an existing trade). Charges fill in by themselves; type over them to override.
    Until you click a box: digits go to Qty, letters to Symbol. Empty price = LTP. */
-/* Remark for a buy made here: the Fundamentals tab it was made from, or Portfolio */
+/* Remark for a buy made here: the Factor Screener tab it was made from, or Portfolio */
 const PF_SRC_TAB = {'': 'Industries', value: 'Value', momentum: 'Momentum', all: 'All Stocks', method: 'Methodology'};
 function pfSrcHere() {
   const h = (location.hash || '#/').replace(/^#\/?/, '').split(/[/?]/)[0];
-  return h === 'portfolio' ? 'Portfolio' : 'Fundamentals → ' + (PF_SRC_TAB[h] || h || 'Industries');
+  return h === 'portfolio' ? 'Portfolio' : 'Factor Screener → ' + (PF_SRC_TAB[h] || h || 'Industries');
 }
 function pfTradeForm(x) {
   const edit = !!x.id, held = () => { const R = pfReplay(PF.txns.filter(t => t !== x)); return (R.pos[f.sym.value.trim().toUpperCase()] || {}).qty || 0; };
@@ -4525,10 +4525,10 @@ if (WEB) {                                                  // website: back but
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
 }
-/* page name under the HNImanshu wordmark (and the tab title): Portfolio on #/portfolio, Fundamentals everywhere else */
+/* page name under the HNImanshu wordmark (and the tab title): Portfolio on #/portfolio, Factor Screener everywhere else */
 (function () {
   const t = $('header .brand .tagline');
-  const set = () => { const pf = /^#\/portfolio/.test(location.hash); if (t) t.textContent = pf ? 'Portfolio' : 'Fundamentals'; document.title = 'HNImanshu — ' + (pf ? 'Portfolio' : 'Fundamentals'); };
+  const set = () => { const pf = /^#\/portfolio/.test(location.hash); if (t) t.textContent = pf ? 'Portfolio' : 'Factor Screener'; document.title = 'HNImanshu — ' + (pf ? 'Portfolio' : 'Factor Screener'); };
   set(); window.addEventListener('hashchange', set);
 })();
 /* Telegram alerts are part of Prime (like PF Builder): not Prime → the plans popup (auth.js window.hniPlans) */
@@ -4582,12 +4582,12 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
 AUTH_WEB = {
     "__AUTH_ATTR__": ' data-auth="required"',
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
-                     '<link rel="stylesheet" href="auth.css?v=8">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=8"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=9">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=9"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
-                     'var w=document.getElementById("auWait");if(w)w.innerHTML=\'Login could not load. <a href="./">Back to screener</a>\';}},10000);</script>\n',
+                     'var w=document.getElementById("auWait");if(w)w.innerHTML=\'Login could not load. <a href="./">Back to home</a>\';}},10000);</script>\n',
 }
 AUTH_OFF = {k: "" for k in AUTH_WEB}
 

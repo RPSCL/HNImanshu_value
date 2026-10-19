@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>HNImanshu — Value Screener</title>
+<title>HNImanshu — Valuation</title>
 <script>
 /* web fonts never block the page; skipped on 2G / data saver (the phone's own fonts are used instead) */
 (function(){ var c = navigator.connection || {}; if (c.saveData || /2g/.test(c.effectiveType || '')) return;
@@ -958,8 +958,8 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
 #wm-btn:active { transform: scale(0.98); }
 </style>
 <!-- login popup for the Fundamentals button (shared with the Fundamentals page) -->
-<link rel="stylesheet" href="auth.css?v=8">
-<script type="module" src="auth.js?v=8"></script>
+<link rel="stylesheet" href="auth.css?v=9">
+<script type="module" src="auth.js?v=9"></script>
 </head>
 <body class="night">
 <script>
@@ -974,7 +974,7 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
 <!-- ── WELCOME OVERLAY ── -->
 <div id="wm-overlay">
   <div id="wm-box">
-    <h2>HNImanshu Value Screener</h2>
+    <h2>HNImanshu Valuation</h2>
     <p>*Free Trial</p>
     <p>This platform helps you find good companies using data — not guesswork.</p>
     <p>We use company financials like profits, growth, cash flow, and balance sheets, instead of tips or news.</p>
@@ -1002,7 +1002,7 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
 
 <!-- ── HEADER ── -->
 <div id="header">
-  <a class="hni-logo" href="#">
+  <a class="hni-logo" href="./" aria-label="HNImanshu home">
     <div class="hni-mark">
       <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect width="32" height="32" rx="7" fill="var(--bg3)"/>
@@ -1011,7 +1011,7 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
     </div>
     <div>
       <div class="hni-wordmark"><span class="hni">HNI</span><span class="manshu">manshu</span></div>
-      <div class="hni-tagline">Value Screener</div>
+      <div class="hni-tagline">Valuation</div>
     </div>
   </a>
   <div class="universe-switch">
@@ -1026,14 +1026,14 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
     <div class="hstat"><div class="hstat-val" id="hs-best">—</div><div class="hstat-lbl">A/B+</div></div>
   </div>
   <!-- Portfolio: the Fundamentals page's Portfolio tab (login needed, same first-tap handling as Fundamentals) -->
-  <a class="fund-btn pf-btn" id="pf-btn" href="fundamentals#/portfolio" data-auth-link title="Your portfolio" aria-label="Portfolio">
+  <a class="fund-btn pf-btn" id="pf-btn" href="factor#/portfolio" data-auth-link title="Your portfolio" aria-label="Portfolio">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg>
     <span>Portfolio</span>
   </a>
   <!-- Fundamentals page link — clean URL (firebase.json cleanUrls), no ?uni=: the page remembers the user's own List pick -->
-  <a class="fund-btn" id="fund-btn" href="fundamentals" data-auth-link title="Industries, value screen and methodology">
+  <a class="fund-btn" id="fund-btn" href="factor" data-auth-link title="Industries, value screen and methodology">
     <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M2 11V7M5 11V4M8 11V6M11 11V2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-    <span>Fundamentals</span>
+    <span>Factor Screener</span>
   </a>
   <script>
   /* Fundamentals button: works on the FIRST tap, even before the login code (auth.js) has loaded.
@@ -1538,7 +1538,7 @@ function toggleTheme(){
 var FUND_UNI = {n500:'NIFTY 500', sc250:'Smallcap 500', mc250:'Microcap 250', all:'all'};
 function updateFundLink(){
   var a = document.getElementById('fund-btn'); if(!a) return;
-  a.href = 'fundamentals';   // clean URL; fundamentals opens on "All lists" first, then remembers the user's own pick
+  a.href = 'factor';   // clean URL; fundamentals opens on "All lists" first, then remembers the user's own pick
 }
 
 function switchUniverse(u){

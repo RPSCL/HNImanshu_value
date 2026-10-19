@@ -36,7 +36,7 @@ News:
   Headlines are hyperlinked to their source URLs.
 
 Fundamentals:
-  Also builds public/fundamentals.html (industry PE, value screen, Magic
+  Also builds public/factor.html, the Factor Screener (industry PE, value screen, Magic
   Formula, promoter / public holding, 1Y-back view) via fundamentals.py,
   from the same three CSVs. A failure there never blocks the screener.
 """
@@ -86,8 +86,8 @@ def minify_html_css(html: str) -> str:
 
 BASE        = Path(__file__).parent
 TEMPLATE    = BASE / "HNImanshu_template.html"
-OUTPUT      = BASE / "public" / "index.html"
-OUTPUT_FUND = BASE / "public" / "fundamentals.html"   # second page, same Firebase deploy
+OUTPUT      = BASE / "public" / "valuation.html"   # Valuation page (was index.html: "/" is now the landing page, public/index.html, hand-made)
+OUTPUT_FUND = BASE / "public" / "factor.html"        # Factor Screener (was fundamentals.html; /fundamentals redirects here, firebase.json)
 
 N500_CSV    = BASE / "nifty500_valuation.csv"
 SC250_CSV   = BASE / "niftysmallcap500_valuation.csv"
@@ -944,7 +944,7 @@ def write_builder_daily(out: Path) -> int:
 
 
 def build_fundamentals():
-    """Build public/fundamentals.html from the same 3 CSVs (explicit paths, so test_*.csv is never read)."""
+    """Build public/factor.html (Factor Screener) from the same 3 CSVs (explicit paths, so test_*.csv is never read)."""
     print("\nBuilding Fundamentals page...\n")
     if fundamentals is None:
         print("  [WARN] skipped — fundamentals.py missing")
@@ -953,7 +953,7 @@ def build_fundamentals():
         fundamentals.build_site([N500_CSV, SC250_CSV, MC250_CSV, OTH_CSV], OUTPUT_FUND, minify=minify_html_css)
     except Exception:
         traceback.print_exc()   # log it, but keep the screener build + deploy going
-        print("  [WARN] Fundamentals build failed — previous fundamentals.html stays live")
+        print("  [WARN] Fundamentals build failed — previous factor.html stays live")
 
 
 # =========================
