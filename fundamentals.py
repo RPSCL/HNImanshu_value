@@ -4370,7 +4370,7 @@ const uniFill = () => {
   const lists = D.lists.filter(l => l !== OTH).concat(OTH);  // Others is always listed (its stocks load for Prime)
   us.innerHTML = [['all', 'All lists'], ...lists.map(l => [l, l])].map(([v, t]) => {
     const pr = v !== FREE_LIST;
-    return `<option value="${esc(v)}"${pr ? ' data-prime="1"' : ''}${pr && !PRO ? ' data-lock="1"' : ''}>${esc(t)}</option>`;
+    return `<option value="${esc(v)}"${pr && !PRO ? ' data-prime="1" data-lock="1"' : ''}>${esc(t)}</option>`;   // Prime: plain options (no purple on the purple page)
   }).join('');
 };
 const uniPick = want => {                                   // Prime: the list asked for (else All lists); free: NIFTY 500
@@ -4582,8 +4582,8 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
 AUTH_WEB = {
     "__AUTH_ATTR__": ' data-auth="required"',
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
-                     '<link rel="stylesheet" href="auth.css?v=7">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=7"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=8">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=8"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
