@@ -4454,12 +4454,17 @@ if (isPhone() && !location.hash) history.replaceState(null, '', location.pathnam
    half-typed box is open. Data files (.json: news, lists) need nothing: the fresh copy is already in the cache. */
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
-  let stale = false;
+  let stale = false, leaving = false;
+  /* only THIS page's own file counts: the screener prefetches Fundamentals (it changes on every build), and that once
+     marked the screener stale, so tapping Fundamentals reloaded the screener instead of opening Fundamentals */
+  const pageKey = u => { const p = new URL(u, location.href).pathname.replace(/\.html$/, '').replace(/\/index$/, '/'); return p || '/'; };
   navigator.serviceWorker.addEventListener('message', e => {
-    if (e.data && e.data.type === 'hni-updated' && !/\.json(\?|$)/.test(e.data.url || '')) stale = true;
+    if (e.data && e.data.type === 'hni-updated' && pageKey(e.data.url || '/x.json') === pageKey(location.href)) stale = true;
   });
+  addEventListener('pagehide', () => { leaving = true; });              // going to another page: never reload over that navigation
+  addEventListener('pageshow', () => { leaving = false; });
   document.addEventListener('visibilitychange', () => {
-    if (!stale || document.visibilityState !== 'hidden') return;
+    if (!stale || leaving || document.visibilityState !== 'hidden') return;
     const a = document.activeElement;
     const busy = document.querySelector('.au-back.open, .wip-back') || (a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.value);
     if (!busy) location.reload();
