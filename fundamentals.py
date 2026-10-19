@@ -1792,6 +1792,19 @@ body.pf-mode .uni-hint{display:none!important}
 .fsel-opt.prime{color:#b892f5}
 body.day .fsel-opt.prime{color:#5b2d9c}
 .fsel-opt.locked svg{width:12px;height:12px;margin-left:7px;vertical-align:-1px;opacity:.9}
+/* PF Builder → Portfolio: the check-before-buying list */
+.pfb .pfb-tw{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.pfb-tbl{width:100%;border-collapse:collapse;font:12.5px var(--mono)}
+.pfb-tbl th{position:sticky;top:0;background:var(--panel2);color:var(--faint);font:600 10.5px var(--mono);text-transform:uppercase;letter-spacing:.05em;text-align:left;padding:7px 10px;border-bottom:1px solid var(--line)}
+.pfb-tbl td{padding:6px 10px;border-bottom:1px solid var(--line);color:var(--ink)}
+.pfb-tbl tr:last-child td{border-bottom:0}
+.pfb-tbl .r{text-align:right}
+.pfb-tbl i{font-style:normal;font-size:10px;color:var(--faint);margin-left:4px}
+.pfb-tbl tr.z td{color:var(--faint);text-decoration:line-through}
+.pfb-sum{display:flex;flex-wrap:wrap;gap:6px 16px;font:500 12px var(--mono);color:var(--faint)}
+.pfb-sum b{color:var(--ink)}
+.pfb-sum i{font-style:normal;font-size:11px}
+.pfb .btn.ghost{height:36px;justify-content:center}
 /* phone header, right to left: avatar · Portfolio · PF Builder · Weekly (PF Builder and Weekly side by side) */
 @media (max-width:700px){
   .btn.hbag{right:calc(var(--au-right,104px) + 40px)}
@@ -3095,9 +3108,81 @@ async function pfLoadNow() {
   PF.busy = false;
   pfApplyRenames();
   PF_HELD = pfHeld();
-  if ((location.hash || '') === '#/portfolio') route(); else pfMarkBags();
+  if ((location.hash || '') === '#/portfolio') { route(); setTimeout(pfBasketOpen, 200); } else pfMarkBags();   // a list from PF Builder: check it, then buy
 }
 window.addEventListener('hni-ready', () => pfLoad());
+/* ---------- PF Builder → Portfolio ----------
+   PF Builder leaves its picks in this browser (localStorage 'hni_pf_basket' = {at, fund, items: [{sym, name, target, px, etf}]})
+   and opens #/portfolio. Here, once the portfolio is loaded: each pick is priced at the LTP (pfLtp: live price when held,
+   else this page's latest close; ETFs and anything else: the builder's price), bought in whole units within its share,
+   and everything is kept within the cash available, charges included (all shares shrink alike when the fund is
+   bigger than the cash). Nothing is saved until "Buy" is pressed; a list older than 30 minutes is dropped. */
+const PF_BASKET = 'hni_pf_basket';
+function pfBasketTake() {
+  let b = null;
+  try { b = JSON.parse(localStorage.getItem(PF_BASKET) || 'null'); localStorage.removeItem(PF_BASKET); } catch (e) { return null; }
+  return b && Array.isArray(b.items) && b.items.length && Date.now() - (b.at || 0) < 30 * 60000 ? b : null;
+}
+function pfBasketPlan(items, cash) {
+  const want = items.reduce((s, x) => s + x.target, 0);
+  let k = want > 0 && cash > 0 ? Math.min(1, cash / want) : 0;
+  const rowsAt = k => items.map(x => { const qty = k > 0 ? Math.floor(x.target * k / x.px) : 0;
+    return Object.assign({}, x, {qty, amt: qty * x.px, ch: qty > 0 ? pfCharges('buy', qty, x.px) : 0}); });
+  let rows = rowsAt(k), tot = rows.reduce((s, r) => s + r.amt + r.ch, 0);
+  for (let i = 0; i < 400 && k > 0 && tot > cash + 1e-6; i++) {       // charges on top: shrink a little until it all fits
+    k *= 0.997; rows = rowsAt(k); tot = rows.reduce((s, r) => s + r.amt + r.ch, 0);
+  }
+  return {rows, tot, k, want};
+}
+function pfBasketOpen() {
+  if (!PF.txns || document.querySelector('.wip-back')) return;
+  const b = pfBasketTake(); if (!b) return;
+  const items = b.items.map(x => ({sym: String(x.sym || '').toUpperCase(), name: x.name || '', target: +x.target || 0, etf: !!x.etf,
+      live: !!(pfLive(String(x.sym || '').toUpperCase()) || {}).ltp, px: pfLtp(String(x.sym || '').toUpperCase()) || +x.px || 0}))
+    .filter(x => /^[A-Z0-9&._-]{1,20}$/.test(x.sym) && x.px > 0 && x.target > 0);
+  if (!items.length) return;
+  const cash = Math.max(0, Math.floor(pfReplay(PF.txns).cash * 100) / 100);
+  const full = pfBasketPlan(items, Infinity);                            // everything, at the fund the builder used
+  const fit = pfBasketPlan(items, cash);                                 // within the cash you have
+  const short = Math.max(0, Math.ceil(full.tot - cash));
+  const row = r => `<tr${r.qty ? '' : ' class="z"'}><td><b>${esc(r.sym)}</b>${r.etf ? ' <i>ETF</i>' : ''}</td><td class="r">${fmt(r.qty, 0)}</td>
+    <td class="r" title="${r.live ? 'Live price (Angel)' : 'Latest close'}">${fmt(r.px, 2)}${r.live ? ' <i>live</i>' : ''}</td><td class="r">${fmt(r.amt, 0)}</td></tr>`;
+  const w = modal('Add from Portfolio Builder', `<form class="pf-form pfb" autocomplete="off">
+    <p class="pf-calc">${items.length} picks · fund ${rs(b.fund)}${b.date ? ' · data as of ' + esc(b.date) : ''}. Quantities are at the LTP and stay within your cash, charges included.</p>
+    <div class="pfb-tw"><table class="pfb-tbl"><thead><tr><th>Stock</th><th class="r">Qty</th><th class="r">LTP ₹</th><th class="r">Amount ₹</th></tr></thead>
+      <tbody>${fit.rows.map(row).join('')}</tbody></table></div>
+    <div class="pfb-sum"><span>Cash available <b>${rs(cash)}</b></span><span>To invest <b>${rs(fit.tot)}</b> <i>incl. charges ${rs(fit.rows.reduce((s, r) => s + r.ch, 0))}</i></span><span>Cash after <b>${rs(cash - fit.tot)}</b></span></div>
+    ${fit.rows.some(r => !r.qty) ? '<p class="pf-calc">Greyed rows: one unit costs more than that pick\'s share of the cash, so they are skipped.</p>' : ''}
+    ${short > 0 ? `<p class="pf-calc">Your cash is ${rs(short)} short of the builder's ${rs(b.fund)}${cash > 0 ? ', so every pick is scaled down alike' : ''}.</p>` : ''}
+    <p class="pf-err"></p>
+    <button type="submit" class="btn primary"${fit.rows.some(r => r.qty) ? '' : ' disabled'}>Buy within cash · ${fit.rows.filter(r => r.qty).length} stocks</button>
+    ${short > 0 ? `<button type="button" class="btn ghost" data-payin>Pay in ${rs(short)} and buy the full list</button>` : ''}
+  </form>`, {sheet: true});
+  const f = $('form', w);
+  const save = async (plan, payIn) => {
+    const buys = plan.rows.filter(r => r.qty > 0), d = today();
+    if (!buys.length) return;
+    if (PF.txns.length + buys.length + (payIn ? 1 : 0) > 3000) return $('.pf-err', w).textContent = 'Transaction limit reached (3000).';
+    const add = [];
+    if (payIn) add.push({id: pfId(), t: 'in', amt: payIn, date: d});
+    buys.forEach(r => {
+      const rec = {id: pfId(), t: 'buy', sym: r.sym, qty: r.qty, px: +r.px.toFixed(2), ch: r.ch, date: d};
+      const s0 = TODAY.get(r.sym);                                       // PE and value score on the day bought (checklist)
+      if (s0 && s0.pe > 0) rec.pe = +(+s0.pe).toFixed(2);
+      if (s0 && s0.score != null) rec.sc = Math.round(s0.score);
+      if (!s0) rec.name = String(r.name || r.sym).slice(0, 80);
+      add.push(rec);
+    });
+    f.querySelectorAll('button').forEach(x => { x.disabled = true; });
+    PF.txns = PF.txns.concat(add);
+    await pfSave(); w._close();
+    if ((location.hash || '') === '#/portfolio') route(); else pfMarkBags();
+    toast(`Added ${buys.length} buys · ${rs(buys.reduce((s, r) => s + r.amt, 0))} invested${PF.err ? ' · ' + PF.err : ''}`);
+  };
+  f.addEventListener('submit', e => { e.preventDefault(); save(fit, 0); });
+  const pi = $('[data-payin]', f); if (pi) pi.addEventListener('click', () => save(full, short));
+}
+window.addEventListener('hashchange', () => { if (/^#\/portfolio/.test(location.hash) && PF.txns) setTimeout(pfBasketOpen, 200); });
 /* PF Builder button: every signed-in user sees it. Admins and prime members open the builder (auth.js window.hniBuilder:
    admin@ account, hni_admins/{uid}, or a hni_prime/{uid} document still in date); everyone else gets the plans popup (window.hniPlans). */
 (function () {
@@ -4484,8 +4569,8 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
 AUTH_WEB = {
     "__AUTH_ATTR__": ' data-auth="required"',
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
-                     '<link rel="stylesheet" href="auth.css?v=6">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=6"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=7">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=7"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
