@@ -104,10 +104,9 @@ html.hni-pro[data-theme=day], html.hni-pro body.day{
 
 /* avatar ring + "Prime · valid till …" under the name in the menu */
 .au-user.au-prime .au-av{box-shadow:0 0 0 2px var(--au-field),0 0 0 4px #9b6bdf}
-.au-who .au-ptag{display:block;margin-top:5px;white-space:nowrap;font:600 11px var(--au-mono);color:#b892f5}
-body.day .au-who .au-ptag,[data-theme=day] .au-who .au-ptag{color:#5b2d9c}
-.au-menu .au-get{color:#b892f5}
-body.day .au-menu .au-get,[data-theme=day] .au-menu .au-get{color:#5b2d9c}
+.au-who .au-ptag{display:block;margin-top:5px;white-space:nowrap;font:600 11px var(--au-mono);color:var(--au-acc)}   /* Prime: normal accent on the purple page */
+html.hni-free .au-menu .au-get{color:#b892f5}
+html.hni-free body.day .au-menu .au-get,html.hni-free[data-theme=day] .au-menu .au-get{color:#5b2d9c}
 
 /* ---------- Prime plans popup ("Choose a plan"): dark purple buttons and outlines ---------- */
 .au-plans{--au-go:#5b2d9c;--au-go-hi:#8b5cf6;--au-go-ink:#fff;--au-go-txt:#b892f5}

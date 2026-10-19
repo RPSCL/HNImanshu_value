@@ -489,7 +489,8 @@ function openNav() {
   $(".hni-nvl", navBox).innerHTML = NAV.filter((n) => n.k !== here).map((n) => {
     const lock = n.prime && !PRO_NOW;
     const tag = n.href ? `a href="${n.href}"` : 'button type="button"';
-    return `<${tag} class="hni-nv${n.prime ? " pr" : ""}${lock ? " lock" : ""}" data-k="${n.k}">
+    // purple tile + crown only for a locked (free account) item; Prime members see it like every other page
+    return `<${tag} class="hni-nv${lock ? " pr lock" : ""}" data-k="${n.k}">
       <span class="ic">${NAV_ICON[n.k]}</span><span class="tx"><b>${esc(n.t)}</b><small>${esc(lock ? "Part of Prime · see plans" : n.s)}</small></span>
       ${lock ? CROWN.replace('class="au-crown"', 'class="cr"') : '<span class="go">›</span>'}</${n.href ? "a" : "button"}>`;
   }).join("");
