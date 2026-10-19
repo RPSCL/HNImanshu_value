@@ -145,7 +145,46 @@ body.day .au-crown,[data-theme=day] .au-crown{color:#3b1475}   /* white would va
   .au-opt-m,.au-opt-p{font-size:16px}
 }
 
-/* ---------- free accounts (html.hni-free): the Prime buttons (PF Builder, Weekly on Telegram) in purple ---------- */
-html.hni-free #pfBuilder, html.hni-free #weeklyBtn{border-color:#6d3fc0;background:rgba(109,63,192,.22);color:#e4d6ff}
-html.hni-free #pfBuilder:hover, html.hni-free #weeklyBtn:hover{border-color:#8b5cf6;background:rgba(139,92,246,.32);color:#fff}
-html.hni-free body.day #pfBuilder, html.hni-free body.day #weeklyBtn{border-color:#5b2d9c;background:rgba(91,45,156,.14);color:#3b1475}
+/* ---------- free accounts (html.hni-free): the Prime buttons (PF Builder, Weekly on Telegram) in solid dark purple ---------- */
+html.hni-free #pfBuilder, html.hni-free #weeklyBtn{border-color:#5b2d9c!important;background:#2e1065!important;color:#efe7ff!important}
+html.hni-free #pfBuilder:hover, html.hni-free #weeklyBtn:hover{border-color:#8b5cf6!important;background:#3b1475!important;color:#fff!important}
+html.hni-free body.day #pfBuilder, html.hni-free body.day #weeklyBtn,
+html.hni-free[data-theme=day] #pfBuilder, html.hni-free[data-theme=day] #weeklyBtn{border-color:#3b1475!important;background:#4c1d95!important;color:#fff!important}
+
+/* ---------- phone: one "Navigate to" button (animated fork) instead of a row of page icons ---------- */
+.hni-navbtn{display:none;flex:none;width:34px;height:34px;padding:0;border-radius:50%;border:1px solid var(--au-acc);background:var(--au-field);
+  color:var(--au-acc);cursor:pointer;align-items:center;justify-content:center}
+.hni-navbtn svg{width:18px;height:18px}
+.hni-fork *{stroke-dasharray:1;stroke-dashoffset:1;animation:hni-draw 4.2s ease-in-out infinite both}
+.hni-fork :nth-child(2){animation-delay:.35s}.hni-fork :nth-child(3){animation-delay:.7s}
+.hni-fork :nth-child(4){animation-delay:1.05s}.hni-fork :nth-child(5){animation-delay:1.4s}
+@keyframes hni-draw{0%{stroke-dashoffset:1}18%{stroke-dashoffset:0}78%{stroke-dashoffset:0;opacity:1}92%{opacity:.25}100%{stroke-dashoffset:0;opacity:1}}
+@media (prefers-reduced-motion:reduce){.hni-fork *{animation:none;stroke-dashoffset:0}}
+@media (max-width:700px){
+  .hni-navbtn{display:inline-flex}
+  /* the page icons it replaces: Fundamentals (Weekly, Portfolio, PF Builder), PF Builder page, Screener (Portfolio, Fundamentals) */
+  html.hni-nav #weeklyBtn, html.hni-nav #pfBag, html.hni-nav #pfBuilder, html.hni-nav .hnav,
+  html.hni-nav #pf-btn, html.hni-nav #fund-btn{display:none!important}
+  header.top .global > .hni-navbtn{position:absolute;top:12px;right:calc(var(--au-right,104px) + 42px)}   /* Fundamentals: left of the avatar */
+  .au-slot .hni-navbtn{margin-right:8px}
+}
+.hni-navsheet .au-box{width:min(400px,100%);padding:18px 16px 14px}
+.hni-navsheet .au-title{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding-left:4px}
+.hni-navsheet .au-title svg{width:16px;height:16px;color:var(--au-acc)}
+.hni-nvl{display:flex;flex-direction:column;gap:8px}
+.hni-nv{display:flex;align-items:center;gap:12px;padding:11px 12px;border:1px solid var(--au-line);border-radius:10px;text-decoration:none;
+  color:var(--au-ink);background:transparent;font-family:var(--au-sans);cursor:pointer;text-align:left;width:100%}
+.hni-nv:hover,.hni-nv:focus-visible{border-color:var(--au-acc);outline:none}
+.hni-nv .ic{flex:none;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:var(--au-field);color:var(--au-acc)}
+.hni-nv .ic svg{width:17px;height:17px}
+.hni-nv .tx{flex:1;min-width:0}
+.hni-nv b{display:block;font:600 14px var(--au-sans)}
+.hni-nv small{display:block;margin-top:1px;font-size:11.5px;color:var(--au-faint)}
+.hni-nv .go{flex:none;color:var(--au-faint);font-size:18px;line-height:1}
+.hni-nv .cr{flex:none;width:16px;height:16px;color:#d9c7ff}
+.hni-nv.pr .ic{background:#2e1065;color:#efe7ff}
+.hni-nv.lock{border-color:#5b2d9c;background:linear-gradient(90deg,rgba(46,16,101,.55),rgba(46,16,101,.15))}
+.hni-nv.lock small{color:#c9b3f5}
+body.day .hni-nv.lock,[data-theme=day] .hni-nv.lock{background:linear-gradient(90deg,rgba(76,29,149,.18),rgba(76,29,149,.05));border-color:#4c1d95}
+body.day .hni-nv.lock small,[data-theme=day] .hni-nv.lock small{color:#4c1d95}
+body.day .hni-nv .cr,[data-theme=day] .hni-nv .cr{color:#4c1d95}

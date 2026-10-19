@@ -34,7 +34,11 @@ const firebaseConfig = {
 // Prime members and admins get the purple theme. Painted at once from last visit's answer (no charcoal flash),
 // then confirmed below once the login is known.
 const PRO_HINT = "hni_pro";
-try { if (localStorage.getItem(PRO_HINT) === "1") document.documentElement.classList.add("hni-pro"); } catch (e) {}
+try {
+  const h = localStorage.getItem(PRO_HINT);
+  if (h === "1") document.documentElement.classList.add("hni-pro");
+  else if (h === "0") document.documentElement.classList.add("hni-free");   // signed in, not Prime: purple PF Builder + Weekly
+} catch (e) {}
 // Realtime Database address: Firebase Hosting hands it out once the database exists, so nothing to paste here later.
 try {
   const hosted = await fetch("/__/firebase/init.json").then((r) => r.json());
@@ -291,6 +295,7 @@ if (!EMBED) {
 
 // ---------- Prime: purple theme, "Prime · till …" in the menu, the plans popup and payment ----------
 let PRIME = null, planBox = null, planSel = 0, planBusy = false;
+let PRO_NOW = (() => { try { return localStorage.getItem(PRO_HINT) === "1"; } catch (e) { return false; } })();   // admin or Prime (hint until known)
 // crown: one outline stroke, white (dark purple in day mode, see auth.css .au-crown)
 const CROWN = '<svg class="au-crown" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg>';
 const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
@@ -299,8 +304,10 @@ const payable = (p) => Math.round(p.pm * p.m * (1 + GST));          // what Razo
 function markPro(admin, p) {
   PRIME = p;
   const on = !!(admin || p);
+  PRO_NOW = on;
   document.documentElement.classList.toggle("hni-pro", on);           // auth.css: darkest purple (night) / light purple (day)
-  try { localStorage.setItem(PRO_HINT, on ? "1" : "0"); } catch (e) {}
+  document.documentElement.classList.toggle("hni-free", !on && !!current);   // free account: Prime buttons in purple
+  try { if (current) localStorage.setItem(PRO_HINT, on ? "1" : "0"); else localStorage.removeItem(PRO_HINT); } catch (e) {}
   markUser();
   if (current && !admin && !EXTRA.some((it) => it.cls === "au-get"))
     addItem(p ? "Extend Prime" : "Get Prime", openPlans, "au-get");
@@ -414,6 +421,92 @@ async function pay() {
   } finally { planBusy = false; paintPlans(); }
 }
 
+// ---------- phone: one "Navigate to" button (fork icon, drawn one line at a time) → every other page in one overlay ----------
+const SVG = (inner, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${inner}</svg>`;
+const FORK = SVG('<circle pathLength="1" cx="6" cy="5" r="2.4"/><path pathLength="1" d="M6 7.4v1.6a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V7.4"/><circle pathLength="1" cx="18" cy="5" r="2.4"/><path pathLength="1" d="M12 12v4.6"/><circle pathLength="1" cx="12" cy="19" r="2.4"/>', 'class="hni-fork"');
+const NAV_ICON = {
+  screener: SVG('<path d="M4 6h16M4 12h16M4 18h10"/>'),
+  fundamentals: SVG('<path d="M3 20h18"/><path d="M6 16v-5M11 16V6M16 16v-8M21 16v-3"/>'),
+  portfolio: SVG('<path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/>'),
+  builder: SVG('<path d="M12 8H5.6L4.5 21H12V8"/><path d="M8.2 8V6.2a3.3 3.3 0 0 1 3.8-3.2"/><g transform="rotate(-40 17 12)"><rect x="14" y="4.6" width="7" height="4.4" rx="1"/><path d="M17.5 9v10.5"/></g>'),
+  weekly: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#29a9eb"/><path d="M5.4 11.6l11.5-4.4c.5-.2 1 .1.8.9l-2 9.3c-.1.6-.5.8-1.1.5l-3-2.2-1.5 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5.1c.2-.2 0-.3-.4-.1l-6.9 4.4-3-.9c-.6-.2-.7-.6.1-1z" fill="#fff"/></svg>',
+};
+const NAV = [
+  { k: "screener", t: "Screener", s: "Value screener, every stock ranked", href: "./" },
+  { k: "fundamentals", t: "Fundamentals", s: "Industries, value and momentum screens", href: "fundamentals#/" },
+  { k: "portfolio", t: "Portfolio", s: "Your holdings and P&L", href: "fundamentals#/portfolio" },
+  { k: "builder", t: "Portfolio Builder", s: "ETFs + value + momentum, with a backtest", href: "builder", prime: true },
+  { k: "weekly", t: "Telegram alerts", s: "Your portfolio summary every week", prime: true },
+];
+function pageNow() {                                                    // which page this is (left out of the list)
+  const p = location.pathname.split("/").pop() || "";
+  if (/^builder/.test(p)) return "builder";
+  if (/^fundamentals/.test(p)) return /^#\/portfolio/.test(location.hash) ? "portfolio" : "fundamentals";
+  return "screener";
+}
+let navBox = null;
+function mountNav() {                                                   // the button, just left of the avatar (shown on phones only)
+  if (!current || document.querySelector(".hni-navbtn")) return;
+  const av = document.querySelector(".au-user");
+  if (!av) return;
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "hni-navbtn"; b.title = "Navigate to"; b.setAttribute("aria-label", "Navigate to");
+  b.setAttribute("aria-haspopup", "dialog"); b.innerHTML = FORK;
+  b.addEventListener("click", (e) => { e.stopPropagation(); openNav(); });
+  av.parentNode.insertBefore(b, av);
+  document.documentElement.classList.add("hni-nav");
+}
+function closeNav() { if (navBox) { navBox.classList.remove("open"); syncLock(); } }
+function openNav() {
+  if (!navBox) {
+    navBox = document.createElement("div");
+    navBox.className = "au-back hni-navsheet";
+    navBox.innerHTML = `<div class="au-box" role="dialog" aria-modal="true" aria-labelledby="hniNavT">
+      <button class="au-x" type="button" aria-label="Close">×</button>
+      <h2 class="au-title" id="hniNavT">${FORK.replace('class="hni-fork"', "")}Navigate to</h2><div class="hni-nvl"></div></div>`;
+    document.body.appendChild(navBox);
+    navBox.addEventListener("click", (e) => {                           // outside the box or ×: close
+      if (e.target === navBox || e.target.closest(".au-x")) return closeNav();
+      const it = e.target.closest(".hni-nv"); if (!it) return;
+      const n = NAV.find((x) => x.k === it.dataset.k);
+      if (n.prime && !PRO_NOW) {                                        // Prime page, free account: close this first, then the plans
+        e.preventDefault(); closeNav(); setTimeout(openPlans, 160); return;
+      }
+      if (n.k === "weekly") {
+        e.preventDefault(); closeNav();
+        setTimeout(() => { const w = document.getElementById("weeklyBtn"); if (w) w.click(); else weeklyNote(); }, 160);
+        return;
+      }
+      closeNav();                                                       // a link: the browser follows it (same tab)
+    });
+    navBox.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") closeNav(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && navBox.classList.contains("open")) closeNav(); });
+    window.addEventListener("hashchange", closeNav);
+  }
+  const here = pageNow();
+  $(".hni-nvl", navBox).innerHTML = NAV.filter((n) => n.k !== here).map((n) => {
+    const lock = n.prime && !PRO_NOW;
+    const tag = n.href ? `a href="${n.href}"` : 'button type="button"';
+    return `<${tag} class="hni-nv${n.prime ? " pr" : ""}${lock ? " lock" : ""}" data-k="${n.k}">
+      <span class="ic">${NAV_ICON[n.k]}</span><span class="tx"><b>${esc(n.t)}</b><small>${esc(lock ? "Part of Prime · see plans" : n.s)}</small></span>
+      ${lock ? CROWN.replace('class="au-crown"', 'class="cr"') : '<span class="go">›</span>'}</${n.href ? "a" : "button"}>`;
+  }).join("");
+  navBox.classList.add("open"); syncLock();
+  setTimeout(() => { const f = navBox.querySelector(".hni-nv"); if (f) f.focus(); }, 30);
+}
+function weeklyNote() {                                                 // Telegram, on a page without its own Weekly button
+  let m = document.querySelector(".au-week");
+  if (!m) {
+    m = document.createElement("div"); m.className = "au-back au-week";
+    m.innerHTML = '<div class="au-box" role="dialog" aria-modal="true"><button class="au-x" type="button" aria-label="Close">×</button><h2 class="au-title">Weekly updates</h2><p class="au-sub">Work in progress. Soon you\'ll get your portfolio summary every week on Telegram.</p></div>';
+    document.body.appendChild(m);
+    const close = () => { m.classList.remove("open"); syncLock(); };
+    m.addEventListener("click", (e) => { if (e.target === m || e.target.closest(".au-x")) close(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  }
+  m.classList.add("open"); syncLock();
+}
+
 // ---------- page wiring ----------
 const SIGNED_HINT = "hni_signed";                          // "1" = signed in last time (only a hint: Fundamentals checks for real)
 const hinted = () => { try { return localStorage.getItem(SIGNED_HINT) === "1"; } catch (e) { return false; } };
@@ -472,6 +565,7 @@ const ready = new Promise((resolve) => {
     window.hniPlans = openPlans;
     window.dispatchEvent(new Event("hni-ready"));
     if (GATED) showUser(u);
+    mountNav();
     Promise.all([window.hniAdmin, window.hniPrimeInfo]).then(([admin, p]) => markPro(!!admin, p));
     idle(() => { record(u); loadExt(u); }, 1500);
   });
