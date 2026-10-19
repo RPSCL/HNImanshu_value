@@ -1761,8 +1761,8 @@ __AUTH_BODY__<script>
     </div>
     <button class="btn primary" id="saveHtml">Save as HTML</button>
     <button type="button" class="btn hweek" id="weeklyBtn" title="Weekly updates on Telegram"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#29a9eb"/><path d="M5.4 11.6l11.5-4.4c.5-.2 1 .1.8.9l-2 9.3c-.1.6-.5.8-1.1.5l-3-2.2-1.5 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5.1c.2-.2 0-.3-.4-.1l-6.9 4.4-3-.9c-.6-.2-.7-.6.1-1z" fill="#fff"/></svg>Weekly</button>
+    <a class="btn hbag bld" id="pfBuilder" href="builder" target="_blank" rel="noopener" title="PF Builder" aria-label="PF Builder"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8H5.6L4.5 21H12V8"/><path d="M8.2 8V6.2a3.3 3.3 0 0 1 3.8-3.2"/><g transform="rotate(-40 17 12)"><rect x="14" y="4.6" width="7" height="4.4" rx="1"/><path d="M17.5 9v10.5"/></g></svg><span class="lg">PF Builder</span></a>
     <a class="btn hbag" id="pfBag" href="#/portfolio" title="Portfolio" aria-label="Portfolio"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg><span class="lg">Portfolio</span></a>
-    <a class="btn hbag bld" id="pfBuilder" href="builder" target="_blank" rel="noopener" title="PF Builder" aria-label="PF Builder"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg><span class="lg">PF Builder</span></a>
     <div id="theme-toggle" title="Day / night">
       <span class="toggle-icon moon-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
       <button class="toggle-track" aria-label="Toggle day / night theme"><div class="toggle-thumb"></div></button>
@@ -1781,6 +1781,24 @@ __AUTH_BODY__<script>
   <button type="button" class="mnav-b" id="mnavTab" aria-haspopup="dialog"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Value screen</span><i>▾</i></button>
   <button type="button" class="mnav-b" id="mnavPre" aria-haspopup="dialog" hidden><span>Deep value</span><i>▾</i></button>
 </div>
+<div id="uniHint" class="uni-hint" hidden></div>
+<style>
+/* Lists: the helper line under the tabs when "All lists" is on */
+.uni-hint{padding:8px 24px 0;font:500 11.5px var(--mono);color:var(--faint);letter-spacing:.02em}
+.uni-hint b{color:var(--mute);font-weight:600}
+body.pf-mode .uni-hint{display:none!important}
+@media (max-width:700px){.uni-hint{padding:8px 12px 0}}
+/* Prime lists in the List menu: purple; locked (free accounts) open the plans popup */
+.fsel-opt.prime{color:#b892f5}
+body.day .fsel-opt.prime{color:#5b2d9c}
+.fsel-opt.locked svg{width:12px;height:12px;margin-left:7px;vertical-align:-1px;opacity:.9}
+/* phone header, right to left: avatar · Portfolio · PF Builder · Weekly (PF Builder and Weekly side by side) */
+@media (max-width:700px){
+  .btn.hbag{right:calc(var(--au-right,104px) + 40px)}
+  .btn.hbag.bld{right:calc(var(--au-right,104px) + 80px)}
+  #weeklyBtn{right:calc(var(--au-right,104px) + 120px)}
+}
+</style>
 <main id="view"></main>
 <button type="button" id="ffab" aria-label="Filters" title="Filters"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 3.5h12M4.5 8h7M7 12.5h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><b class="cnt"></b></button>
 
@@ -3087,8 +3105,12 @@ window.addEventListener('hni-ready', () => pfLoad());
   let ok = null;
   const check = () => { const w = window.hniBuilder || window.hniAdmin; if (w) w.then(a => { ok = !!a; }).catch(() => { ok = false; }); };
   check(); window.addEventListener('hni-ready', check);
+  const phone = () => matchMedia('(max-width:700px)').matches;
   b.addEventListener('click', async e => {
-    if (ok === true) return;                                  // allowed: opens in a new tab as before
+    if (ok === true) {                                        // allowed: new tab on a computer, same tab on a phone
+      if (phone()) { e.preventDefault(); location.href = b.href; }
+      return;
+    }
     e.preventDefault();
     if (ok === null) {                                        // tapped before the check finished: wait for it
       const w = window.hniBuilder || window.hniAdmin;
@@ -4240,12 +4262,48 @@ hist.checked = false;
 hist.addEventListener('change', () => setHistorical(hist.checked));
 bsel.addEventListener('change', () => setHistorical(GF.back, bsel.value));   // picking a date keeps Historical as it is
 const us = $('#uniSel');
+/* Lists and Prime. Free accounts: NIFTY 500 only. All lists, Smallcap 500, Microcap 250 and Others are Prime: shown in purple,
+   locked for free accounts (picking one opens the plans popup). Prime members and admins start on All lists and get Others too.
+   PRO starts from auth.js's hint (last visit), then the real answer (setPro, below) corrects it. */
+const FREE_LIST = 'NIFTY 500';
+let PRO = (() => { try { return localStorage.getItem('hni_pro') === '1'; } catch (e) { return false; } })();
 const UNI_WANT = GF.uni;                                    // last visit's list: may be one added later (hniMore)
-const uniFill = () => { us.innerHTML = '<option value="all">All lists</option>' + D.lists.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join(''); };
-uniFill();
-us.value = D.lists.includes(GF.uni) ? GF.uni : 'all';
-GF.uni = us.value;                                          // drop an unknown list name passed in the URL
-us.addEventListener('change', () => { GF.uni = us.value; saveGF(); route(); });
+const uniFill = () => {
+  const lists = D.lists.filter(l => l !== OTH).concat(OTH);  // Others is always listed (its stocks load for Prime)
+  us.innerHTML = [['all', 'All lists'], ...lists.map(l => [l, l])].map(([v, t]) => {
+    const pr = v !== FREE_LIST;
+    return `<option value="${esc(v)}"${pr ? ' data-prime="1"' : ''}${pr && !PRO ? ' data-lock="1"' : ''}>${esc(t)}</option>`;
+  }).join('');
+};
+const uniPick = want => {                                   // Prime: the list asked for (else All lists); free: NIFTY 500
+  us.value = PRO ? ([...us.options].some(o => o.value === want) ? want : 'all') : FREE_LIST;
+  GF.uni = us.value;
+};
+const uniHintPaint = () => {                                // "NIFTY 500, Smallcap 500 and Microcap 250 selected"
+  const h = $('#uniHint'); if (!h) return;
+  const l = D.lists.filter(x => x !== OTH).map(x => `<b>${esc(x)}</b>`);
+  h.innerHTML = (l.length > 1 ? l.slice(0, -1).join(', ') + ' and ' + l[l.length - 1] : l.join('')) + ' selected';
+  h.hidden = GF.uni !== 'all' || document.body.classList.contains('pf-mode');
+};
+uniFill(); uniPick(GF.uni); uniHintPaint();
+us.addEventListener('change', () => {
+  GF.uni = us.value; saveGF(); uniHintPaint();
+  if (GF.uni === OTH && PRO && window.hniMore) window.hniMore('oth');
+  route();
+});
+function setPro(p) {
+  const was = PRO, cur = us.value;
+  PRO = !!p; uniFill();
+  uniPick(PRO ? (was ? cur : UNI_WANT) : FREE_LIST);
+  if (us._paint) us._paint(); uniHintPaint();
+  if (us.value !== cur) route();
+  if (PRO && window.hniMore) window.hniMore('oth');          // Others: every other NSE stock, for Prime
+}
+(function () {
+  const go = () => { const w = window.hniBuilder || window.hniAdmin; if (w) w.then(setPro).catch(() => setPro(false)); };
+  go(); window.addEventListener('hni-ready', go);
+  window.addEventListener('hashchange', uniHintPaint);
+})();
 /* add the stocks of fundamentals_<tag>.json (+ its back / sparkline files) to this page; data loaded before
    without them is dropped and loads again with them on next use */
 window.hniMore = async tag => {
@@ -4270,6 +4328,7 @@ window.hniMore = async tag => {
 /* day / night: same key as the screener, so both pages always match */
 /* ---------- themed dropdown: hides the native <select>, keeps it as the source of truth ---------- */
 const CHEV = '<svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const FSEL_CROWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-label="Prime"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg>';
 const closeFsel = except => document.querySelectorAll('.fsel.open').forEach(w => { if (w !== except) w.classList.remove('open'); });
 function fancySelect(sel) {
   if (sel.dataset.fancy) return;
@@ -4285,7 +4344,7 @@ function fancySelect(sel) {
     const cur = sel.options[sel.selectedIndex];
     btn.innerHTML = `<span>${esc(cur ? cur.text : '')}</span>${CHEV}`;
     menu.innerHTML = [...sel.options].map((o, i) =>
-      `<button type="button" role="option" class="fsel-opt${i === sel.selectedIndex ? ' on' : ''}" data-i="${i}">${esc(o.text)}</button>`).join('');
+      `<button type="button" role="option" class="fsel-opt${i === sel.selectedIndex ? ' on' : ''}${o.dataset.prime ? ' prime' : ''}${o.dataset.lock ? ' locked' : ''}" data-i="${i}">${esc(o.text)}${o.dataset.lock ? FSEL_CROWN : ''}</button>`).join('');
   };
   paint();
   sel._paint = paint;                                      // lets code that sets sel.value refresh the button
@@ -4300,6 +4359,7 @@ function fancySelect(sel) {
     e.preventDefault(); e.stopPropagation();
     const o = e.target.closest('.fsel-opt'); if (!o) return;
     wrap.classList.remove('open'); btn.focus();
+    if (sel.options[+o.dataset.i].dataset.lock) { if (window.hniPlans) window.hniPlans(); return; }   // Prime list, free account
     if (+o.dataset.i !== sel.selectedIndex) {
       sel.selectedIndex = +o.dataset.i;
       paint();
