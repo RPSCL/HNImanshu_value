@@ -2,6 +2,8 @@ import os
 import sys
 import time
 import random
+import signal
+import argparse
 import re
 import threading
 import xml.etree.ElementTree as ET
@@ -70,12 +72,34 @@ class Pace:
             self.gap *= 1.5                       # stay slower for the rest of the run
         shown = f"{1 / self.gap:.1f}"
         print(f"⏸ Google asked to slow down; pausing {pause}s, now {shown} calls/s", flush=True)
+        if OPT.max_slow and self.hits >= OPT.max_slow and not ABORT.is_set():   # Oracle: stop early, push what we have
+            ABORT.set()
+            print(f"🛑 Google asked to slow down {self.hits} times: stopping the news fetch; what is done is kept, push + deploy go on.", flush=True)
         if shown == "0.0" and not ABORT.is_set():                # the first 0.0 calls/s: no point going on (it once ran 5 hours like this)
             ABORT.set()
             print("🛑 Google keeps refusing (0.0 calls/s): stopping the news fetch here; what is done is kept, the build + deploy go on.", flush=True)
 
 
 PACE = Pace(RATE)
+
+# Options (GitHub runs it with none = the old behaviour; oracle/news.sh: --halves 2 --gap 15 --max-slow 3 --max-min 40 --quiet)
+_ap = argparse.ArgumentParser()
+_ap.add_argument("--halves",   type=int,   default=1,  help="split this run's stocks into N parts …")
+_ap.add_argument("--gap",      type=float, default=15, help="… with this many minutes of rest between parts")
+_ap.add_argument("--max-slow", type=int,   default=0,  help="stop fetching after Google says 'slow down' this many times (0 = only at 0.0 calls/s)")
+_ap.add_argument("--max-min",  type=float, default=0,  help="stop fetching after this many minutes of fetching (rest not counted; 0 = no limit)")
+_ap.add_argument("--quiet",    action="store_true",    help="don't print the 'no news' lines")
+OPT = _ap.parse_known_args()[0]
+
+# Ctrl+C / kill: 1st = stop asking Google, save what is done and finish normally; 2nd Ctrl+C = quit at once (nothing saved)
+def _stop(sig, _frame):
+    if ABORT.is_set() and sig == signal.SIGINT:
+        print("\n✋ Second Ctrl+C: quitting now, nothing saved from this run.", flush=True)
+        os._exit(130)
+    ABORT.set()
+    print("\n✋ Stopping: finishing the stocks in hand, then saving (Ctrl+C again = quit without saving)…", flush=True)
+signal.signal(signal.SIGINT, _stop)
+signal.signal(signal.SIGTERM, _stop)
 
 
 def google_news(query):
@@ -376,11 +400,37 @@ def main():
     done = found = 0
     asked = []                                                     # stocks really asked this run (the others stay "least recently fetched")
     t0 = time.time()
+    fetching = 0.0                                                 # minutes spent asking Google (rests between parts not counted)
 
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        futures = {pool.submit(fetch_stock, s, n): (s, n) for s, n in stocks}
+    # --halves N: portfolio stocks + the rest split into N parts, --gap minutes apart (spreads the load on Google)
+    n_parts = max(1, OPT.halves)
+    size    = -(-total // n_parts) if total else 0
+    parts   = [stocks[i:i + size] for i in range(0, total, size)] if size else []
 
-        for f in as_completed(futures, timeout=TASK_TIMEOUT * total):
+    for pi, part in enumerate(parts):
+      if ABORT.is_set():
+          break
+      if pi:
+          print(f"\n😴 Part {pi} of {len(parts)} done ({done} stocks). Resting {OPT.gap:g} min before part {pi + 1}…\n", flush=True)
+          if ABORT.wait(OPT.gap * 60):                             # Ctrl+C / kill during the rest → skip the next part
+              break
+          PACE.next = time.monotonic()
+      elif len(parts) > 1:
+          print(f"▶ Part 1 of {len(parts)}: {len(part)} stocks", flush=True)
+      tp = time.time()
+
+      # --max-min: a watchdog that stops the fetch when the fetching time is used up
+      if OPT.max_min:
+          left = OPT.max_min * 60 - fetching * 60
+          if left <= 0:
+              print("⏱ Fetching time used up: stopping here.", flush=True); break
+          timer = threading.Timer(left, lambda: (ABORT.set(), print(f"\n⏱ {OPT.max_min:g} min of fetching used up: stopping, push + deploy go on.", flush=True)))
+          timer.daemon = True; timer.start()
+
+      with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = {pool.submit(fetch_stock, s, n): (s, n) for s, n in part}
+
+        for f in as_completed(futures, timeout=TASK_TIMEOUT * len(part) + 60):
             sym, name = futures[f]
             if f.cancelled():
                 continue
@@ -412,10 +462,11 @@ def main():
                     accumulated.append(new_rows)
                     found += len(new_rows)
                     print(f"✓ [{done}/{total}] {sym} → {len(new_rows)} new", flush=True)
-                else:
+                elif not OPT.quiet:
                     print(f"· [{done}/{total}] {sym} → no new", flush=True)
             else:
-                print(f"• [{done}/{total}] {sym} → no news", flush=True)
+                if not OPT.quiet:
+                    print(f"• [{done}/{total}] {sym} → no news", flush=True)
 
             # Periodic save
             if done % SAVE_EVERY == 0 and accumulated:
@@ -432,6 +483,10 @@ def main():
                 eta     = (total - done) / rate if rate else 0
                 print(f"\n💾 Saved | {done}/{total} | ETA {eta/60:.1f} min\n", flush=True)
 
+      fetching += (time.time() - tp) / 60
+      if OPT.max_min:
+          timer.cancel()
+
     # Final save
     if accumulated:
         new_df = pd.concat(accumulated, ignore_index=True)
@@ -447,7 +502,7 @@ def main():
 
     elapsed = time.time() - t0
     if ABORT.is_set():
-        print(f"\n⚠️ Stopped early (Google throttling): {done} of {total} stocks asked, {total - done} left for the next run.", flush=True)
+        print(f"\n⚠️ Stopped early: {done} of {total} stocks asked, {total - done} left for the next run.", flush=True)
     print(f"\n✅ Done | {found} new rows | total {len(existing_df)} | time {elapsed/60:.1f} min", flush=True)
 
 
