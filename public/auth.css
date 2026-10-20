@@ -161,6 +161,8 @@ html.hni-free[data-theme=day] #pfBuilder, html.hni-free[data-theme=day] #weeklyB
 .hni-fork :nth-child(4){animation-delay:1.05s}.hni-fork :nth-child(5){animation-delay:1.4s}
 @keyframes hni-draw{0%{stroke-dashoffset:1}18%{stroke-dashoffset:0}78%{stroke-dashoffset:0;opacity:1}92%{opacity:.25}100%{stroke-dashoffset:0;opacity:1}}
 @media (prefers-reduced-motion:reduce){.hni-fork *{animation:none;stroke-dashoffset:0}}
+/* hover / keyboard focus on Navigate: the drawing stops and the whole fork shows */
+.hni-navbtn:hover .hni-fork *,.hni-navbtn:focus-visible .hni-fork *{animation:none;stroke-dashoffset:0;opacity:1}
 /* the page links it replaces: Fundamentals (Back to Screener, Value Screener, Weekly, Portfolio, PF Builder),
    PF Builder page (its page buttons), Screener (Portfolio, Fundamentals) */
 html.hni-nav #backBtn, html.hni-nav #pfBackV, html.hni-nav #weeklyBtn, html.hni-nav #pfBag, html.hni-nav #pfBuilder,
