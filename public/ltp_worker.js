@@ -1,28 +1,39 @@
-// ltp_worker.js — Cloudflare Worker (free plan) behind the website's "⟳ Live prices" button.
+// ltp_worker.js — Cloudflare Worker "hni-ltp": live prices (⟳ on the Portfolio page + a 10-minute timer) and PF Builder prices.
 //
 // Why a Worker: starting a GitHub workflow needs a GitHub token. A token in the website would be readable by anyone,
 // so it lives here, as a Worker secret, and the website only sends the signed-in user's Firebase login token.
 //
-// What it does on POST /run (Authorization: Bearer <Firebase ID token>):
-//   1. Google checks the login token (Identity Toolkit accounts:lookup) → uid + email. A fake token stops here.
-//   2. Admin only: the main "admin" account, or a user with a document in Firestore hni_admins/{uid}
-//      (read with the user's own token, so the Firestore rules decide, exactly as on the website).
-//   3. Not more than once every COOLDOWN_MIN minutes (asks GitHub when the last run started).
-//   4. Starts .github/workflows/ltp.yml on main (workflow_dispatch). The run takes about 1–2 minutes.
+// POST /run      (Authorization: Bearer <Firebase ID token>) → starts .github/workflows/ltp.yml
+//   • Any signed-in user. Google checks the login token first (a fake token stops there).
+//   • Admins (the main "admin" account, or a hni_admins/{uid} document): no limits at all. Any time of day, any day,
+//     as often as they like; the workflow is started with any_time = true so it fetches even after 15:40 / at weekends.
+//   • Everyone else:
+//       – once per 10 minutes, counted from the LAST price update (hni_market/ltp "asOf", the same for every user):
+//         if anyone fetched at 09:30, the next fetch is possible from 09:40 for everybody →
+//         {error: "Prices can be fetched only after 10 minutes (09:40)", wait: true, next: "09:40"}
+//       – Mon–Fri from 09:00 IST. After 15:40 only the day's closing-price run (once; the workflow's gate decides).
+//   • A run already going → {error: "already running", running: true}.
+// POST /builder  {symbols: [...]} → starts .github/workflows/builder_prices.yml (PF Builder's 1-year-back daily prices)
+//   • Admins and Prime members (hni_prime/{uid}, read with the user's own token: the Firestore rules refuse an ended Prime).
+//   • One run at a time → {error: "another chart is being prepared, try again in a few minutes", running: true}.
+// Timer (Cloudflare → Worker → Settings → Triggers → Cron: */10 3-10 * * MON-FRI, UTC): starts ltp.yml unless one is running;
+//   the workflow's own gate keeps it to market hours.
 //
 // Secrets / settings (Worker → Settings → Variables and Secrets):
 //   GH_TOKEN  (Secret)  fine-grained GitHub token: only repository RPSCL/HNImanshu_value, permission "Actions: Read and write"
 // Nothing else is secret: the Firebase web key below is public by design (same as in auth.js).
 
 const REPO = "RPSCL/HNImanshu_value";
-const WORKFLOW = "ltp.yml";
+const LTP_WORKFLOW = "ltp.yml";
+const BUILDER_WORKFLOW = "builder_prices.yml";
 const BRANCH = "main";
 const FIREBASE_KEY = "AIzaSyD1oA953pXZxBAuOR9ObSk6vAmKf1gyVbE";
 const PROJECT = "hnimanshu";
 const MAIN_ADMIN = "admin@users.hnimanshu.app";
-const ALLOW_ALL_USERS = false;     // true = any signed-in user may press the button (cooldown still applies)
-const COOLDOWN_MIN = 3;
+const USER_GAP_MIN = 10;              // non-admins: minutes between price updates (from the last update, shared by everyone)
+const MAX_SYMBOLS = 300;              // PF Builder: most stocks one request may ask prices for
 const ORIGINS = ["https://hnimanshu-value.web.app", "https://hnimanshu-value.firebaseapp.com"];
+const FS = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
 
 export default {
 	async fetch(req, env) {
@@ -34,48 +45,96 @@ export default {
 			"Access-Control-Max-Age": "86400",
 			"Vary": "Origin",
 		};
-		const reply = (status, body) => new Response(JSON.stringify(body), {status, headers: {...cors, "Content-Type": "application/json"}});
-		if (req.method === "OPTIONS") return new Response(null, {status: 204, headers: cors});
-		if (req.method !== "POST" || new URL(req.url).pathname !== "/run") return reply(404, {error: "not found"});
-		if (!ORIGINS.includes(origin)) return reply(403, {error: "wrong site"});
+		const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+		if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+		const path = new URL(req.url).pathname;
+		if (req.method !== "POST" || (path !== "/run" && path !== "/builder")) return reply(404, { error: "not found" });
+		if (!ORIGINS.includes(origin)) return reply(403, { error: "wrong site" });
 
-		// 1. who is this? (Google verifies the token)
-		const idToken = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-		if (!idToken) return reply(401, {error: "not signed in"});
-		const look = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_KEY}`, {
-			method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({idToken}),
-		});
-		const user = look.ok ? ((await look.json()).users || [])[0] : null;
-		if (!user) return reply(401, {error: "login expired, sign in again"});
+		try {
+			// 1. who is this? (Google verifies the token)
+			const idToken = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+			if (!idToken) return reply(401, { error: "not signed in" });
+			const look = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_KEY}`, {
+				method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }),
+			});
+			const user = look.ok ? ((await look.json()).users || [])[0] : null;
+			if (!user) return reply(401, { error: "login expired, sign in again" });
+			const asUser = (p) => fetch(`${FS}/${p}`, { headers: { Authorization: `Bearer ${idToken}` } });   // the Firestore rules decide
+			const admin = user.email === MAIN_ADMIN || (await asUser(`hni_admins/${encodeURIComponent(user.localId)}`)).ok;
 
-		// 2. admin?
-		let admin = user.email === MAIN_ADMIN;
-		if (!admin && !ALLOW_ALL_USERS) {
-			const r = await fetch(`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/hni_admins/${encodeURIComponent(user.localId)}`,
-				{headers: {Authorization: `Bearer ${idToken}`}});
-			admin = r.ok;                                        // 200 = the admin document exists (rules let a user read their own)
-		}
-		if (!admin && !ALLOW_ALL_USERS) return reply(403, {error: "admins only"});
+			if (path === "/builder") return await builder(req, env, reply, admin, asUser, user);
 
-		const gh = (path, init = {}) => fetch(`https://api.github.com/repos/${REPO}${path}`, {...init, headers: {
-			Authorization: `Bearer ${env.GH_TOKEN}`, Accept: "application/vnd.github+json",
-			"X-GitHub-Api-Version": "2022-11-28", "User-Agent": "hnimanshu-ltp-worker", ...(init.headers || {}),
-		}});
-
-		// 3. cooldown: the last run of ltp.yml
-		const runs = await gh(`/actions/workflows/${WORKFLOW}/runs?per_page=1`);
-		if (runs.ok) {
-			const last = ((await runs.json()).workflow_runs || [])[0];
-			if (last) {
-				const ago = (Date.now() - Date.parse(last.created_at)) / 60000;
-				if (last.status !== "completed" || ago < COOLDOWN_MIN)
-					return reply(429, {error: last.status !== "completed" ? "already running" : `ran ${Math.round(ago * 60)} s ago`, running: last.status !== "completed"});
+			// 2. /run: limits for everyone but admins
+			const ist = istNow();
+			if (!admin) {
+				if (ist.dow >= 6) return reply(429, { error: "Market closed today. Live prices run Mon–Fri from 09:00 IST.", wait: true });
+				if (ist.mins < 9 * 60) return reply(429, { error: "Live prices start at 09:00 IST.", wait: true, next: "09:00" });
+				const m = await asUser("hni_market/ltp");
+				const asOf = m.ok ? (((await m.json()).fields || {}).asOf || {}).stringValue : null;   // "YYYY-MM-DD HH:MM" (IST)
+				if (asOf) {
+					const last = Date.parse(asOf.replace(" ", "T") + ":00+05:30");
+					const next = last + USER_GAP_MIN * 60000;
+					if (Date.now() < next) {
+						const hhmm = istNow(next).hhmm;
+						return reply(429, { error: `Prices can be fetched only after ${USER_GAP_MIN} minutes (${hhmm})`, wait: true, next: hhmm, asOf });
+					}
+					if (ist.mins > 15 * 60 + 40 && asOf.slice(0, 10) === ist.date && asOf.slice(11) >= "15:40")
+						return reply(429, { error: `Market closed. Today's closing prices are in (${asOf.slice(11)}).`, wait: true, asOf });
+				}
 			}
-		}
 
-		// 4. start it
-		const go = await gh(`/actions/workflows/${WORKFLOW}/dispatches`, {method: "POST", body: JSON.stringify({ref: BRANCH})});
-		if (go.status !== 204) return reply(502, {error: `GitHub said ${go.status}`});
-		return reply(200, {ok: true});
+			// 3. one run at a time (GitHub)
+			if (await running(env, LTP_WORKFLOW)) return reply(429, { error: "already running", running: true });
+
+			// 4. start it (admins: any time of day)
+			const go = await gh(env, `/actions/workflows/${LTP_WORKFLOW}/dispatches`, { method: "POST",
+				body: JSON.stringify({ ref: BRANCH, inputs: { any_time: admin ? "true" : "false" } }) });
+			if (go.status !== 204) return reply(502, { error: `GitHub said ${go.status}` });
+			return reply(200, { ok: true, admin });
+		} catch (e) {
+			return reply(500, { error: String(e && e.message || e).slice(0, 200) });
+		}
+	},
+
+	// every 10 minutes in market hours (Cron Trigger): live prices for everybody
+	async scheduled(event, env, ctx) {
+		ctx.waitUntil((async () => {
+			if (await running(env, LTP_WORKFLOW)) return;
+			await gh(env, `/actions/workflows/${LTP_WORKFLOW}/dispatches`, { method: "POST", body: JSON.stringify({ ref: BRANCH }) });
+		})());
 	},
 };
+
+// PF Builder: day-by-day prices for the stocks of its 1-year-back list (admins and Prime members)
+async function builder(req, env, reply, admin, asUser, user) {
+	const prime = admin || (await asUser(`hni_prime/${encodeURIComponent(user.localId)}`)).ok;   // ended Prime: the rules refuse the read
+	if (!prime) return reply(403, { error: "PF Builder is part of Prime" });
+	const body = await req.json().catch(() => ({}));
+	const syms = [...new Set((Array.isArray(body.symbols) ? body.symbols : []).map((s) => String(s).toUpperCase().trim())
+		.filter((s) => /^[A-Z0-9&._-]{1,20}$/.test(s)))].slice(0, MAX_SYMBOLS);
+	if (await running(env, BUILDER_WORKFLOW)) return reply(429, { error: "another chart is being prepared, try again in a few minutes", running: true });
+	const go = await gh(env, `/actions/workflows/${BUILDER_WORKFLOW}/dispatches`, { method: "POST",
+		body: JSON.stringify({ ref: BRANCH, inputs: { symbols: syms.join(",") } }) });
+	if (go.status !== 204) return reply(502, { error: `GitHub said ${go.status}` });
+	return reply(200, { ok: true, symbols: syms.length });
+}
+
+function gh(env, path, init = {}) {
+	return fetch(`https://api.github.com/repos/${REPO}${path}`, { ...init, headers: {
+		Authorization: `Bearer ${env.GH_TOKEN}`, Accept: "application/vnd.github+json",
+		"X-GitHub-Api-Version": "2022-11-28", "User-Agent": "hnimanshu-ltp-worker", ...(init.headers || {}),
+	} });
+}
+async function running(env, workflow) {                     // the latest run of that workflow is still queued / in progress
+	const r = await gh(env, `/actions/workflows/${workflow}/runs?per_page=1`);
+	if (!r.ok) return false;
+	const last = ((await r.json()).workflow_runs || [])[0];
+	return !!(last && last.status !== "completed");
+}
+function istNow(ms = Date.now()) {                          // India time parts
+	const d = new Date(ms + 5.5 * 3600e3);
+	const p = (n) => String(n).padStart(2, "0");
+	return { dow: d.getUTCDay() === 0 ? 7 : d.getUTCDay(), mins: d.getUTCHours() * 60 + d.getUTCMinutes(),
+		hhmm: `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`, date: `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}` };
+}

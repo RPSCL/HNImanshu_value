@@ -492,11 +492,11 @@ function openNav() {
   }
   const here = pageNow();
   $(".hni-nvl", navBox).innerHTML = NAV.filter((n) => n.k !== here).map((n) => {
-    const lock = n.prime && !PRO_NOW && !!current;                       // logged out: the login comes first, plans after
+    const lock = n.prime && !PRO_NOW;                                    // purple + crown for anyone without Prime, logged out too
     const tag = n.href ? `a href="${n.href}"` : 'button type="button"';
     // purple tile + crown only for a locked (free account) item; Prime members see it like every other page
     return `<${tag} class="hni-nv${lock ? " pr lock" : ""}" data-k="${n.k}">
-      <span class="ic">${NAV_ICON[n.k]}</span><span class="tx"><b>${esc(n.t)}</b><small>${esc(lock ? "Part of Prime · see plans" : n.s)}</small></span>
+      <span class="ic">${NAV_ICON[n.k]}</span><span class="tx"><b>${esc(n.t)}</b><small>${esc(lock ? (current ? "Part of Prime · see plans" : "Part of Prime · log in first") : n.s)}</small></span>
       ${lock ? CROWN.replace('class="au-crown"', 'class="cr"') : '<span class="go">›</span>'}</${n.href ? "a" : "button"}>`;
   }).join("");
   navBox.classList.add("open"); syncLock();
@@ -513,7 +513,14 @@ function weeklyNote() {                                                 // Teleg
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
   }
   m.classList.add("open"); syncLock();
+  fadeAway(m, () => { m.classList.remove("open"); syncLock(); });
 }
+function fadeAway(el, done, ms = 5000) {                                // an info popup closes itself: fade, then close
+  clearTimeout(el._fade); el.style.transition = ""; el.style.opacity = "";
+  el._fade = setTimeout(() => { el.style.transition = "opacity .6s"; el.style.opacity = "0";
+    el._fade = setTimeout(() => { done(); el.style.transition = ""; el.style.opacity = ""; }, 600); }, ms);
+}
+window.hniFadeAway = fadeAway;
 
 // ---------- page wiring ----------
 const SIGNED_HINT = "hni_signed";                          // "1" = signed in last time (only a hint: Fundamentals checks for real)

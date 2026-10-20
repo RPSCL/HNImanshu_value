@@ -7,9 +7,9 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141414'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='18' font-weight='bold' fill='%23a89060' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E">
 <meta name="description" content="Split a fund into index ETFs, value stocks and momentum stocks by fixed rules, with a 1-year backtest.">
 <style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>
-<link rel="stylesheet" href="auth.css?v=9">
+<link rel="stylesheet" href="auth.css?v=10">
 <style>html:not(.pb-admin) .lead,html:not(.pb-admin) .card,html:not(.pb-admin) .tabs,html:not(.pb-admin) #out,html:not(.pb-admin) .disc{display:none}</style>
-<script type="module" src="auth.js?v=9"></script>
+<script type="module" src="auth.js?v=10"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>
@@ -151,6 +151,24 @@ details.sec>.body{padding:0 14px 14px}
 .btn.addpf{border-color:var(--brass);color:var(--brass)}
 .btn.addpf:hover{background:var(--brassbg)}
 .addpart{display:flex;justify-content:flex-end;margin:0 0 10px}
+/* Add to portfolio: the check box */
+.pb-box{width:min(560px,100%);max-height:88vh;overflow:auto}
+.pb-sub{margin:0 0 10px;font-size:12.5px;color:var(--mute);line-height:1.5}
+.pb-none{margin:6px 0 12px;padding:14px;border:1px dashed var(--bad);border-radius:8px;color:var(--bad);font:600 13px var(--mono);text-align:center}
+.pb-err{margin:6px 0 0;font-size:12.5px;color:var(--bad)}
+.pb-err:empty{display:none}
+.pb-tw{max-height:42vh;overflow:auto;border:1px solid var(--line);border-radius:8px;margin:0 0 10px}
+.pb-tw table{width:100%;border-collapse:collapse;font:12.5px var(--mono)}
+.pb-tw th{position:sticky;top:0;background:var(--panel2);color:var(--faint);font:600 10.5px var(--mono);text-transform:uppercase;letter-spacing:.05em;text-align:left;padding:7px 10px;border-bottom:1px solid var(--line)}
+.pb-tw td{padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+.pb-tw tr:last-child td{border-bottom:0}
+.pb-tw .r{text-align:right}
+.pb-tw small{display:block;font-size:10.5px;color:var(--faint)}
+.pb-tw i{font-style:normal;font-size:10px;color:var(--faint);margin-left:4px}
+.pb-sum{display:flex;flex-wrap:wrap;gap:6px 16px;margin:0 0 10px;font:500 12px var(--mono);color:var(--faint)}
+.pb-sum b{color:var(--ink)}
+.pb-acts{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.pb-acts .btn{justify-content:center;height:40px}
 .cashav{margin:10px 0 0;font:500 12px var(--mono);color:var(--faint)}
 .cashav b{color:var(--ink)}
 .cashav button{margin-left:8px;border:1px solid var(--line);background:var(--panel2);color:var(--brass);font:600 11.5px var(--mono);padding:3px 9px;border-radius:999px;cursor:pointer}
@@ -801,27 +819,112 @@ document.addEventListener('keydown', e => {
   el.dispatchEvent(new Event('change', {bubbles: true}));
 });
 $('#csv').addEventListener('click', csv);
-/* ---------- Add to portfolio ----------
-   The picks (symbol, its share of the fund, the price here) are handed to the Portfolio page in this browser
-   (localStorage 'hni_pf_basket'). There they are priced at the LTP, sized to whole units within your cash (charges included),
-   shown for a check, and saved as buys only when you confirm. Nothing is bought here. */
 const SRC_PART = {value: 'Value', mom: 'Momentum'};
-function addToPortfolio(only) {                              // only = 'index' | 'value' | 'mom', or all parts
+/* ---------- Add to portfolio: checked HERE, saved only when you press Buy ----------
+   Your Portfolio (hni_portfolio, through auth.js) is loaded; each pick is priced at the LTP (live price when anyone holds it,
+   else this page's price), bought in whole units by its weight, and kept within your cash with charges (the same charge
+   rates as the Portfolio page, including any you changed there). Close the box and nothing changes; you stay here.
+   Buy → the trades are saved with a Remark (PF Builder → part), then the Portfolio opens. */
+const PF_RATES = {brokPct:0, brokCap:0, stt:0.1, exch:0.00297, sebi:0.0001, stamp:0.015, gst:18, dp:15.93};   // = Factor Screener's defaults
+function buyCharges(qty, px, r) {
+  const v = qty * px;
+  let brok = v * r.brokPct / 100; if (r.brokCap > 0) brok = Math.min(brok, r.brokCap);
+  const exch = v * r.exch / 100, sebi = v * r.sebi / 100;
+  return Math.round((brok + v * r.stt / 100 + exch + sebi + v * r.stamp / 100 + (brok + exch + sebi) * r.gst / 100) * 100) / 100;
+}
+function cashOf(txns) {
+  let c = 0;
+  txns.forEach(x => {
+    if (x.t === 'in') c += +x.amt || 0; else if (x.t === 'out') c -= +x.amt || 0;
+    else if (x.t === 'buy') c -= (+x.qty || 0) * (+x.px || 0) + (+x.ch || 0);
+    else if (x.t === 'sell') c += (+x.qty || 0) * (+x.px || 0) - (+x.ch || 0);
+  });
+  return Math.floor(c * 100) / 100;
+}
+function planBuys(items, cash, rates) {                       // whole units within each pick's share; everything within the cash
+  const want = items.reduce((t, x) => t + x.target, 0);
+  let k = want > 0 && cash > 0 ? Math.min(1, cash / want) : 0;
+  const at = k => items.map(x => { const qty = k > 0 ? Math.floor(x.target * k / x.px) : 0;
+    return Object.assign({}, x, {qty, amt: qty * x.px, ch: qty > 0 ? buyCharges(qty, x.px, rates) : 0}); });
+  let rows = at(k), tot = rows.reduce((t, r) => t + r.amt + r.ch, 0);
+  for (let i = 0; i < 400 && k > 0 && tot > cash + 1e-6; i++) { k *= 0.997; rows = at(k); tot = rows.reduce((t, r) => t + r.amt + r.ch, 0); }
+  return {rows, tot};
+}
+const pfId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const todayIso = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+function pickBox(title) {                                     // the check box (closes on ×, Esc or a click outside: you stay here)
+  let w = document.querySelector('.pb-back');
+  if (!w) {
+    w = document.createElement('div'); w.className = 'au-back pb-back';
+    w.innerHTML = '<div class="au-box pb-box" role="dialog" aria-modal="true" aria-labelledby="pbT"><button class="au-x" type="button" aria-label="Close">×</button><h2 class="au-title" id="pbT"></h2><div class="pb-body"></div></div>';
+    document.body.appendChild(w);
+    const close = () => { if (!w._busy) w.classList.remove('open'); };
+    w.addEventListener('click', e => { if (e.target === w || e.target.closest('.au-x')) close(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && w.classList.contains('open')) close(); });
+  }
+  $('#pbT', w).textContent = title; w._busy = false; w.classList.add('open');
+  return w;
+}
+async function addToPortfolio(only) {                        // only = 'index' | 'value' | 'mom', or all parts
   if (!LAST || !LAST.fund) return;
   const pairs = new Set(((LAST.pk && LAST.pk.notes) || []).map(n => n.win));   // ETFs holding an IT/Gold or ALPHA/Gold slot
   const by = new Map();
   LAST.A.parts.filter(p => !only || p.k === only).forEach(p => p.rows.forEach(x => {
     if (!(num(x.price) && x.price > 0 && x.target > 0)) return;
     const part = p.k === 'index' ? (pairs.has(x.sym) ? 'ETF pair' : 'ETF') : SRC_PART[p.k] || p.label;
-    const o = by.get(x.sym) || {sym: x.sym, name: x.name || x.sym, target: 0, px: x.price, etf: !!x.etf, parts: []};
+    const o = by.get(x.sym) || {sym: x.sym, name: x.name || x.sym, target: 0, px: x.price, etf: !!x.etf, pe: x.pe, score: x.score, parts: []};
     o.target += x.target; if (!o.parts.includes(part)) o.parts.push(part); by.set(x.sym, o);   // GOLDBEES can fill both ETF slots: one buy
   }));
-  const items = [...by.values()].map(o => Object.assign(o, {src: 'PF Builder → ' + o.parts.join(' + ')}));
+  let items = [...by.values()].map(o => Object.assign(o, {src: 'PF Builder → ' + o.parts.join(' + ')}));
   if (!items.length) return;
   const scope = only ? (LAST.A.parts.find(p => p.k === only) || {}).label : 'all parts';
-  try { localStorage.setItem('hni_pf_basket', JSON.stringify({at: Date.now(), fund: LAST.fund, date: LAST.date, scope, items})); }
-  catch (e) { return status('Could not hand the list over (browser storage is off).'); }
-  location.href = 'factor#/portfolio';
+  const w = pickBox('Add to portfolio'), body = $('.pb-body', w);
+  body.innerHTML = '<p class="pb-sub">Loading your portfolio…</p>';
+  let d, mkt;
+  try { d = await window.hniStore.load() || {}; mkt = await window.hniStore.market().catch(() => null); }
+  catch (e) { body.innerHTML = `<p class="pb-err">Could not load your portfolio (${esc(e.code || e.message || e)}).</p>`; return; }
+  const txns = Array.isArray(d.txns) ? d.txns : [], rates = Object.assign({}, PF_RATES, d.rates || {}), cash = Math.max(0, cashOf(txns));
+  const live = (mkt && mkt.prices) || {};
+  items = items.map(x => Object.assign(x, {live: !!(live[x.sym] && live[x.sym].ltp), px: (live[x.sym] && live[x.sym].ltp) || x.px}));
+  const fit = planBuys(items, cash, rates), full = planBuys(items, Infinity, rates);
+  const buys = fit.rows.filter(r => r.qty > 0), skipped = fit.rows.length - buys.length;
+  const short = Math.max(0, Math.ceil(full.tot - cash));
+  const row = r => `<tr><td><b>${esc(r.sym)}</b><small>${esc(r.parts.join(' + '))}</small></td><td class="r">${fmt(r.qty, 0)}</td>
+    <td class="r">${fmt(r.px, 2)}${r.live ? '<i>live</i>' : ''}</td><td class="r">${fmt(r.amt, 0)}</td></tr>`;
+  body.innerHTML = `<p class="pb-sub">${items.length} picks (${esc(scope)}) · fund ${rs(LAST.fund)}. Bought at the LTP, by weight, within your cash (charges included).</p>
+    ${buys.length ? `<div class="pb-tw"><table><thead><tr><th>Stock</th><th class="r">Qty</th><th class="r">LTP ₹</th><th class="r">Amount ₹</th></tr></thead><tbody>${buys.map(row).join('')}</tbody></table></div>`
+      : '<p class="pb-none">Not enough cash to complete all transactions.</p>'}
+    ${buys.length && skipped ? `<p class="pb-sub">${skipped} more pick${skipped > 1 ? 's' : ''} left out: not enough cash for one unit.</p>` : ''}
+    <div class="pb-sum"><span>Cash available <b>${rs(cash)}</b></span>${buys.length ? `<span>To invest <b>${rs(fit.tot)}</b></span><span>Cash after <b>${rs(cash - fit.tot)}</b></span>` : ''}</div>
+    ${short > 0 ? `<p class="pb-sub">${buys.length ? 'Not enough cash to complete all transactions: ' : ''}the full list needs ${rs(full.tot)}, ${rs(short)} more than your cash.</p>` : ''}
+    <p class="pb-err" aria-live="polite"></p>
+    <div class="pb-acts">
+      ${buys.length ? `<button type="button" class="btn primary" data-buy="fit">Buy ${buys.length} within cash</button>` : ''}
+      ${short > 0 ? `<button type="button" class="btn addpf" data-buy="full">Add ₹${fmt(short, 0)} cash and buy all ${full.rows.filter(r => r.qty > 0).length}</button>` : ''}
+    </div>`;
+  body.querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', async () => {
+    const plan = b.dataset.buy === 'full' ? full : fit, payIn = b.dataset.buy === 'full' ? short : 0, rows = plan.rows.filter(r => r.qty > 0), dt = todayIso();
+    if (!rows.length) return;
+    w._busy = true; body.querySelectorAll('button').forEach(x => { x.disabled = true; }); b.textContent = 'Saving…';
+    try {
+      const cur = await window.hniStore.load() || {}, base = Array.isArray(cur.txns) ? cur.txns : [];   // fresh copy: nothing typed meanwhile is lost
+      if (base.length + rows.length + (payIn ? 1 : 0) > 3000) throw new Error('Transaction limit reached (3000)');
+      const add = payIn ? [{id: pfId(), t: 'in', amt: payIn, date: dt}] : [];
+      rows.forEach(r => {
+        const rec = {id: pfId(), t: 'buy', sym: r.sym, qty: r.qty, px: +r.px.toFixed(2), ch: r.ch, date: dt, src: r.src};
+        if (num(r.pe) && r.pe > 0) rec.pe = +(+r.pe).toFixed(2);
+        if (num(r.score)) rec.sc = Math.round(r.score);
+        if (r.etf) rec.name = String(r.name || r.sym).slice(0, 80);
+        add.push(rec);
+      });
+      await window.hniStore.save({txns: base.concat(add), rates: cur.rates || {}});
+      location.href = 'factor#/portfolio';                      // only now: the trades are saved
+    } catch (e) {
+      w._busy = false; body.querySelectorAll('button').forEach(x => { x.disabled = false; });
+      b.textContent = b.dataset.buy === 'full' ? 'Try again: add cash and buy all' : 'Try again';
+      $('.pb-err', body).textContent = 'Not saved (' + (e.code || e.message || e) + ').';
+    }
+  }));
 }
 $('#addPf').addEventListener('click', () => addToPortfolio());
 $('#out').addEventListener('click', e => { const b = e.target.closest('[data-addpart]'); if (b) addToPortfolio(b.dataset.addpart); });
@@ -868,6 +971,7 @@ $('#weeklyBtn').addEventListener('click', async () => {
     document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
   }
   m.classList.add('open');
+  if (window.hniFadeAway) window.hniFadeAway(m, () => m.classList.remove('open'));   // closes itself after 5 s
 });
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   TAB = b.dataset.tab; document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b)); paint();
