@@ -49,7 +49,11 @@ BATCH = 50                                   # Angel getMarketData: max 50 token
 INDEX_TOKENS = {"99926000": "NIFTY", "99926009": "BANKNIFTY"}   # Angel tokens of the NIFTY 50 and NIFTY BANK indices
 SYMBOL_CHANGE_URL = "https://nsearchives.nseindia.com/content/equities/symbolchange.csv"
 EQUITY_URLS = ["https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv",          # main board
-               "https://nsearchives.nseindia.com/emerge/corporates/content/SME_EQUITY_L.csv"]   # SME (Emerge)
+               "https://nsearchives.nseindia.com/emerge/corporates/content/SME_EQUITY_L.csv",   # SME (Emerge)
+               "https://nsearchives.nseindia.com/content/equities/eq_etfseclist.csv"]   # ETFs: not in EQUITY_L, so they were flagged "not listed"
+# ETFs the PF Builder buys: always counted as listed (even on a day NSE's ETF file can't be read); Angel prices them like stocks
+KNOWN_ETFS = {"GOLDBEES", "ITBEES", "ALPHA", "JUNIORBEES", "MON100", "HNGSNGBEES", "FMCGIETF", "NIFTYBEES", "BANKBEES",
+              "LIQUIDBEES", "SILVERBEES", "MAFANG", "MOM100", "NIF100BEES", "CPSEETF", "PSUBNKBEES"}
 NSE_HEAD = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", "Referer": "https://www.nseindia.com/"}
 
 
@@ -87,7 +91,7 @@ def nse_master():
 			continue
 		head = [c.strip().upper() for c in rows[0]]
 		si = next((i for i, c in enumerate(head) if c == "SYMBOL"), 0)
-		ni = next((i for i, c in enumerate(head) if "NAME" in c), 1)
+		ni = next((i for i, c in enumerate(head) if "NAME" in c), 1)   # "NAME OF COMPANY"; the ETF file: "SecurityName"
 		for r_ in rows[1:]:
 			if len(r_) > max(si, ni) and r_[si].strip():
 				out[r_[si].strip().upper()] = r_[ni].strip()
@@ -177,11 +181,12 @@ def main():
 	names, not_listed = {}, []
 	for s in syms:
 		live = renames.get(s, s)
-		if master:
+		if live in KNOWN_ETFS or (live in master) or (live in tmap and live.endswith(("BEES", "ETF"))):   # ETFs are listed (Angel has them too)
 			if live in master:
 				names[live] = master[live]
-			else:
-				not_listed.append(s)
+			continue
+		if master:
+			not_listed.append(s)
 		elif live not in tmap:                              # NSE unreachable: Angel's list is the fallback check
 			not_listed.append(s)
 	log(f"NSE check: {len(syms) - len(not_listed)} of {len(syms)} held symbols listed"

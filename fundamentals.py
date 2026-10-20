@@ -1801,8 +1801,9 @@ body.day .fsel-opt.prime{color:#5b2d9c}
 .pfb-tbl .r{text-align:right}
 .pfb-tbl i{font-style:normal;font-size:10px;color:var(--faint);margin-left:4px}
 .pfb-tbl tr.z td{color:var(--faint);text-decoration:line-through}
-.pf-src{display:block;font:500 10.5px var(--mono);color:var(--faint);letter-spacing:.01em;white-space:normal;min-width:120px}
-.pf-zh .pf-zsrc{margin-top:3px}.pf-zh .pf-zsrc .pf-src{white-space:normal}
+.pf-src{display:block;font:500 10.5px var(--mono);color:var(--faint);letter-spacing:.01em;white-space:nowrap}
+.pf-zh .pf-zsrc{margin-top:3px}.pf-zh .pf-zsrc .pf-src{overflow:hidden;text-overflow:ellipsis}
+.tl-etf .a{background:radial-gradient(circle at 35% 30%,#ffe08a,#f0a020 55%,#b86c00);box-shadow:0 0 6px 1px rgba(240,160,32,.75)}.tl-etf .g{background:radial-gradient(circle at 35% 30%,#a6f5a0,#3ec65a 55%,#1d8a32);box-shadow:0 0 6px 1px rgba(62,198,90,.75)}
 .pfb-sum{display:flex;flex-wrap:wrap;gap:6px 16px;font:500 12px var(--mono);color:var(--faint)}
 .pfb-sum b{color:var(--ink)}
 .pfb-sum i{font-style:normal;font-size:11px}
@@ -3218,7 +3219,7 @@ async function pfApplyRenames() {
 }
 /* held symbols that portfolio_ltp.py did not find on NSE's master list today → one line, each symbol opens "Update symbol" */
 function pfNotListed(open) {
-  const nl = new Set((PF.mkt && PF.mkt.notListed) || []), bad = open.filter(r => nl.has(r.sym)).map(r => r.sym);
+  const nl = pfNotListedSet(), bad = open.filter(r => nl.has(r.sym)).map(r => r.sym);   // ETFs never count
   if (!bad.length) return '';
   return `<p class="pf-err">⚠ Not on NSE's list today: ${bad.map(x => `<button type="button" class="btn ghost" data-rn="${esc(x)}" title="Update the symbol / name">${esc(x)} ✎</button>`).join(' ')}
     — delisted, suspended or the symbol changed. Tap one to update it.</p>`;
@@ -3227,11 +3228,22 @@ function pfNotListed(open) {
    doc every 15 s until they land (about 1–2 minutes), and redraws */
 const pfCanRefresh = () => !!(WEB && window.hniStore && window.hniStore.canRefresh && window.hniStore.canRefresh());
 let PF_POLL = null;
+/* Who may fetch: admins any time, no limit. Everyone else once per 10 minutes from the LAST update (hni_market/ltp asOf,
+   the same for every user: if anyone fetched at 09:30, the next fetch opens at 09:40 for all). The Worker enforces it;
+   here the button never locks, it only says when the next fetch is possible. */
+const PF_GAP_MIN = 10;
+const istHm = ms => new Date(ms + 330 * 60000).toISOString().slice(11, 16);
 async function pfRefresh(btn) {
-  if (PF_POLL) return;
-  btn.disabled = true; btn.classList.add('spin');
+  if (PF_POLL) return toast('Fetching live prices…');
+  try { const m = await window.hniStore.market(); if (m && m.asOf && (!PF.mkt || m.asOf !== PF.mkt.asOf)) { PF.mkt = m; if ((location.hash || '') === '#/portfolio') route(); } } catch (e) {}   // latest shared time
+  const admin = window.hniAdmin ? await window.hniAdmin.catch(() => false) : false;
+  if (!admin && PF.mkt && PF.mkt.asOf) {
+    const next = Date.parse(PF.mkt.asOf.replace(' ', 'T') + ':00+05:30') + PF_GAP_MIN * 60000;
+    if (Date.now() < next) return toast(`Prices can be fetched only after ${PF_GAP_MIN} minutes (${istHm(next)})`);
+  }
+  btn.classList.add('spin');
   let r; try { r = await window.hniStore.refresh(); } catch (e) { r = {error: 'no connection'}; }
-  if (r.error && !r.running) { btn.disabled = false; btn.classList.remove('spin'); return toast('Live prices: ' + r.error); }
+  if (r.error && !r.running) { btn.classList.remove('spin'); return toast(r.wait ? r.error : 'Live prices: ' + r.error); }
   toast('Live prices in about a minute');
   const was = PF.mkt && PF.mkt.asOf, t0 = Date.now();
   PF_POLL = setInterval(async () => {
@@ -3314,7 +3326,7 @@ const PFC = {
   val: {k:'val', label:'Value ₹', v:r => r.value, f:r => r.priced ? fmt(r.value, 0) : `<span class="na" title="No price: valued at cost">${fmt(r.value, 0)}</span>`},
   pnl: {k:'pnl', label:'P&L', tip:'Unrealised profit / loss, ₹ and %', v:r => r.priced ? r.pnlPct : null, x:r => r.priced ? fmt(r.pnl, 0) : '', f:pnlCell},
   wt: {k:'wt', label:'Wt %', tip:'Share of the holdings value', v:r => r.wt, f:r => fmt(r.wt, 1)},
-  vd: {k:'vd', label:'Checklist', tip:'Checklist light (green / amber / red) and its score: tap the stock name to see every check. Not investment advice.', v:r => r.vd ? r.vd.pct : null, x:r => r.vd ? r.vd.label + ' ' + Math.round(r.vd.pct) + '%' : '', f:r => r.vd ? vdChip(r.vd) : NA},
+  vd: {k:'vd', label:'Checklist', tip:'Checklist light (green / amber / red) and its score: tap the stock name to see every check. Not investment advice.', v:r => r.vd ? r.vd.pct : null, x:r => r.vd ? r.vd.label + ' ' + Math.round(r.vd.pct) + '%' : '', f:r => r.vd ? vdChip(r.vd) : pfIsEtf(r.sym, r.name) ? etfChip() : NA},
   score: Object.assign(pfKnown(C.score), {label:'Score'}), mom: Object.assign(pfKnown(C.mom), {label:'Mom.'}), trend: pfKnown(C.trend), flags: pfKnown(C.flags),
   ind: pfKnown(C.ind), name: pfKnown(Object.assign({}, C.name, {f: s => `<span class="co">${esc(s.name)}</span>`})),
   msym: Object.assign({}, C.sym, {f: r => pfSymCell(r) + `<div class="pf-co">${fmt(r.qty, 0)} @ ${fmt(r.avg, 2)}</div>` + (r.remark ? `<div class="pf-src">${esc(r.remark)}</div>` : '')}),
@@ -3543,13 +3555,13 @@ function pfPhone(P) {
   const host = $('.pf-zp');
   const sec = (title, n, extra = '') => { const p = document.createElement('section'); p.className = 'pf-panel pf-zs';
     p.innerHTML = `<h3 class="pf-h">${title} <span>${n}</span>${extra}</h3><div class="pf-zlist"></div>`; host.appendChild(p); return $('.pf-zlist', p); };
-  const nl = new Set((PF.mkt && PF.mkt.notListed) || []);
+  const nl = pfNotListedSet();
   // holdings: Qty · Avg / % ; SYMBOL / P&L ; Invested / LTP (day %)
   sec('Holdings', open.length).innerHTML = open.length ? open.map(r => {
     const c = r.priced ? (r.pnl >= 0 ? 'up' : 'dn') : '';
     return `<div class="pf-zh" data-news="${esc(r.sym)}" role="button" tabindex="0">
       <div class="a"><span>Qty. ${fmt(r.qty, 0)} <i>•</i> Avg. ${f2(r.avg)}</span><span class="${c}">${r.priced ? pctTxt(r.pnlPct) : ''}</span></div>
-      <div class="b"><b>${esc(r.sym)}${nl.has(r.sym) ? ' <em class="dn">⚠</em>' : ''} ${vdChip(verdict(r.sym, P))}</b><b class="${c}">${r.priced ? (r.pnl > 0 ? '+' : r.pnl < 0 ? '−' : '') + f2(Math.abs(r.pnl)) : '–'}</b></div>
+      <div class="b"><b>${esc(r.sym)}${nl.has(r.sym) ? ' <em class="dn">⚠</em>' : ''} ${(v => v ? vdChip(v) : pfIsEtf(r.sym, r.name) ? etfChip() : '')(r.vd || verdict(r.sym, P))}</b><b class="${c}">${r.priced ? (r.pnl > 0 ? '+' : r.pnl < 0 ? '−' : '') + f2(Math.abs(r.pnl)) : '–'}</b></div>
       <div class="a"><span>Invested ${f2(r.qty * r.avg)}</span><span>LTP ${r.ltp == null ? '–' : f2(r.ltp)}${r.dayPct != null ? ` <em class="${r.day >= 0 ? 'up' : 'dn'}">(${pctTxt(r.dayPct)})</em>` : ''}</span></div>
       ${r.remark ? `<div class="a pf-zsrc"><span class="pf-src">${esc(r.remark)}</span></div>` : ''}
     </div>`; }).join('')
@@ -3680,7 +3692,7 @@ function verdict(sym, P, snap) {
       best && s.score != null ? (best.score - s.score >= L.betterBy ? `${best.sym} scores ${f0(best.score)} vs ${f0(s.score)}` : `best peer ${best.sym} ${f0(best.score)}`) : '');
   add('Portfolio', `Not down ${-L.stopLoss}%+ from your average while the business weakened`, held && h.priced ? !(h.pnlPct <= L.stopLoss && worse) : null,
       held && h.priced ? `${pctTxt(h.pnlPct, 1)} from your average${worse ? ', business signs weak' : ''}` : '');
-  add('Portfolio', "Still on NSE's list", held && PF.mkt && PF.mkt.notListed ? !PF.mkt.notListed.includes(sym) : null, '');
+  add('Portfolio', "Still on NSE's list", held && PF.mkt && PF.mkt.notListed ? !pfNotListedSet().has(sym) : null, '');
   if (snap) C.splice(0, C.length, ...C.filter(c => c.g !== 'Portfolio' || /better stock/.test(c.label)));   // past dates: only checks that mean something then
   const pts = C.filter(c => c.pass != null && typeof c.w === 'number');            // gates don't score; they overrule
   const pass = pts.filter(c => c.pass).reduce((t, c) => t + c.w, 0), n = pts.reduce((t, c) => t + c.w, 0), pct = n ? pass / n * 100 : null;
@@ -3771,6 +3783,13 @@ function vdSpark(host, sym, PS) {
   tip.addEventListener('mouseleave', later);
   host.closest('.wip-box').addEventListener('click', e => { if (!e.target.closest('.hit') && !e.target.closest('.vh-tip')) { tip.hidden = true; tip._i = null; } });
 }
+/* ETFs: index funds, not companies. Never "not on NSE's list" (NSE keeps them in a separate ETF list), and their checklist
+   light is a fixed green + amber (no company checks apply) */
+const PF_ETFS = new Set(['GOLDBEES', 'ITBEES', 'ALPHA', 'JUNIORBEES', 'MON100', 'HNGSNGBEES', 'FMCGIETF', 'NIFTYBEES', 'BANKBEES', 'LIQUIDBEES', 'SILVERBEES', 'MAFANG', 'MOM100', 'CPSEETF']);
+const pfIsEtf = (sym, name) => PF_ETFS.has(sym) || /(BEES|ETF)$/.test(sym || '') || /\bETF\b|\bBeES\b/i.test(name || '');
+const pfNameOf = sym => ((PF.txns || []).find(t => t.sym === sym && t.name) || {}).name || '';
+const pfNotListedSet = () => new Set(((PF.mkt && PF.mkt.notListed) || []).filter(s => !pfIsEtf(s, pfNameOf(s))));
+const etfChip = () => '<span class="tlw" title="ETF (index fund): no company checklist, shown green and amber by default" role="img" aria-label="ETF, no checklist"><span class="tl tl-etf"><i class="r"></i><i class="a"></i><i class="g"></i></span></span>';
 const vdChip = (v, big) => !v ? '' : `<span class="tlw${big ? ' big' : ''}" title="Checklist light: ${v.label.toLowerCase()} · ${v.pass} of ${v.n} points${v.gateWhy ? ' · ' + v.gateWhy : ''}" role="img" aria-label="Checklist light ${v.label}, ${v.pass} of ${v.n} points">`
   + `<span class="tl tl-${v.st}"><i class="r"></i><i class="a"></i><i class="g"></i></span>${big ? ` <small>${v.pass}/${v.n} pts · ${fmt(v.pct, 0)}%</small>` : ''}</span>`;
 const VD_DISCLAIMER = `<p class="vd-disc">The light only shows how many of these checks the published numbers pass. It is an educational screen,
@@ -4536,7 +4555,8 @@ $('#weeklyBtn').addEventListener('click', async () => {
   const w = window.hniBuilder || window.hniAdmin;
   const ok = w ? !!(await w.catch(() => false)) : false;
   if (!ok && window.hniPlans) return window.hniPlans();
-  modal('Weekly updates', `<p>Work in progress. Soon you'll get your portfolio summary every week on Telegram.</p>`);
+  const wk = modal('Weekly updates', `<p>Work in progress. Soon you'll get your portfolio summary every week on Telegram.</p>`);
+  if (window.hniFadeAway) window.hniFadeAway(wk, () => wk._close());   // closes itself after 5 s
 });
 window.addEventListener('hashchange', route);
 if (isPhone() && !location.hash) history.replaceState(null, '', location.pathname + location.search + '#/value');   // phone: opens on Value screen
@@ -4582,8 +4602,8 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
 AUTH_WEB = {
     "__AUTH_ATTR__": ' data-auth="required"',
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
-                     '<link rel="stylesheet" href="auth.css?v=9">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=9"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=10">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=10"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
