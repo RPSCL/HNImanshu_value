@@ -27,6 +27,12 @@ on:
     - cron: "30 22 * * 5"    # Saturday 04:00 IST (Fri 22:30 UTC) → prices part 2 (middle third)
     - cron: "30 0 * * 6"     # Saturday 06:00 IST (Sat 00:30 UTC) → prices part 3 (last third)
 
+  # 📰 News from the Oracle server (oracle/news.sh, every 2 hours): its push of multi_stock_news.csv → build + deploy only.
+  #    This workflow's own commits never start it again (they use GITHUB_TOKEN and say [skip ci]).
+  push:
+    branches: [main]
+    paths: [multi_stock_news.csv]
+
   workflow_dispatch:
     inputs:
       force_full:
@@ -84,7 +90,8 @@ jobs:
       # 2. DECIDE MODE
       #    Manual run (force_full):
       #       1  → full   (archive + scrape the 3 lists + build; no news, NO Angel prices)
-      #       0  → light  (news + build)
+      #       0  → light  (news + build; scheduled light runs = build only, news comes from the Oracle server)
+      #    Push of multi_stock_news.csv (Oracle server) → news (build + deploy only, no Telegram message)
       #      -1  → build  (build only, no news, no scrape)
       #       2  → prices (Angel prices for one third, picked in price_part; nothing else: no build, no deploy)
       #       4  → etf    (ONLY the Portfolio Builder's ETFs + NIFTY 500 benchmark: Angel prices + momentum (3M / 6M / 12-1M,
@@ -134,6 +141,9 @@ jobs:
               echo "mode=prices" >> $GITHUB_OUTPUT; echo "part=$P" >> $GITHUB_OUTPUT; exit 0 ;;
           esac
           echo "part=${PART:-1}" >> $GITHUB_OUTPUT
+
+          # the Oracle server pushed fresh news → just build + deploy
+          if [ "$EVENT" = "push" ]; then echo "mode=news" >> $GITHUB_OUTPUT; exit 0; fi
 
           if [ "$EVENT" = "workflow_dispatch" ]; then
             case "$FORCE" in
@@ -279,14 +289,16 @@ jobs:
         run: |
           python build.py
 
-      - name: "⚡ Light run — news + build (0)"
+      # News now comes from the Oracle server (oracle/news.sh). Scheduled light runs only build;
+      # a manual run with 0 still scans news here too (backup for when the server is down).
+      - name: "⚡ Light run — build (0)"
         if: steps.mode.outputs.mode == 'light'
         run: |
-          python -u fetch_news.py
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then python -u fetch_news.py; fi
           python build.py
 
-      - name: "🔨 Build only (-1)"
-        if: steps.mode.outputs.mode == 'build'
+      - name: "🔨 Build only (-1 / news from Oracle)"
+        if: steps.mode.outputs.mode == 'build' || steps.mode.outputs.mode == 'news'
         run: |
           python build.py
 
