@@ -1,0 +1,23 @@
+# /etc/systemd/system/hni-ltp.service — keeps oracle/ltp_server.py running 24x7 (starts at boot, restarts after a crash)
+#   sudo cp /opt/hni/oracle/hni-ltp.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now hni-ltp
+#   journalctl -u hni-ltp -f        live log
+#   sudo systemctl restart hni-ltp  after a git pull
+[Unit]
+Description=HNImanshu live prices (Firestore listener + market-hours timer)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=opc
+WorkingDirectory=/opt/hni
+# Angel login (ANGEL_API_KEY, ANGEL_CLIENT_CODE, ANGEL_PIN, ANGEL_TOTP_SECRET) — kept outside the repo, readable by opc only
+EnvironmentFile=/opt/hni-secrets/hni.env
+Environment=GOOGLE_APPLICATION_CREDENTIALS=/opt/hni-secrets/sa.json
+Environment=TZ=Asia/Kolkata
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/hni/venv/bin/python -u /opt/hni/oracle/ltp_server.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
