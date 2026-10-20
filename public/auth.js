@@ -544,11 +544,26 @@ const ready = new Promise((resolve) => {
       load: async () => { await needFS(); const d = await getDoc(doc(db, PORTFOLIO, u.uid)); return d.exists() ? d.data() : {}; },             // {txns, rates} (or old {items})
       save: async (data) => { await needFS(); return setDoc(doc(db, PORTFOLIO, u.uid), { txns: data.txns || [], rates: data.rates || {}, updated: serverTimestamp() }); },
       market: async () => { await needFS(); const d = await getDoc(doc(db, ...MARKET)); return d.exists() ? d.data() : null; },
-      canRefresh: () => !!LTP_HOOK,                          // every signed-in user
-      // start the live-price job → {ok} | {error, running}
+      canRefresh: () => true,                                // every signed-in user
+      // live prices: a request to the Oracle server (oracle/ltp_server.py listens to hni_jobs/ltp_req and answers in
+      // hni_jobs/ltp_status). It decides: admins any time; others once per 10 min from the last update, market hours.
+      //   → {ok} | {error, wait} (refused, with the reason) | {error, running}
       refresh: async () => {
-        const r = await fetch(LTP_HOOK, { method: "POST", headers: { Authorization: "Bearer " + await u.getIdToken() } });
-        return r.json().catch(() => ({ error: "HTTP " + r.status }));
+        await needFS();
+        const id = Math.random().toString(36).slice(2, 12);
+        try { await setDoc(doc(db, "hni_jobs", "ltp_req"), { uid: u.uid, id, at: serverTimestamp() }); }
+        catch (e) { return { error: "Please wait a few seconds before asking again.", wait: true }; }   // rules: 30 s between requests
+        for (let i = 0; i < 20; i++) {                             // the server answers within a second or two
+          await new Promise((r) => setTimeout(r, 500));
+          const s = await getDoc(doc(db, "hni_jobs", "ltp_status")).catch(() => null);
+          const x = s && s.exists() ? s.data() : null;
+          if (!x || x.req !== id) continue;
+          if (x.state === "refused") return { error: x.msg || "Not now", wait: true };
+          if (x.state === "busy") return { error: "already running", running: true };
+          if (x.state === "failed") return { error: x.msg || "the fetch failed" };
+          return { ok: true };                                     // running (or already done)
+        }
+        return { error: "the price server did not answer. Try again in a minute." };
       },
     };
     // PF Builder (admins and prime members, checked again by the Worker): download day-by-day prices for these stocks → {ok} | {error, running}
