@@ -82,12 +82,13 @@ class Pace:
 
 PACE = Pace(RATE)
 
-# Options (GitHub runs it with none = the old behaviour; oracle/news.sh: --halves 2 --gap 15 --max-slow 3 --max-min 40 --quiet)
+# Options (GitHub runs it with none = the old behaviour; oracle/news.sh: --part-of 2 --max-slow 3 --max-min 20 --quiet)
 _ap = argparse.ArgumentParser()
 _ap.add_argument("--halves",   type=int,   default=1,  help="split this run's stocks into N parts …")
 _ap.add_argument("--gap",      type=float, default=15, help="… with this many minutes of rest between parts")
 _ap.add_argument("--max-slow", type=int,   default=0,  help="stop fetching after Google says 'slow down' this many times (0 = only at 0.0 calls/s)")
 _ap.add_argument("--max-min",  type=float, default=0,  help="stop fetching after this many minutes of fetching (rest not counted; 0 = no limit)")
+_ap.add_argument("--part-of",  type=int,   default=0,  help="take 1/N of the stocks per run (least recently fetched first, so N runs cover all); 0 = BATCH")
 _ap.add_argument("--quiet",    action="store_true",    help="don't print the 'no news' lines")
 OPT = _ap.parse_known_args()[0]
 
@@ -391,9 +392,10 @@ def main():
     rest = [(s, n) for s, n in all_stocks if s not in held]
     random.shuffle(rest)                                           # random among equals …
     rest.sort(key=lambda x: state.get(x[0], ""))                  # … never-fetched / longest-ago first
-    stocks = [(s, names.get(s, s)) for s in sorted(held)] + rest[:BATCH]   # 2. + BATCH more
+    take   = -(-len(rest) // OPT.part_of) if OPT.part_of > 0 else BATCH    # --part-of 2: half of the list this run, the other half next run
+    stocks = [(s, names.get(s, s)) for s in sorted(held)] + rest[:take]    # 2. + that many more
     total  = len(stocks)
-    print(f"\n📋 {total} stocks this run: {len(held)} held in portfolios + {min(BATCH, len(rest))} of {len(rest)} others"
+    print(f"\n📋 {total} stocks this run: {len(held)} held in portfolios + {min(take, len(rest))} of {len(rest)} others"
           f" (least recently fetched first) | workers={MAX_WORKERS} | ≤{RATE} calls/s\n", flush=True)
 
     accumulated = []
