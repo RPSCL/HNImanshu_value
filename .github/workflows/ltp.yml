@@ -113,6 +113,7 @@ jobs:
         with:
           path: .cache
           key: ltp-masters-${{ steps.day.outputs.d }}
+          restore-keys: ltp-masters-        # no copy for today yet → bring back the latest older day's (a fallback if Angel's download breaks)
 
       - name: Install dependencies
         if: steps.gate.outputs.go == 'true'
