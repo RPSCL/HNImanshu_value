@@ -41,6 +41,18 @@ const ONE_MONTH_MIN = payable(1) * 100;
 const TRIAL_MS = 60 * 60e3;                                          // free trial: exactly 1 hour
 const TRIAL_GOOGLE_ONLY = true;                                      // username accounts are free to make, so no trial for them
 
+// Errors shown to people are short: "Unable to complete payment (Razorpay: authentication)". The full detail goes to the
+// Worker's log only (Cloudflare → hni-pay → Logs / Observability), never to the page.
+class Fail extends Error { constructor(src, word, detail) { super(detail || word); this.src = src; this.word = word; } }
+const SAY = { "/order": "Unable to complete payment", "/verify": "Unable to complete payment", "/trial": "Unable to start the free trial" };
+function setup(env, rzpToo) {                                        // a secret missing or pasted into the wrong box
+	let sa = null; try { sa = JSON.parse(env.FIREBASE_SA || ""); } catch (e) {}
+	if (!sa || !sa.private_key || !sa.client_email) throw new Fail("Server", "setup", "FIREBASE_SA is not the service-account JSON");
+	if (rzpToo && !/^rzp_(test|live)_/.test(env.RZP_KEY_ID || "")) throw new Fail("Server", "setup", "RZP_KEY_ID is not a Razorpay key id");
+	if (rzpToo && !env.RZP_KEY_SECRET) throw new Fail("Server", "setup", "RZP_KEY_SECRET is empty");
+	return sa;
+}
+
 const FS = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
 const DOC = (path) => `projects/${PROJECT}/databases/(default)/documents/${path}`;
 
@@ -63,12 +75,15 @@ export default {
 			const user = await whoIs(req);
 			if (!user) return reply(401, { error: "Login expired. Please sign in again." });
 			const body = await req.json().catch(() => ({}));
+			if (!SAY[url.pathname]) return reply(404, { error: "not found" });
+			setup(env, url.pathname !== "/trial");
 			if (url.pathname === "/order") return await order(body, user, env, reply);
 			if (url.pathname === "/verify") return await verify(body, user, env, reply);
-			if (url.pathname === "/trial") return await trial(user, env, reply);
-			return reply(404, { error: "not found" });
+			return await trial(user, env, reply);
 		} catch (e) {
-			return reply(500, { error: String(e && e.message || e).slice(0, 200) });
+			console.error(url.pathname, e && e.src ? `${e.src}/${e.word}: ${e.message}` : (e && e.stack) || e);   // full detail: the log only
+			const say = SAY[url.pathname] || "Unable to complete the request";
+			return reply(500, { error: e && e.src ? `${say} (${e.src}: ${e.word})` : `${say} (Server: error)` });
 		}
 	},
 };
@@ -86,9 +101,15 @@ async function whoIs(req) {
 }
 
 // ---------- Razorpay ----------
+const RZP_WORD = { 400: "rejected", 401: "authentication", 403: "forbidden", 404: "not-found", 429: "busy" };
 const rzp = (env, path, init = {}) => fetch(`https://api.razorpay.com/v1${path}`, { ...init, headers: {
 	Authorization: "Basic " + btoa(`${env.RZP_KEY_ID}:${env.RZP_KEY_SECRET}`), "Content-Type": "application/json", ...(init.headers || {}) } })
-	.then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error("Razorpay: " + ((j.error && j.error.description) || r.status)); return j; });
+	.catch((e) => { throw new Fail("Razorpay", "unreachable", String(e)); })
+	.then(async (r) => {
+		const j = await r.json().catch(() => ({}));
+		if (!r.ok) throw new Fail("Razorpay", RZP_WORD[r.status] || (r.status >= 500 ? "unavailable" : "error"), `${r.status} ${(j.error && j.error.description) || ""}`);
+		return j;
+	});
 
 async function order(body, user, env, reply) {
 	const m = Number(body.months);
@@ -227,9 +248,9 @@ async function extendPrime(env, uid, months, pay) {
 			  currentDocument: { exists: false } },
 		] }) });
 		if (r.ok) return { ok: true, until };
-		if (r.status !== 409 && r.status !== 400 && r.status !== 412) throw new Error("Firestore " + r.status + ": " + (await r.text()).slice(0, 150));
+		if (r.status !== 409 && r.status !== 400 && r.status !== 412) throw new Fail("Database", "error", "Firestore " + r.status + ": " + (await r.text()).slice(0, 150));
 	}
-	throw new Error("Busy, please try again.");
+	throw new Fail("Database", "busy", "3 transaction tries failed");
 }
 async function currentUntil(call, uid) {
 	const r = await call(`/hni_prime/${encodeURIComponent(uid)}`);
@@ -249,18 +270,19 @@ function addMonths(ms, k) {
 let TOKEN = null;
 async function googleToken(env) {
 	if (TOKEN && TOKEN.exp > Date.now()) return TOKEN.value;
-	const sa = JSON.parse(env.FIREBASE_SA), now = Math.floor(Date.now() / 1000);
+	const sa = setup(env, false), now = Math.floor(Date.now() / 1000);
 	const b64u = (x) => btoa(typeof x === "string" ? x : String.fromCharCode(...new Uint8Array(x))).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 	const head = b64u(JSON.stringify({ alg: "RS256", typ: "JWT" }));
 	const claim = b64u(JSON.stringify({ iss: sa.client_email, scope: "https://www.googleapis.com/auth/datastore",
 		aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600 }));
 	const der = Uint8Array.from(atob(sa.private_key.replace(/-----[^-]+-----|\s/g, "")), (c) => c.charCodeAt(0));
-	const key = await crypto.subtle.importKey("pkcs8", der, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
+	const key = await crypto.subtle.importKey("pkcs8", der, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"])
+		.catch((e) => { throw new Fail("Server", "setup", "FIREBASE_SA private_key unreadable: " + e); });
 	const sig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(`${head}.${claim}`));
 	const r = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
 		body: `grant_type=${encodeURIComponent("urn:ietf:params:oauth:grant-type:jwt-bearer")}&assertion=${head}.${claim}.${b64u(sig)}` });
 	const j = await r.json();
-	if (!j.access_token) throw new Error("Service account login failed: " + (j.error_description || j.error || r.status));
+	if (!j.access_token) throw new Fail("Server", "login", "Service account login failed: " + (j.error_description || j.error || r.status));
 	TOKEN = { value: j.access_token, exp: Date.now() + 50 * 60e3 };
 	return TOKEN.value;
 }
