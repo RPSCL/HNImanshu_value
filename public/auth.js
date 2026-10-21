@@ -171,9 +171,17 @@ function openPopup(next) {
   setTimeout(() => $(".au-google", box).focus(), 30);
 }
 function closePopup() { if (box) box.classList.remove("open"); }
-function done() {
+async function done() {
   closePopup();
-  if (nextUrl) location.href = nextUrl;
+  const go = nextUrl; nextUrl = null;
+  if (!go) return;
+  if (/(^|\/)builder(\.html)?(\?|#|$)/.test(go)) {                                  // PF Builder: only for Prime / admin, else the plans HERE
+    for (let i = 0; i < 60 && !(current && window.hniBuilder); i++) await new Promise((r) => setTimeout(r, 100));
+    const ok = window.hniBuilder ? await window.hniBuilder.catch(() => false) : true;
+    if (ok) location.href = go; else openPlans(go);
+    return;
+  }
+  location.href = go;
 }
 function message(ex) {
   const c = (ex && ex.code) || "";
@@ -312,7 +320,8 @@ if (!EMBED) {
 
 // ---------- Prime: purple theme, "Prime · till …" in the menu, the plans popup and payment ----------
 let PRIME = null, planBox = null, planSel = 0, planBusy = false;
-let TRIAL_P = null, TRIAL_USED = null;                                 // free trial already used by this account? (hni_trials/{uid})
+let TRIAL_P = null, TRIAL_USED = null;
+let PLAN_NEXT = null;                                                  // page to open once paid (PF Builder), else stay here                                 // free trial already used by this account? (hni_trials/{uid})
 const isGoogle = (u) => !!(u && (u.providerData || []).some((x) => x.providerId === "google.com"));
 let PRO_NOW = (() => { try { return localStorage.getItem(PRO_HINT) === "1"; } catch (e) { return false; } })();   // admin or Prime (hint until known)
 // crown: one outline stroke, white (dark purple in day mode, see auth.css .au-crown)
@@ -330,6 +339,7 @@ function markPro(admin, p) {
   try { if (current) localStorage.setItem(PRO_HINT, on ? "1" : "0"); else localStorage.removeItem(PRO_HINT); } catch (e) {}
   markUser();
   watchEnd(admin ? null : p);                                          // trial / Prime ends while the page is open → popup
+  try { if (current && !admin && p && p.until) localStorage.setItem(pendKey(), JSON.stringify({ until: p.until, trial: !!p.trial })); } catch (e) {}
   if (current && !admin && !EXTRA.some((it) => it.cls === "au-get"))
     addItem(p ? "Extend Prime" : "Get Prime", openPlans, "au-get");
 }
@@ -394,10 +404,12 @@ function planMsg(t, kind) {
   const el = $(".au-plan-msg", planBox);
   el.textContent = t || ""; el.className = "au-plan-msg" + (kind ? " " + kind : "");
 }
-function openPlans() {
-  if (!current) return openPopup(null);                                // signed out: log in first
+// next: the page to open after a successful payment / trial (e.g. "builder"). Not paid → the visitor stays on this page.
+function openPlans(next) {
+  PLAN_NEXT = typeof next === "string" ? next : null;
+  if (!current) return openPopup(PLAN_NEXT);                           // signed out: log in first
   buildPlans(); planMsg(""); paintPlans();
-  if (TRIAL_P && TRIAL_USED === null) TRIAL_P.then((used) => { TRIAL_USED = used; if (planBox) paintPlans(); });
+  if (TRIAL_P && TRIAL_USED === null) TRIAL_P.then((t) => { TRIAL_USED = t.used; if (planBox) paintPlans(); });
   planBox.classList.add("open"); syncLock();
   setTimeout(() => { const i = planBox.querySelector("input:checked"); if (i) i.focus(); }, 30);
 }
@@ -440,9 +452,9 @@ async function pay() {
       });
       rz.open();
     });
-    planMsg((v.note ? v.note + " " : "") + `Prime is on, valid till ${dateTxt(v.until)}. Reloading…`, "ok");
+    planMsg((v.note ? v.note + " " : "") + `Prime is on, valid till ${dateTxt(v.until)}. ${PLAN_NEXT ? "Opening Portfolio Builder…" : "Reloading…"}`, "ok");
     try { localStorage.setItem(PRO_HINT, "1"); } catch (e) {}
-    setTimeout(() => location.reload(), 1600);
+    setTimeout(() => { if (PLAN_NEXT) location.href = PLAN_NEXT; else location.reload(); }, 1600);
   } catch (e) {
     if (e.paid) planMsg(`Payment received, Prime not confirmed yet (${e.message}). It switches on by itself within a few minutes; reload this page then.`, "bad");
     else if (e.message) planMsg(e.message, "bad");
@@ -457,9 +469,9 @@ async function startTrial() {
   try {
     const r = await payCall("/trial", {});
     if (!r || !r.ok) { if (r && /already/.test(r.error || "")) TRIAL_USED = true; throw new Error((r && r.error) || "Couldn't start the trial."); }
-    planMsg(`Free trial on till ${new Date(r.until).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}. Reloading…`, "ok");
+    planMsg(`Free trial on till ${new Date(r.until).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}. ${PLAN_NEXT ? "Opening Portfolio Builder…" : "Reloading…"}`, "ok");
     try { localStorage.setItem(PRO_HINT, "1"); } catch (e) {}
-    setTimeout(() => location.reload(), 1400);
+    setTimeout(() => { if (PLAN_NEXT) location.href = PLAN_NEXT; else location.reload(); }, 1400);
   } catch (e) { planMsg(e.message, "bad"); }
   finally { planBusy = false; if (planBox) paintPlans(); }
 }
@@ -482,6 +494,13 @@ function primeEnded() {
   TRIAL_USED = true;
   const onBuilder = document.documentElement.classList.contains("pb-admin");
   document.documentElement.classList.remove("pb-admin");              // PF Builder: its contents go at once
+  endPopup(p.trial, onBuilder);
+}
+// "Free trial expired" / "Prime has ended": shown once, right when it ends, or on the next visit / login after it ended
+const pendKey = () => current ? "hni_pend_" + current.uid : "";        // last Prime seen on this browser: {until, trial}
+const seenKey = () => current ? "hni_tseen_" + current.uid : "";       // trial-ended popup already shown
+function endPopup(trial, reload) {
+  try { localStorage.removeItem(pendKey()); if (trial) localStorage.setItem(seenKey(), "1"); } catch (e) {}
   if (!endBox) {
     endBox = document.createElement("div");
     endBox.className = "au-back au-plans au-ended";
@@ -492,21 +511,30 @@ function primeEnded() {
     document.body.appendChild(endBox);
     const close = (plans) => {
       endBox.classList.remove("open"); syncLock();
-      if (plans) openPlans(); else if (endBox._reload) location.reload();
+      if (plans) openPlans(endBox._reload ? "builder" : null); else if (endBox._reload) location.reload();
     };
     $(".au-x", endBox).addEventListener("click", () => close(false));
     endBox.addEventListener("click", (e) => { if (e.target === endBox) close(false); });
     endBox.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") close(false); });
     $(".au-pay", endBox).addEventListener("click", () => close(true));
   }
-  endBox._reload = onBuilder;
-  $(".au-title", endBox).textContent = p.trial ? "Free trial expired" : "Prime has ended";
-  $(".au-plan-lead", endBox).textContent = p.trial
+  endBox._reload = reload;
+  $(".au-title", endBox).textContent = trial ? "Free trial expired" : "Prime has ended";
+  $(".au-plan-lead", endBox).textContent = trial
     ? "Your 1-hour free trial is over. Choose a plan to keep Portfolio Builder and Telegram alerts."
     : "Your Prime plan has ended. Choose a plan to keep Portfolio Builder and Telegram alerts.";
   document.querySelectorAll(".au-back.open").forEach((b) => { if (b !== endBox) b.classList.remove("open"); });
   endBox.classList.add("open"); syncLock();
   setTimeout(() => $(".au-pay", endBox).focus(), 30);
+}
+
+// next visit / login after Prime or the trial ran out (while away): the same popup, once
+async function endedSince() {
+  let was = null; try { was = JSON.parse(localStorage.getItem(pendKey()) || "null"); } catch (e) {}
+  if (was && was.until && was.until <= Date.now()) return setTimeout(() => endPopup(!!was.trial, false), 900);
+  const t = TRIAL_P && await TRIAL_P;                                   // trial taken on another device / browser
+  let seen = true; try { seen = !!localStorage.getItem(seenKey()); } catch (e) {}
+  if (t && t.used && t.until && t.until <= Date.now() && !seen) setTimeout(() => endPopup(true, false), 900);
 }
 
 // ---------- phone: one "Navigate to" button (fork icon, drawn one line at a time) → every other page in one overlay ----------
@@ -562,7 +590,7 @@ function openNav() {
         e.preventDefault(); closeNav(); setTimeout(() => openPopup(n.href || "factor#/"), 160); return;
       }
       if (n.prime && !PRO_NOW) {                                        // Prime page, free account: close this first, then the plans
-        e.preventDefault(); closeNav(); setTimeout(openPlans, 160); return;
+        e.preventDefault(); closeNav(); setTimeout(() => openPlans(n.k === "builder" ? n.href : null), 160); return;
       }
       if (n.k === "weekly") {
         e.preventDefault(); closeNav();
@@ -663,14 +691,18 @@ const ready = new Promise((resolve) => {
     })();
     window.hniPrime = window.hniPrimeInfo.then((p) => !!p);
     TRIAL_USED = null;                                                // free trial taken before? (only the owner can read it)
-    TRIAL_P = (async () => { try { await needFS(); return (await getDoc(doc(db, "hni_trials", u.uid))).exists(); } catch (e) { return true; } })();
+    TRIAL_P = (async () => {                                         // → {used, until}
+      try { await needFS(); const d = await getDoc(doc(db, "hni_trials", u.uid));
+        const t = d.exists() && d.data().until; return { used: d.exists(), until: t && t.toMillis ? t.toMillis() : null }; }
+      catch (e) { return { used: true, until: null }; }
+    })();
     // PF Builder (button on Fundamentals + the page itself): admins and prime members. Everyone else sees the plans.
     window.hniBuilder = (async () => (await window.hniAdmin) || (await window.hniPrime))();
     window.hniPlans = openPlans;
     window.dispatchEvent(new Event("hni-ready"));
     if (GATED) showUser(u);
     mountNav();
-    Promise.all([window.hniAdmin, window.hniPrimeInfo]).then(([admin, p]) => markPro(!!admin, p));
+    Promise.all([window.hniAdmin, window.hniPrimeInfo]).then(([admin, p]) => { markPro(!!admin, p); if (!admin && !p) endedSince(); });
     idle(() => { record(u); loadExt(u); }, 1500);
   });
 });
@@ -680,6 +712,14 @@ if (!GATED) {
   // even before this file has loaded): it disables the button, shows "Checking login…" and then calls this.
   window.hniAuthGo = async (href) => {
     window.hniPending = null;
+    if (/(^|\/)builder(\.html)?(\?|#|$)/.test(href)) {                          // PF Builder: Prime / admin go; others get the plans here
+      await ready;
+      if (window.hniDone) window.hniDone();
+      if (!current) return openPopup(href);
+      for (let i = 0; i < 60 && !window.hniBuilder; i++) await new Promise((r) => setTimeout(r, 100));
+      if (window.hniBuilder && !(await window.hniBuilder.catch(() => false))) return openPlans("builder");
+      location.href = href; return;
+    }
     // signed in last time → go at once (the Fundamentals page confirms the login itself, and sends you back if needed)
     if (current || hinted()) { location.href = href; return; }
     await ready;

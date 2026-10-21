@@ -15,8 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="auth.css?v=16">
-<script type="module" src="auth.js?v=16"></script>
+<link rel="stylesheet" href="auth.css?v=17">
+<script type="module" src="auth.js?v=17"></script>
 <style>
 /* same colours and names as the other pages, so auth.css (popup, avatar, Prime purple) fits without changes */
 :root{--mono:'IBM Plex Mono',ui-monospace,monospace;--sans:'DM Sans',system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -77,6 +77,27 @@ html:not(.hni-pro) body.day .card.prime small,html:not(.hni-pro) body.day .card.
 html.hni-pro .card.prime .p-on{display:inline}
 html.hni-pro .card.prime .p-off{display:none}
 
+/* "View demo": a pebble under the tagline → the video plays in a big purple frame over the hero (full screen on a phone) */
+.demo-btn{display:inline-flex;align-items:center;gap:9px;height:40px;padding:0 18px 0 6px;margin-top:6px;border-radius:999px;cursor:pointer;
+  border:1px solid color-mix(in srgb,#8b5cf6 55%,var(--line));background:color-mix(in srgb,#5b2d9c 16%,var(--panel));color:var(--ink);
+  font:600 13px var(--mono);letter-spacing:.3px;opacity:0;transform:translateY(8px);transition:background .15s,border-color .15s,translate .15s}
+.demo-btn:hover,.demo-btn:focus-visible{border-color:#8b5cf6;background:color-mix(in srgb,#5b2d9c 30%,var(--panel));translate:0 -2px;outline:none}
+.demo-btn .pl{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#5b2d9c;color:#fff;flex:none}
+body.day .demo-btn .pl{background:#4c1d95}
+.go-anim .demo-btn{animation:up .7s 1.7s ease forwards}
+.hero{position:relative}
+.demo{position:absolute;inset:-4vh -2vw;z-index:20;display:none;align-items:center;justify-content:center;padding:clamp(14px,2.2vw,30px);
+  border-radius:18px;border:1px solid #5b2d9c;background:rgba(46,16,101,.62);box-shadow:0 24px 70px rgba(0,0,0,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+body.day .demo{background:rgba(76,29,149,.18);border-color:#6d3fc0;box-shadow:0 24px 60px rgba(40,20,80,.25)}
+.demo.open{display:flex;animation:demoIn .25s ease}
+@keyframes demoIn{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:none}}
+.demo .frame{position:relative;width:100%;max-width:1100px;aspect-ratio:16/9;max-height:100%;border-radius:12px;overflow:hidden;background:#000;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.demo iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.demo .soon{position:absolute;inset:0;display:grid;place-items:center;color:#e9dcff;font:600 15px var(--mono);text-align:center;padding:20px}
+.demo .x{position:absolute;top:10px;right:12px;width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(20,8,40,.6);
+  color:#fff;font-size:22px;line-height:1;cursor:pointer;z-index:2}
+.demo .x:hover{background:#5b2d9c}
+
 /* bottom, centred */
 .foot{padding:18px 16px 26px;text-align:center;font:500 12.5px var(--mono);color:var(--faint);display:flex;flex-direction:column;gap:6px;opacity:0}
 .foot a{color:var(--accent);text-decoration:none;border-bottom:1px dotted currentColor}
@@ -98,10 +119,12 @@ html.hni-pro .card.prime .p-off{display:none}
 .foot.go-anim{animation:fade .8s 1.8s ease forwards}
 @keyframes fade{to{opacity:1}}
 @media (prefers-reduced-motion:reduce){
-  .tile,.word,.word-in,.lede,.card,.foot{animation:none!important;opacity:1!important;transform:none!important;max-width:none!important}
+  .tile,.word,.word-in,.lede,.card,.foot,.demo-btn{animation:none!important;opacity:1!important;transform:none!important;max-width:none!important}
 }
 
 @media (max-width:760px){
+  .demo{position:fixed;inset:0;border-radius:0;border:0;padding:56px 10px 10px;z-index:400}
+  .demo .frame{border-radius:8px}
   .top{padding:14px 16px;gap:10px}
   .main{padding:0 16px 8px;gap:26px}
   .hero{min-height:auto;padding-top:9vh;gap:14px}
@@ -149,6 +172,8 @@ html.hni-pro .card.prime .p-off{display:none}
       <p class="t1">No noise. No hype. Just data.</p>
       <p class="t2">Indian stocks valued from company financials: NIFTY 500, Smallcap 500 and Microcap 250.</p>
     </div>
+    <button type="button" class="demo-btn" id="demoBtn" aria-haspopup="dialog"><span class="pl"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg></span>View demo</button>
+    <div class="demo" id="demo" role="dialog" aria-modal="true" aria-label="Demo video"><button type="button" class="x" aria-label="Close video">×</button><div class="frame"></div></div>
   </section>
 
   <nav class="go" aria-label="Pages">
@@ -180,6 +205,25 @@ html.hni-pro .card.prime .p-off{display:none}
 </footer>
 
 <script>
+/* "View demo": paste the YouTube link here (any form: youtu.be/…, youtube.com/watch?v=…, /shorts/…, /embed/…) */
+var DEMO_VIDEO = "";
+(function () {
+  var btn = document.getElementById('demoBtn'), box = document.getElementById('demo'), frame = box.querySelector('.frame');
+  function ytId(u) { var m = String(u).match(/(?:youtu\.be\/|[?&]v=|\/(?:embed|shorts|live)\/)([\w-]{11})/); return m ? m[1] : ''; }
+  function open() {
+    var id = ytId(DEMO_VIDEO);
+    frame.innerHTML = id
+      ? '<iframe src="https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&rel=0&modestbranding=1&playsinline=1" title="HNImanshu demo" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>'
+      : '<div class="soon">The demo video is coming soon.</div>';
+    box.classList.add('open'); box.querySelector('.x').focus();
+  }
+  function close() { box.classList.remove('open'); frame.innerHTML = ''; btn.focus(); }   // removing the player stops the sound
+  btn.addEventListener('click', open);
+  box.querySelector('.x').addEventListener('click', close);
+  box.addEventListener('click', function (e) { if (e.target === box) close(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && box.classList.contains('open')) close(); });
+})();
+
 /* day / night switch: same key as the other pages */
 document.getElementById('theme-toggle').addEventListener('click', function () {
   var day = !document.body.classList.contains('day');
@@ -205,7 +249,7 @@ document.getElementById('theme-toggle').addEventListener('click', function () {
     e.preventDefault(); e.stopImmediatePropagation();
     if (a.getAttribute('aria-disabled') === 'true') return;
     if (a.hasAttribute('data-prime-link') && window.hniBuilder) {        // signed in: Prime or admin → go; else the plans
-      window.hniBuilder.then(function (ok) { if (ok) location.href = a.href; else if (window.hniPlans) window.hniPlans(); else location.href = a.href; });
+      window.hniBuilder.then(function (ok) { if (ok) location.href = a.href; else if (window.hniPlans) window.hniPlans('builder'); });   // not Prime: plans here, builder only after paying
       return;
     }
     a.setAttribute('aria-disabled', 'true'); a.classList.add('au-busy'); chk(true);
