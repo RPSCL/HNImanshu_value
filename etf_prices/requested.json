@@ -1,6 +1,6 @@
 {
  "asof": "2026-10-16",
- "fetched_at": "2026-10-21 16:01",
+ "fetched_at": "2026-10-21 16:07",
  "asked": {
   "APOLLO": "2026-10-19",
   "ARVINDFASN": "2026-10-21",
@@ -56,10 +56,13 @@
   "SOUTHBANK": "2026-10-21",
   "STLTECH": "2026-10-21",
   "SUBROS": "2026-10-21",
+  "TANLA": "2026-10-21",
   "THYROCARE": "2026-10-21",
   "TI": "2026-10-19",
   "TMB": "2026-10-21",
+  "UJJIVANSFB": "2026-10-21",
   "V2RETAIL": "2026-10-21",
+  "VIYASH": "2026-10-21",
   "YATHARTH": "2026-10-21"
  },
  "requested": [
@@ -117,10 +120,13 @@
   "SOUTHBANK",
   "STLTECH",
   "SUBROS",
+  "TANLA",
   "THYROCARE",
   "TI",
   "TMB",
+  "UJJIVANSFB",
   "V2RETAIL",
+  "VIYASH",
   "YATHARTH"
  ]
 }
