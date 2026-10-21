@@ -320,8 +320,8 @@ if (!EMBED) {
 
 // ---------- Prime: purple theme, "Prime · till …" in the menu, the plans popup and payment ----------
 let PRIME = null, planBox = null, planSel = 0, planBusy = false;
-let TRIAL_P = null, TRIAL_USED = null;
-let PLAN_NEXT = null;                                                  // page to open once paid (PF Builder), else stay here                                 // free trial already used by this account? (hni_trials/{uid})
+let TRIAL_P = null, TRIAL_USED = null;                                 // free trial already used by this account? (hni_trials/{uid})
+let PLAN_NEXT = null;                                                  // page to open once paid (PF Builder), else stay here
 const isGoogle = (u) => !!(u && (u.providerData || []).some((x) => x.providerId === "google.com"));
 let PRO_NOW = (() => { try { return localStorage.getItem(PRO_HINT) === "1"; } catch (e) { return false; } })();   // admin or Prime (hint until known)
 // crown: one outline stroke, white (dark purple in day mode, see auth.css .au-crown)
@@ -413,11 +413,20 @@ function openPlans(next) {
   planBox.classList.add("open"); syncLock();
   setTimeout(() => { const i = planBox.querySelector("input:checked"); if (i) i.focus(); }, 30);
 }
-async function payCall(path, body) {                                   // the pay Worker, with the signed-in user's login token
-  const r = await fetch(PAY_HOOK.replace(/\/+$/, "") + path, { method: "POST",
-    headers: { Authorization: "Bearer " + await current.getIdToken(), "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  return r.json().catch(() => ({ error: "HTTP " + r.status }));
+// the pay Worker, with the signed-in user's login token. Errors come back short: "Unable to … (Source: word)".
+async function payCall(path, body) {
+  const say = path === "/trial" ? "Unable to start the free trial" : "Unable to complete payment";
+  let r;
+  try {
+    r = await fetch(PAY_HOOK.replace(/\/+$/, "") + path, { method: "POST",
+      headers: { Authorization: "Bearer " + await current.getIdToken(), "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  } catch (e) { return { error: `${say} (Network: offline)` }; }
+  return r.json().catch(() => ({ error: `${say} (Server: ${r.status >= 500 ? "unavailable" : "error"})` }));
 }
+// Razorpay's own failure reasons → one word people understand
+const RZP_WHY = { payment_cancelled: "cancelled", payment_failed: "declined", payment_timed_out: "timeout", authentication_failed: "authentication",
+  insufficient_funds: "funds", card_declined: "declined", incorrect_otp: "OTP", payment_risk_check_failed: "risk" };
+const rzpWord = (e) => { const k = String((e && (e.reason || e.code)) || "").toLowerCase(); return RZP_WHY[k] || k.split("_").pop() || "error"; };
 let RZP = null;
 const loadRazorpay = () => RZP = RZP || new Promise((ok, bad) => {
   const s = document.createElement("script");
@@ -433,7 +442,7 @@ async function pay() {
   try {
     const o = await payCall("/order", { months: p.m });                // the Worker prices it from its own table, not from this page
     if (!o || o.error || !o.order_id) throw new Error((o && o.error) || "Couldn't start the payment.");
-    await loadRazorpay();
+    await loadRazorpay().catch(() => { throw new Error("Unable to complete payment (Razorpay: unreachable)"); });
     const v = await new Promise((resolve, reject) => {
       const rz = new window.Razorpay({
         key: o.key, order_id: o.order_id, amount: o.amount, currency: o.currency || "INR",
@@ -449,6 +458,10 @@ async function pay() {
           } catch (e) { reject(Object.assign(e, { paid: true })); }
         },
         modal: { ondismiss: () => reject(new Error("")) },              // closed without paying
+      });
+      rz.on("payment.failed", (r) => {                                  // the Razorpay window stays open so they can try again
+        console.warn("Razorpay payment failed:", r && r.error);
+        planMsg(`Unable to complete payment (Razorpay: ${rzpWord(r && r.error)})`, "bad");
       });
       rz.open();
     });
@@ -472,7 +485,7 @@ async function startTrial() {
     planMsg(`Free trial on till ${new Date(r.until).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}. ${PLAN_NEXT ? "Opening Portfolio Builder…" : "Reloading…"}`, "ok");
     try { localStorage.setItem(PRO_HINT, "1"); } catch (e) {}
     setTimeout(() => { if (PLAN_NEXT) location.href = PLAN_NEXT; else location.reload(); }, 1400);
-  } catch (e) { planMsg(e.message, "bad"); }
+  } catch (e) { planMsg(e.message || "Unable to start the free trial (Server: error)", "bad"); }
   finally { planBusy = false; if (planBox) paintPlans(); }
 }
 // trial / Prime runs out while a page is open: switch to free at once and say so (Firestore stops answering at that moment anyway)
