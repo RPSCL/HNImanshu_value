@@ -7,6 +7,15 @@
 //   POST /verify   {razorpay_order_id, razorpay_payment_id, razorpay_signature}
 //                  checks Razorpay's signature + that the payment is captured for this user's order → Prime extended → {ok, until}
 //   POST /webhook  Razorpay webhook (event "payment.captured"): the same, for when the person closed the page before /verify ran.
+//   POST /trial    1-hour free trial (₹0): once per Google account. hni_prime/{uid}.until = now + 1 hour; the email is blocked
+//                  for good (hni_trial_emails/{sha256 of the email}), the account too (hni_trials/{uid}).
+//
+// What is charged and what is given never comes from the page:
+//   the page sends only {months}; the price comes from PLANS below, the order is made here, and Prime is given only after this
+//   Worker reads the payment back from Razorpay itself. If the amount paid is not the plan's amount (it cannot be for a normal
+//   order, but just in case): paid at least the 1-month price → 1 month; less → nothing (forfeited). A payment made without one
+//   of our orders (someone using the public key by hand) never gives Prime: it is recorded for the admin as "orphan".
+//   Every case is written to hni_payments/{payment_id} (admins can read it; nobody can write it but this Worker).
 //
 // Prime is extended ONCE per payment (hni_payments/{payment_id} is written in the same Firestore transaction; a second try
 // finds it and stops). New months start after the current end date if Prime is still on, else today.
@@ -26,6 +35,11 @@ const ORIGINS = ["https://hnimanshu-value.web.app", "https://hnimanshu-value.fir
 const PLANS = { 1: 999, 3: 899, 6: 799, 12: 599 };
 const GST = 0.18;
 const payable = (m) => Math.round(PLANS[m] * m * (1 + GST));        // rupees, GST included; same rounding as the page
+// A wrong amount (see the top): at least this many paise → 1 month, less → forfeited. = the 1-month price with GST (₹1,179).
+// (to use ₹999 instead: 999 * 100)
+const ONE_MONTH_MIN = payable(1) * 100;
+const TRIAL_MS = 60 * 60e3;                                          // free trial: exactly 1 hour
+const TRIAL_GOOGLE_ONLY = true;                                      // username accounts are free to make, so no trial for them
 
 const FS = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
 const DOC = (path) => `projects/${PROJECT}/databases/(default)/documents/${path}`;
@@ -51,6 +65,7 @@ export default {
 			const body = await req.json().catch(() => ({}));
 			if (url.pathname === "/order") return await order(body, user, env, reply);
 			if (url.pathname === "/verify") return await verify(body, user, env, reply);
+			if (url.pathname === "/trial") return await trial(user, env, reply);
 			return reply(404, { error: "not found" });
 		} catch (e) {
 			return reply(500, { error: String(e && e.message || e).slice(0, 200) });
@@ -66,7 +81,8 @@ async function whoIs(req) {
 		method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }),
 	});
 	const u = r.ok ? ((await r.json()).users || [])[0] : null;
-	return u ? { uid: u.localId, email: u.email || "" } : null;
+	return u ? { uid: u.localId, email: u.email || "", verified: !!u.emailVerified,
+		google: (u.providerUserInfo || []).some((x) => x.providerId === "google.com") } : null;
 }
 
 // ---------- Razorpay ----------
@@ -100,20 +116,83 @@ async function webhook(req, env, reply) {
 	const ev = JSON.parse(raw);
 	const p = ev.payload && ev.payload.payment && ev.payload.payment.entity;
 	if (ev.event !== "payment.captured" || !p) return reply(200, { ignored: ev.event });
-	return reply(200, await applyPayment(env, p.id, null));
+	return reply(200, await applyPayment(env, p.id, null));      // errors are reported in the body; 200 so Razorpay stops retrying
 }
 
 // The one place Prime is given: payment captured, for an order this Worker made, at the full price of its plan.
+// Everything is read back from Razorpay here; nothing the page sent is trusted except the payment id to look up.
 async function applyPayment(env, pid, uidMustBe) {
 	const p = await rzp(env, `/payments/${encodeURIComponent(pid)}`);
 	if (p.status !== "captured") return { error: `Payment is ${p.status}, not captured yet.` };
-	if (!p.order_id) return { error: "Payment has no order." };
+	if (!p.order_id) {                                               // not made through /order: never gives Prime
+		await note(env, pid, { status: "orphan", amount: p.amount, currency: p.currency, email: p.email || "", why: "payment without an order" });
+		return { error: "This payment was not made through the plans window, so it can't switch Prime on. Please contact us." };
+	}
 	const o = await rzp(env, `/orders/${encodeURIComponent(p.order_id)}`);
-	const uid = o.notes && o.notes.uid, m = Number(o.notes && o.notes.months);
-	if (!uid || !PLANS[m]) return { error: "Order is not a Prime order." };
+	const uid = o.notes && o.notes.uid, m = Number(o.notes && o.notes.months);   // order notes: written by THIS Worker in /order
+	if (!uid || !PLANS[m] || !String(o.receipt || "").startsWith("p")) {
+		await note(env, pid, { status: "orphan", amount: p.amount, currency: p.currency, order: o.id, why: "order not made by the Worker" });
+		return { error: "Order is not a Prime order." };
+	}
 	if (uidMustBe && uid !== uidMustBe) return { error: "This payment belongs to another account." };
-	if (p.amount !== o.amount || o.amount !== payable(m) * 100 || p.currency !== "INR") return { error: "Amount does not match the plan." };
-	return extendPrime(env, uid, m, { pid, oid: o.id, amount: p.amount });
+	const want = payable(m) * 100;
+	if (p.currency === "INR" && p.amount === want && o.amount === want) return extendPrime(env, uid, m, { pid, oid: o.id, amount: p.amount });
+	// wrong amount (or currency): at least the 1-month price → 1 month; less → nothing
+	const why = `paid ${p.currency} ${p.amount / 100}, plan ${m} mo = INR ${want / 100}`;
+	if (p.currency === "INR" && p.amount >= ONE_MONTH_MIN) {
+		const r = await extendPrime(env, uid, 1, { pid, oid: o.id, amount: p.amount, status: "anomaly-1-month", why });
+		return Object.assign(r, { note: "The amount paid did not match the plan picked, so 1 month was given." });
+	}
+	await note(env, pid, { status: "forfeited", uid, amount: p.amount, currency: p.currency, order: o.id, why });
+	return { error: "The amount paid did not match any plan, so Prime was not switched on. Please contact us." };
+}
+// one record per payment that did NOT give Prime (orphan / forfeited); never overwritten
+async function note(env, pid, f) {
+	const tok = await googleToken(env), fields = {};
+	for (const [k, v] of Object.entries(f)) fields[k] = typeof v === "number" ? { integerValue: String(Math.round(v)) } : { stringValue: String(v) };
+	fields.at = { timestampValue: new Date().toISOString() };
+	await fetch(`${FS}:commit`, { method: "POST", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+		body: JSON.stringify({ writes: [{ update: { name: DOC(`hni_payments/${pid}`), fields }, currentDocument: { exists: false } }] }) });
+}
+
+// ---------- free trial: 1 hour of Prime, once per Google account (email) ----------
+const normEmail = (e) => {
+	let [n, d] = String(e || "").trim().toLowerCase().split("@");
+	if (d === "gmail.com" || d === "googlemail.com") { n = n.split("+")[0].replace(/\./g, ""); d = "gmail.com"; }   // a.b+x@gmail = ab@gmail
+	return n && d ? `${n}@${d}` : "";
+};
+async function sha256(t) {
+	const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t));
+	return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function trial(user, env, reply) {
+	const email = normEmail(user.email);
+	if (TRIAL_GOOGLE_ONLY && !(user.google && user.verified)) return reply(400, { error: "The free trial needs a Google sign-in." });
+	if (!email) return reply(400, { error: "No email on this account." });
+	const key = await sha256(email), tok = await googleToken(env);
+	const call = (path, init = {}) => fetch(`${FS}${path}`, { ...init, headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" } });
+	if ((await call(`/hni_admins/${encodeURIComponent(user.uid)}`)).ok) return reply(400, { error: "Admins don't need a trial." });
+	const tx = (await (await call(":beginTransaction", { method: "POST", body: "{}" })).json()).transaction;
+	const q = `?transaction=${encodeURIComponent(tx)}`;
+	const used = (await call(`/hni_trial_emails/${key}${q}`)).ok || (await call(`/hni_trials/${encodeURIComponent(user.uid)}${q}`)).ok;
+	const cur = await call(`/hni_prime/${encodeURIComponent(user.uid)}${q}`);
+	let on = false;
+	if (cur.ok) { const f = (await cur.json()).fields || {}; const t = f.until && Date.parse(f.until.timestampValue); on = !f.until || t > Date.now(); }
+	if (used || on) {
+		await call(":rollback", { method: "POST", body: JSON.stringify({ transaction: tx }) });
+		return reply(400, { error: used ? "The free trial has already been used with this email." : "You are already Prime." });
+	}
+	const now = Date.now(), until = new Date(now + TRIAL_MS).toISOString(), at = new Date(now).toISOString();
+	const r = await call(":commit", { method: "POST", body: JSON.stringify({ transaction: tx, writes: [
+		{ update: { name: DOC(`hni_prime/${user.uid}`), fields: { until: { timestampValue: until }, months: { integerValue: "0" },
+			by: { stringValue: "trial" }, src: { stringValue: "trial" }, at: { timestampValue: at } } } },
+		{ update: { name: DOC(`hni_trials/${user.uid}`), fields: { at: { timestampValue: at }, until: { timestampValue: until } } },
+		  currentDocument: { exists: false } },
+		{ update: { name: DOC(`hni_trial_emails/${key}`), fields: { uid: { stringValue: user.uid }, at: { timestampValue: at } } },
+		  currentDocument: { exists: false } },
+	] }) });
+	if (!r.ok) return reply(400, { error: "The free trial has already been used with this email." });
+	return reply(200, { ok: true, until: Date.parse(until) });
 }
 
 // ---------- Firestore (service account; one transaction: read Prime, write the new date + the payment record) ----------
@@ -143,7 +222,8 @@ async function extendPrime(env, uid, months, pay) {
 				payment: { stringValue: pay.pid } } } },
 			{ update: { name: DOC(`hni_payments/${pay.pid}`), fields: {
 				uid: { stringValue: uid }, months: { integerValue: String(months) }, amount: { integerValue: String(pay.amount) },
-				order: { stringValue: pay.oid }, at: { timestampValue: now }, until: { timestampValue: new Date(until).toISOString() } } },
+				order: { stringValue: pay.oid }, at: { timestampValue: now }, until: { timestampValue: new Date(until).toISOString() },
+				status: { stringValue: pay.status || "ok" }, ...(pay.why ? { why: { stringValue: pay.why } } : {}) } },
 			  currentDocument: { exists: false } },
 		] }) });
 		if (r.ok) return { ok: true, until };

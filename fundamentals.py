@@ -4606,8 +4606,8 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
 AUTH_WEB = {
     "__AUTH_ATTR__": ' data-auth="required"',
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
-                     '<link rel="stylesheet" href="auth.css?v=15">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=15"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=16">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=16"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
