@@ -1354,6 +1354,10 @@ html.pop-open,html.pop-open body{overflow:hidden}
 .wip-back{background:rgba(8,8,10,.72)}            /* deep dim instead of blur: any blur re-draws the page on every scroll and hover */
 .wip-box{overscroll-behavior:contain;scrollbar-gutter:stable}   /* the scrollbar's space is always kept: × , chart and text never shift */
 .wip-back.open{display:flex}
+.au-back.open ~ .wip-back{z-index:330}                 /* a stock card opened from an admin overlay (Users → View portfolio) sits on top of it */
+/* PF Builder shows this page's stock card over itself (this page runs hidden inside the builder): only the card, see-through around it */
+html.pb-pop,html.pb-pop body{background:transparent!important}
+html.pb-pop body>*:not(.wip-back):not(.au-back):not(.toast){visibility:hidden!important}
 .wip-box{position:relative;width:min(420px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:20px 22px;box-shadow:0 18px 50px rgba(0,0,0,.35);box-sizing:border-box}
 .wip-box h3{margin:0 0 8px;font:700 15px var(--mono);color:var(--brass)}
 .wip-box > p{margin:0;color:var(--mute);font-size:13.5px;line-height:1.5}
@@ -4602,8 +4606,8 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
 AUTH_WEB = {
     "__AUTH_ATTR__": ' data-auth="required"',
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
-                     '<link rel="stylesheet" href="auth.css?v=13">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=13"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=14">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=14"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
