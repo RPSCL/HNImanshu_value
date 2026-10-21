@@ -235,7 +235,7 @@ function showUser(u, slot) {
   const n = nameOf(u);
   const el = document.createElement("span");
   el.className = "au-user";
-  el.innerHTML = `<button type="button" class="au-av" aria-haspopup="menu" title="Signed in as ${esc(n)}">${esc(initials(n))}</button>
+  el.innerHTML = `<button type="button" class="au-av" aria-haspopup="menu" title="Signed in as ${esc(n)}"><span class="au-ini">${esc(initials(n))}</span><span class="au-nm">${esc(n)}</span></button>
     <span class="au-menu" role="menu"><span class="au-who"><b>${esc(n)}</b>${u.email && !u.email.endsWith("@" + USER_DOMAIN) ? `<i>${esc(u.email)}</i>` : ""}</span>
     <button type="button" class="au-out" role="menuitem">Logout</button></span>`;
   $(".au-av", el).addEventListener("click", (e) => { e.stopPropagation(); el.classList.toggle("open"); });

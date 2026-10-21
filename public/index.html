@@ -15,8 +15,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="auth.css?v=18">
-<script type="module" src="auth.js?v=18"></script>
+<link rel="stylesheet" href="auth.css?v=19">
+<script type="module" src="auth.js?v=19"></script>
 <style>
 /* same colours and names as the other pages, so auth.css (popup, avatar, Prime purple) fits without changes */
 :root{--mono:'IBM Plex Mono',ui-monospace,monospace;--sans:'DM Sans',system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -28,25 +28,42 @@ body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);transition:
 a{color:inherit}
 
 /* top bar: Login (or the avatar menu) + day / night */
-.top{display:flex;align-items:center;justify-content:flex-end;gap:14px;padding:18px 28px}
+.top{display:flex;align-items:center;justify-content:flex-end;gap:22px;padding:18px 28px}
 .au-slot{display:inline-flex;align-items:center;min-width:32px;min-height:32px}
 .au-slot:empty{visibility:hidden}                                   /* nothing until the login state is known */
 .au-login{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 16px;border:1px solid var(--accent);border-radius:8px;background:transparent;
   color:var(--accent);font:600 13px var(--mono);letter-spacing:.3px;cursor:pointer;transition:background .15s,color .15s}
 .au-login:hover{background:var(--accent);color:var(--bg)}
-#theme-toggle{display:flex;align-items:center;gap:7px;cursor:pointer;border:0;background:transparent;padding:6px;color:var(--faint)}
-.toggle-track{position:relative;width:38px;height:22px;border-radius:11px;background:var(--line);transition:background .3s}
+/* day / night: 1.5× the other pages' size */
+#theme-toggle{display:flex;align-items:center;gap:10px;cursor:pointer;border:0;background:transparent;padding:6px;color:var(--faint)}
+#theme-toggle svg{width:22px;height:22px}
+.toggle-track{position:relative;width:57px;height:33px;border-radius:17px;background:var(--line);transition:background .3s}
 body.day .toggle-track{background:var(--accent)}
-.toggle-thumb{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--panel2);transition:transform .25s cubic-bezier(.4,0,.2,1)}
-body.day .toggle-thumb{transform:translateX(16px)}
+.toggle-thumb{position:absolute;top:4.5px;left:4.5px;width:24px;height:24px;border-radius:50%;background:var(--panel2);transition:transform .25s cubic-bezier(.4,0,.2,1)}
+body.day .toggle-thumb{transform:translateX(24px)}
+/* signed in: initials + full name in one pill, same height as the toggle, in line with it */
+.top .au-user{position:static!important}
+.top .au-av{width:auto;height:40px;padding:0 16px 0 4px;gap:10px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+.top .au-av:hover{border-color:var(--accent);filter:none}
+.top .au-ini{width:32px;height:32px;border-radius:50%;background:var(--accent);color:var(--bg);display:grid;place-items:center;font:700 12px var(--mono);flex:none}
+.top .au-nm{display:block;font:600 13.5px var(--sans);letter-spacing:0;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top .au-user.au-prime .au-av{border-color:#9b6bdf;box-shadow:0 0 0 1px #9b6bdf}
 
 /* hero (centre) + the four page links (right; under the hero on a phone) */
 .main{flex:1 1 auto;display:flex;flex-wrap:wrap;align-items:center;gap:40px;padding:0 56px 32px}
 .hero{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;text-align:center;min-height:min(62vh,600px)}
 .mark{display:flex;align-items:center;justify-content:center}
-.tile{width:96px;height:96px;border-radius:22px;background:var(--panel2);border:1px solid var(--line);display:grid;place-items:center;flex:none;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+.tile{width:96px;height:96px;border-radius:22px;background:var(--panel2);border:1px solid var(--line);display:grid;place-items:center;flex:none;
+  box-shadow:0 18px 50px var(--shade);cursor:pointer;-webkit-tap-highlight-color:transparent}
+/* shadow under the H tile and under HNImanshu, coloured for the background: dark charcoal → light charcoal glow, dark purple (Prime)
+   → light purple glow, light beige / light purple → black */
+body.night{--shade:rgba(150,150,158,.30)}
+body.day{--shade:rgba(0,0,0,.38)}
+html.hni-pro body.night{--shade:rgba(186,150,255,.32)}
+html.hni-pro body.day{--shade:rgba(0,0,0,.34)}
+.word .hni,.word .manshu{text-shadow:0 14px 26px var(--shade)}
 .tile span{font:700 58px Georgia,'Times New Roman',serif;color:var(--accent);line-height:1}
-.word{display:inline-block;overflow:hidden;white-space:nowrap;max-width:0}
+.word{display:inline-block;overflow:hidden;white-space:nowrap;max-width:0;padding:24px 0 40px;margin:-24px 0 -40px}   /* room for the text shadow inside the clip */
 .word-in{display:inline-flex;align-items:baseline;gap:4px;padding-left:22px;transform:translateX(-36px);opacity:0}
 .word .hni{font:700 64px var(--mono);letter-spacing:6px;color:var(--accent)}
 .word .manshu{font:400 48px var(--mono);letter-spacing:1px;color:var(--faint)}
@@ -91,11 +108,13 @@ body.day .demo-btn .pl{background:#4c1d95}
 body.day .demo{background:rgba(76,29,149,.18);border-color:#6d3fc0;box-shadow:0 24px 60px rgba(40,20,80,.25)}
 .demo.open{display:flex;animation:demoIn .25s ease}
 @keyframes demoIn{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:none}}
+.demo .stage{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 .demo .frame{position:relative;width:100%;max-width:1100px;aspect-ratio:16/9;max-height:100%;border-radius:12px;overflow:hidden;background:#000;box-shadow:0 10px 30px rgba(0,0,0,.4)}
 .demo iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .demo .soon{position:absolute;inset:0;display:grid;place-items:center;color:#e9dcff;font:600 15px var(--mono);text-align:center;padding:20px}
-.demo .x{position:absolute;top:10px;right:12px;width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(20,8,40,.6);
-  color:#fff;font-size:22px;line-height:1;cursor:pointer;z-index:2}
+.demo .x{position:absolute;top:-6px;right:-6px;height:34px;padding:0 12px;border-radius:999px;border:1px solid rgba(255,255,255,.4);background:rgba(20,8,40,.75);
+  color:#fff;font:600 13px var(--mono);cursor:pointer;z-index:3;display:inline-flex;align-items:center;gap:6px}
+.demo .x b{font-size:18px;font-weight:400;line-height:1}
 .demo .x:hover{background:#5b2d9c}
 
 /* bottom, centred */
@@ -118,14 +137,23 @@ body.day .demo{background:rgba(76,29,149,.18);border-color:#6d3fc0;box-shadow:0 
 .go-anim .card:nth-of-type(3){animation-delay:1.44s}.go-anim .card:nth-of-type(4){animation-delay:1.56s}
 .foot.go-anim{animation:fade .8s 1.8s ease forwards}
 @keyframes fade{to{opacity:1}}
+@media (max-width:760px) and (orientation:portrait){
+  html .demo .stage{inset:auto;top:50%;left:50%;width:100vh;width:100dvh;height:100vw;transform:translate(-50%,-50%) rotate(90deg)}   /* upright phone: turn the player */
+}
 @media (prefers-reduced-motion:reduce){
   .tile,.word,.word-in,.lede,.card,.foot,.demo-btn{animation:none!important;opacity:1!important;transform:none!important;max-width:none!important}
 }
 
 @media (max-width:760px){
-  .demo{position:fixed;inset:0;border-radius:0;border:0;padding:56px 10px 10px;z-index:400}
-  .demo .frame{border-radius:8px}
-  .top{padding:14px 16px;gap:10px}
+  /* phone: always full screen and sideways, like a film app, whichever way the phone is held */
+  .demo{position:fixed;inset:0;border-radius:0;border:0;padding:0;z-index:400;background:#000;backdrop-filter:none;-webkit-backdrop-filter:none}
+  body.day .demo{background:#000}
+  .demo .stage{position:absolute;inset:0}
+  .demo .frame{max-width:none;width:100%;height:100%;aspect-ratio:auto;border-radius:0;box-shadow:none}
+  .demo .x{top:max(10px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right))}
+  .top{padding:14px 16px;gap:16px}
+  .top .au-av{height:38px}
+  .top .au-nm{max-width:42vw}
   .main{padding:0 16px 8px;gap:26px}
   .hero{min-height:auto;padding-top:9vh;gap:14px}
   .tile{width:60px;height:60px;border-radius:14px}
@@ -165,7 +193,7 @@ body.day .demo{background:rgba(76,29,149,.18);border-color:#6d3fc0;box-shadow:0 
 <main class="main go-anim">
   <section class="hero">
     <h1 class="mark" aria-label="HNImanshu">
-      <span class="tile" aria-hidden="true"><span>H</span></span>
+      <span class="tile" id="hTile" role="button" tabindex="0" aria-label="Play the intro again"><span>H</span></span>
       <span class="word" aria-hidden="true"><span class="word-in"><span class="hni">HNI</span><span class="manshu">manshu</span></span></span>
     </h1>
     <div class="lede">
@@ -173,7 +201,7 @@ body.day .demo{background:rgba(76,29,149,.18);border-color:#6d3fc0;box-shadow:0 
       <p class="t2">Indian stocks valued from company financials: NIFTY 500, Smallcap 500 and Microcap 250.</p>
     </div>
     <button type="button" class="demo-btn" id="demoBtn" aria-haspopup="dialog"><span class="pl"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg></span>View demo</button>
-    <div class="demo" id="demo" role="dialog" aria-modal="true" aria-label="Demo video"><button type="button" class="x" aria-label="Close video">×</button><div class="frame"></div></div>
+    <div class="demo" id="demo" role="dialog" aria-modal="true" aria-label="Demo video"><div class="stage"><button type="button" class="x" aria-label="Close video"><b>×</b> Close</button><div class="frame"></div></div></div>
   </section>
 
   <nav class="go" aria-label="Pages">
@@ -217,11 +245,41 @@ var DEMO_VIDEO = "";
       : '<div class="soon">The demo video is coming soon.</div>';
     box.classList.add('open'); box.querySelector('.x').focus();
   }
-  function close() { box.classList.remove('open'); frame.innerHTML = ''; btn.focus(); }   // removing the player stops the sound
+  var phone = function () { return matchMedia('(max-width:760px)').matches; };
+  function goFull() {                                                   // hide the browser bars and turn the screen sideways where the phone allows it
+    var el = box, rq = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!rq) return;
+    try { Promise.resolve(rq.call(el, {navigationUI: 'hide'})).then(function () {
+      if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () {});
+    }).catch(function () {}); } catch (e) {}
+  }
+  function leaveFull() {
+    try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) {}
+    var fe = document.fullscreenElement || document.webkitFullscreenElement, ex = document.exitFullscreen || document.webkitExitFullscreen;
+    if (fe && ex) try { Promise.resolve(ex.call(document)).catch(function () {}); } catch (e) {}
+  }
+  function close() { box.classList.remove('open'); frame.innerHTML = ''; leaveFull(); btn.focus(); }   // removing the player stops the sound
+  btn.addEventListener('click', function () { if (phone()) goFull(); });                              // must start inside the tap
+  ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (ev) {                               // phone back gesture left full screen → close
+    document.addEventListener(ev, function () { if (!(document.fullscreenElement || document.webkitFullscreenElement) && box.classList.contains('open') && phone()) close(); });
+  });
   btn.addEventListener('click', open);
   box.querySelector('.x').addEventListener('click', close);
   box.addEventListener('click', function (e) { if (e.target === box) close(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && box.classList.contains('open')) close(); });
+})();
+
+/* tap the H: the intro plays again */
+(function () {
+  var t = document.getElementById('hTile');
+  function replay() {
+    var parts = [document.querySelector('.main'), document.querySelector('.foot')];
+    parts.forEach(function (el) { el.classList.remove('go-anim'); });
+    void document.body.offsetWidth;                                     // let the browser forget the finished animation
+    parts.forEach(function (el) { el.classList.add('go-anim'); });
+  }
+  t.addEventListener('click', replay);
+  t.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); replay(); } });
 })();
 
 /* day / night switch: same key as the other pages */
