@@ -37,8 +37,21 @@ const PRO_HINT = "hni_pro";
 // signed-in pages: the page links sit in the Navigate overlay, so hide them at once (no flash before the login is known)
 // (every page but the landing page, which has its own big links: there the Navigate button never shows)
 if (document.documentElement.dataset.page !== "home") document.documentElement.classList.add("hni-nav");
+// Tab icon (favicon): the "H" tile. It follows the BROWSER's own light / dark look (prefers-color-scheme inside the SVG:
+// dark browser → light tile, light browser → dark tile) and turns purple for Prime members and admins.
+function tabIcon(pro) {
+  const [bg, h, bgD, hD] = pro ? ["#2b1250", "#e3cfff", "#dcc8fb", "#3a1670"]      // Prime: deep purple / light purple
+                               : ["#141414", "#d4b47a", "#f1e8d8", "#4c2e0a"];     // everyone else: black + gold / cream + brown
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><style>rect{fill:${bg}}text{fill:${h}}@media (prefers-color-scheme:dark){rect{fill:${bgD}}text{fill:${hD}}}</style><rect width='32' height='32' rx='7'/><text x='16' y='23' font-family='Georgia,serif' font-size='18' font-weight='bold' text-anchor='middle'>H</text></svg>`;
+  const href = "data:image/svg+xml," + encodeURIComponent(svg);
+  let l = document.querySelector("link[rel~='icon']");
+  if (!l) { l = document.createElement("link"); l.rel = "icon"; document.head.appendChild(l); }
+  if (l.getAttribute("href") === href) return;
+  l.type = "image/svg+xml"; l.href = href;
+}
 try {
   const h = localStorage.getItem(PRO_HINT);
+  tabIcon(h === "1");                                                    // at once from the last visit; markPro() confirms it
   if (h === "1") document.documentElement.classList.add("hni-pro");
   else if (h === "0") document.documentElement.classList.add("hni-free");   // signed in, not Prime: purple PF Builder + Weekly
 } catch (e) {}
@@ -309,6 +322,7 @@ function markPro(admin, p) {
   const on = !!(admin || p);
   PRO_NOW = on;
   document.documentElement.classList.toggle("hni-pro", on);           // auth.css: darkest purple (night) / light purple (day)
+  tabIcon(on);                                                         // purple tab icon for Prime / admin
   document.documentElement.classList.toggle("hni-free", !on && !!current);   // free account: Prime buttons in purple
   try { if (current) localStorage.setItem(PRO_HINT, on ? "1" : "0"); else localStorage.removeItem(PRO_HINT); } catch (e) {}
   markUser();
