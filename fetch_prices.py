@@ -147,9 +147,33 @@ def scrip_master():
 		log(f"Angel scrip master: today's saved copy ({cache.name})")
 		return json.loads(cache.read_text())
 	log("Downloading Angel scrip master (first run today) …")
-	r = requests.get(SCRIP_URL, timeout=120)
-	r.raise_for_status()
-	data = [{k: m.get(k) for k in SCRIP_KEYS} for m in r.json() if m.get("exch_seg") == "NSE"]
+	tmp = CACHE_DIR / "scrip_master_download.tmp"
+	for attempt in range(1, 5):                                            # Angel's server sometimes cuts the ~36 MB download half-way
+		try:
+			with requests.get(SCRIP_URL, timeout=120, stream=True) as r:      # straight to disk: never the whole ~40 MB in memory
+				r.raise_for_status()
+				with open(tmp, "wb") as f:
+					for chunk in r.iter_content(1 << 20):
+						f.write(chunk)
+			break
+		except requests.RequestException as e:
+			log(f"  download {attempt} of 4 broke ({type(e).__name__}); " + ("trying again" if attempt < 4 else "giving up"))
+			if attempt < 4:
+				time.sleep(10 * attempt)                                         # 10 s, 20 s, 30 s
+				continue
+			older = sorted(CACHE_DIR.glob("scrip_master_*.json"))            # an earlier day's copy (tokens rarely change)
+			if older:
+				log(f"Angel scrip master: using the older saved copy {older[-1].name}")
+				return json.loads(older[-1].read_text())
+			raise
+	try:
+		import ijson                                                       # one item at a time: fine on a 1 GB server (Oracle free tier)
+		with open(tmp, "rb") as f:
+			data = [{k: m.get(k) for k in SCRIP_KEYS} for m in ijson.items(f, "item") if m.get("exch_seg") == "NSE"]
+	except ImportError:                                                    # GitHub runners (plenty of memory): plain json
+		data = [{k: m.get(k) for k in SCRIP_KEYS} for m in json.loads(tmp.read_text()) if m.get("exch_seg") == "NSE"]
+	tmp.unlink()
+	log(f"Angel scrip master: {len(data)} NSE rows kept")
 	for old in CACHE_DIR.glob("scrip_master_*.json"):
 		old.unlink()
 	cache.write_text(json.dumps(data, separators=(",", ":")))
