@@ -18,8 +18,21 @@ self.addEventListener("fetch", (e) => {
 	const url = new URL(req.url);
 	if (FOREVER.some((re) => re.test(req.url))) return e.respondWith(cacheFirst(req));
 	if (url.origin !== SAME || url.pathname.startsWith("/__/")) return;   // Firebase calls, reserved URLs: straight to the network
+	if (/^\/builder_[a-z]+\.json$/.test(url.pathname)) return e.respondWith(networkFirst(req));   // PF Builder prices: a price run may have just finished
 	e.respondWith(staleWhileRevalidate(req, e));
 });
+
+/* newest copy from the network; the saved one only when offline */
+async function networkFirst(req) {
+	const c = await caches.open(CACHE), key = new Request(new URL(req.url).pathname);   // one saved copy, whatever the ?query
+	try {
+		const res = await fetch(req, {cache: "no-cache"});
+		if (res.ok && res.type === "basic") c.put(key, res.clone());
+		return res;
+	} catch (e) {
+		return (await c.match(key)) || new Response("Offline and not cached yet.", {status: 503, headers: {"Content-Type": "text/plain"}});
+	}
+}
 
 async function cacheFirst(req) {
 	const c = await caches.open(CACHE);

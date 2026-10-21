@@ -7,9 +7,9 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141414'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='18' font-weight='bold' fill='%23a89060' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E">
 <meta name="description" content="Split a fund into index ETFs, value stocks and momentum stocks by fixed rules, with a 1-year backtest.">
 <style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>
-<link rel="stylesheet" href="auth.css?v=13">
+<link rel="stylesheet" href="auth.css?v=14">
 <style>html:not(.pb-admin) .lead,html:not(.pb-admin) .card,html:not(.pb-admin) .tabs,html:not(.pb-admin) #out,html:not(.pb-admin) .disc{display:none}</style>
-<script type="module" src="auth.js?v=13"></script>
+<script type="module" src="auth.js?v=14"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>
@@ -204,6 +204,23 @@ details.sec>.body{padding:0 14px 14px}
 .cch{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;justify-content:space-between}
 .cch .rh{font:500 11.5px var(--mono);color:var(--faint);margin:0 0 6px}
 .lead2{color:var(--mute);font-size:12.5px;margin:0 0 12px}
+/* stocks already in your Portfolio: blue text (not green / red), a tinted row, a bar on the left and a green bag */
+:root{--held:#8cc8ff;--heldbg:rgba(120,180,255,.11);--heldbar:#5aa8ff;--bagc:#3ccf6e}
+:root[data-theme=day]{--held:#0a3a8c;--heldbg:rgba(20,80,190,.12);--heldbar:#1d58c4;--bagc:#0b7a2c}
+tr.held td{background:var(--heldbg)}
+tr.held td:first-child{box-shadow:inset 3px 0 0 var(--heldbar)}
+tr.held td,tr.held td b,tr.held .sym,tr.held .nm{color:var(--held)}
+tr.held .sym{border-bottom-color:var(--held)}
+tbody tr.held:hover td{background:var(--heldbg);filter:brightness(1.08)}
+.bag{display:inline-block;vertical-align:-2px;margin-left:6px;color:var(--bagc)}
+.bag svg{display:block}
+.sym[data-pop]{cursor:pointer}
+/* stock popup: the Factor Screener's own stock card, shown on top of this page */
+.eng.show{position:fixed;left:0;top:0;width:100vw;height:100vh;height:100dvh;visibility:visible;z-index:600;background:transparent;color-scheme:normal}
+.pb-toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,16px);z-index:700;max-width:calc(100vw - 32px);background:var(--panel2);color:var(--ink);
+  border:1px solid var(--brass);border-radius:10px;padding:10px 16px;font:600 12.5px/1.45 var(--mono);box-shadow:0 10px 28px rgba(0,0,0,.35);
+  opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
+.pb-toast.on{opacity:1;transform:translate(-50%,0)}
 @media (max-width:640px){
   .wrap{padding:12px 16px}
     h1{font-size:19px}
@@ -600,8 +617,17 @@ function choose(pool, c, k) {
 const sortName = c => (SORT_KEYS.find(x => x[0] === c.key) || [0, c.key])[1] + (c.dir === 'asc' ? ', low to high' : ', high to low');
 const uniName = u => u === 'all' ? 'All lists' : u;
 const selText = k => `${uniName(SELC[k].uni)} · by ${sortName(SELC[k])} · ${SELC[k].n > 0 ? 'top ' + SELC[k].n : 'all that pass'}`;
+/* stocks in your Portfolio (qty > 0), from hniStore.load(): marked with a green bag and a blue row */
+let HELD = new Map();                                            // SYMBOL → qty
+const BAG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1.2 12.2a1 1 0 0 1-1 .8H7.2a1 1 0 0 1-1-.8z" fill="currentColor" fill-opacity=".25"/><path d="M9 10V6.5a3 3 0 0 1 6 0V10"/></svg>';
+const held = sym => HELD.has(sym);
+const heldTr = x => held(x.sym) ? ' class="held"' : '';
+const bagOf = sym => held(sym) ? `<span class="bag" title="In your Portfolio: ${fmt(HELD.get(sym), 0)} held" role="img" aria-label="In your Portfolio">${BAG}</span>` : '';
+/* click = the stock card (health light, numbers, news) like the other pages; ctrl / cmd-click = Screener.in in a new tab */
 function symCell(x) {
-  return x.url ? `<a class="sym" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer" title="Open on Screener.in">${esc(x.sym)}</a>` : `<b>${esc(x.label || x.sym)}</b>`;
+  const t = esc(x.label || x.sym);
+  return (x.url ? `<a class="sym" href="${esc(x.url)}" data-pop="${esc(x.sym)}" target="_blank" rel="noopener noreferrer" title="Stock card · ctrl-click: Screener.in">${t}</a>`
+                : `<b class="sym" data-pop="${esc(x.sym)}" role="button" tabindex="0" title="Stock card">${t}</b>`) + bagOf(x.sym);
 }
 const ms = v => num(v) ? fmt(v, 1) : '–';
 function pairNotes(pk) {
@@ -615,7 +641,7 @@ function section(k, title, small, body, def) {
 function indexBack(BT, sh) {
   const cell = n => `${esc(n.label)} <small>(${esc(n.c)} ${ms(n.mc)} vs ${esc(n.d)} ${ms(n.md)})</small>`;
   const heldRows = Object.entries(BT.held).sort((a, b) => b[1].months - a[1].months)
-    .map(([s, h]) => `<tr><td><b>${esc(s)}</b></td><td class="nm">${esc(ETF_NAME[s] || s)}</td><td class="r">${h.months} of 12</td><td class="r">${pill((h.g - 1) * 100)}</td></tr>`).join('');
+    .map(([s, h]) => `<tr${heldTr({sym: s})}><td>${symCell({sym: s})}</td><td class="nm">${esc(ETF_NAME[s] || s)}</td><td class="r">${h.months} of 12</td><td class="r">${pill((h.g - 1) * 100)}</td></tr>`).join('');
   const monthRows = BT.rows.map(x => `<tr><td>${esc(x.date || ('−' + x.k + ' mo'))}</td>${x.notes.map(n => `<td>${cell(n)}</td>`).join('')}<td class="r">${x.rows.length}</td><td class="r">${pill(x.ret)}</td></tr>`).join('');
   const cov = BT.scored < 12 ? `<p class="note">Composite scores were available for ${BT.scored} of 12 months; in the others the default (${esc(PAIRS[0][1])}) is held.</p>` : '';
   return `<p class="rule">Composite Dual Momentum (score = 0.5 × 6M + 0.5 × 12M return): each month a slot holds the challenger only if its score is above 0 and above ${esc(PAIRS[0][1])}'s, otherwise ${esc(PAIRS[0][1])}. When both slots hold ${esc(PAIRS[0][1])} it is held twice (2× weight). After every switch the sold ETF's profit is taxed at 15% (tax paid over the year: ${fmt(BT.taxPaid, 2)}% of the starting amount). ${esc(ALWAYS.join(', '))} are always held; each other ETF once, rebalanced monthly.</p>${cov}
@@ -675,7 +701,7 @@ async function ensureDaily(syms, force) {
   paint();                                                                  // button goes grey at once
   let res = null;
   try { res = window.hniStore && window.hniStore.builderPrices ? await window.hniStore.builderPrices(syms) : {error: 'not signed in'}; } catch (e) { res = {error: 'network'}; }
-  if (res && res.ok) lsSet('pb_req', JSON.stringify({sig, syms, t: Date.now()}));
+  if (res && res.ok) { lsSet('pb_req', JSON.stringify({sig, syms, t: Date.now()})); toast('Preparing the 1-year prices: check back in 5 minutes. You can refresh or leave this page; it opens on the 1-year backtest with the new prices.', 9000); }
   else { PREP.state = 'failed'; PREP.msg = res && res.running ? 'another chart is being prepared, try again in a few minutes' : (res && res.error) || ''; paint(); return; }
   paint(); pollDaily(syms);
 }
@@ -729,7 +755,7 @@ function paintBack(fund) {
     if (k === 'index' && BT) return section(k, label, hdr, indexBack(BT, sh), false);
     const rows = L[k];
     const body = (k === 'index' ? pairNotes(L.pk) : `<p class="rule">${esc(selText(k))} · all figures as they stood on ${esc(B.date)}.</p>`) + `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Value score then</th><th class="r">Momentum then</th><th class="r">PE then</th><th class="r">PB then</th><th class="r">Mcap then</th><th class="r">EPS CAGR then</th><th class="r">Vs 52w high then</th><th class="r">Return since</th></tr></thead><tbody>${
-      rows.length ? rows.map(x => `<tr><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td>
+      rows.length ? rows.map(x => `<tr${heldTr(x)}><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td>
         <td class="r">${num(x.score) ? fmt(x.score, 0) : '–'}</td><td class="r">${num(x.mom) ? Math.round(x.mom) : '–'}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td><td class="r">${crf(x.mcap)}</td><td class="r">${num(x.cagr) ? fmt(x.cagr, 1) + '%' : '–'}</td><td class="r">${num(x.vs52) ? fmt(x.vs52, 1) + '%' : '–'}</td><td class="r">${pill(x.ret)}</td></tr>`).join('')
       : '<tr><td colspan="10" class="empty">Nothing passed this screen then.</td></tr>'}</tbody></table></div>`;
     return section(k, label, hdr, body, false);
@@ -762,7 +788,7 @@ function paint() {
           : `<p class="rule">Non-PSU stocks that pass the Momentum screen · ${esc(selText('mom'))} · equal weight.</p>`;
         const hdr = `${pc(p.share)} · ${fund ? rs(p.amt) + ' · ' : ''}${p.rows.length} holdings${fund && p.rows.length ? ' · ' + rs(p.amt / p.rows.length) + ' each' : ''}`;
         const body = rule + `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Price ₹</th>${extraH}<th class="r">Units</th><th class="r">Amount ₹</th></tr></thead><tbody>${
-          p.rows.length ? p.rows.map(x => `<tr><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td><td class="r">${fmt(x.price, 2)}</td>${extra(x)}
+          p.rows.length ? p.rows.map(x => `<tr${heldTr(x)}><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td><td class="r">${fmt(x.price, 2)}</td>${extra(x)}
             <td class="r ${x.qty === 0 ? 'zero' : ''}" ${x.qty === 0 ? 'title="Price is above this holding\'s share of the fund"' : ''}>${fund && x.qty != null ? fmt(x.qty, 0) : '–'}</td><td class="r">${fund && x.invested != null ? fmt(x.invested, 0) : '–'}</td></tr>`).join('')
           : `<tr><td colspan="11" class="empty">Nothing passes this screen today.</td></tr>`}</tbody></table></div>`;
         const add = fund && p.rows.some(x => x.qty > 0) ? `<div class="addpart"><button type="button" class="btn sm addpf" data-addpart="${p.k}">Add these to portfolio</button></div>` : '';
@@ -934,6 +960,11 @@ async function cashLine() {
   try {
     if (!window.hniStore || !window.hniStore.load) return;
     const d = await window.hniStore.load() || {}, tx = Array.isArray(d.txns) ? d.txns : [];
+    const q = new Map();                                          // what is held now: buys − sells
+    tx.forEach(x => { if ((x.t === 'buy' || x.t === 'sell') && x.sym) { const k = String(x.sym).toUpperCase().trim(); q.set(k, (q.get(k) || 0) + (+x.qty || 0) * (x.t === 'buy' ? 1 : -1)); } });
+    const was = [...HELD.keys()].sort().join();
+    HELD = new Map([...q].filter(([, n]) => n > 1e-9));
+    if (DATA && [...HELD.keys()].sort().join() !== was) paint();    // marks follow the Portfolio
     let cash = 0;
     tx.forEach(x => {
       if (x.t === 'in') cash += +x.amt || 0; else if (x.t === 'out') cash -= +x.amt || 0;
@@ -973,9 +1004,14 @@ $('#weeklyBtn').addEventListener('click', async () => {
   m.classList.add('open');
   if (window.hniFadeAway) window.hniFadeAway(m, () => m.classList.remove('open'));   // closes itself after 5 s
 });
-document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
-  TAB = b.dataset.tab; document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b)); paint();
-}));
+/* Today / 1-year backtest: the last one used is remembered for this user (this browser), so a reload or the next visit opens on it */
+const tabKey = () => 'pb_tab_' + ((window.hniStore && window.hniStore.uid) || 'me');
+function setTab(t, save) {
+  TAB = t === 'back' ? 'back' : 'now';
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x.dataset.tab === TAB));
+  if (save) lsSet(tabKey(), TAB);
+}
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => { setTab(b.dataset.tab, true); paint(); }));
 /* section open / closed (kept across repaints), expand / collapse all, chart legend */
 $('#out').addEventListener('toggle', e => { const d = e.target; if (d.classList && d.classList.contains('sec')) OPEN[TAB + d.dataset.k] = d.open; }, true);
 $('#out').addEventListener('click', e => {
@@ -988,7 +1024,42 @@ $('#out').addEventListener('click', e => {
   }
   const a = e.target.closest('[data-all]');
   if (a) { const o = a.dataset.all === '1'; $('#out').querySelectorAll('details.sec').forEach(d => { d.open = o; }); return; }
+  const sp = e.target.closest('[data-pop]');
+  if (sp && !(e.ctrlKey || e.metaKey || e.shiftKey || e.button)) { e.preventDefault(); stockPop(sp.dataset.pop, sp.getAttribute('href')); }
 });
+$('#out').addEventListener('keydown', e => { const sp = e.target.closest && e.target.closest('b[data-pop]'); if (sp && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); stockPop(sp.dataset.pop); } });
+/* the stock card is the Factor Screener's own (newsOverlay: checklist light, value / momentum numbers, news, Buy / Sell). That page already runs
+   hidden in this one (the screens engine), so its card is opened there and the frame is shown over this page until the card closes. */
+let POP = null;
+async function stockPop(sym, url) {
+  const f = $('iframe.eng');
+  let w = null, open = null;
+  try { w = f && await engine(); open = w && w.eval("typeof newsOverlay === 'function' ? newsOverlay : null"); } catch (e) {}
+  if (!open) { if (url) window.open(url, '_blank', 'noopener'); return; }          // engine not ready: Screener.in as before
+  const d = w.document, day = document.documentElement.dataset.theme === 'day';
+  d.documentElement.dataset.theme = day ? 'day' : 'night'; d.body.classList.toggle('day', day); d.body.classList.toggle('night', !day);   // same theme as here
+  d.documentElement.classList.add('pb-pop'); f.classList.add('show'); f.removeAttribute('aria-hidden'); f.tabIndex = 0;
+  try { open(sym); } catch (e) { d.documentElement.classList.remove('pb-pop'); f.classList.remove('show'); if (url) window.open(url, '_blank', 'noopener'); return; }
+  try { f.focus(); const x = d.querySelector('.wip-back .wip-x'); if (x) x.focus({preventScroll: true}); } catch (e) {}
+  clearInterval(POP);
+  POP = setInterval(() => {                                     // card (and anything it opened, e.g. Buy / Sell) closed → hide the frame
+    if (d.querySelector('.wip-back, .au-back.open')) return;
+    clearInterval(POP); POP = null;
+    d.documentElement.classList.remove('pb-pop'); f.classList.remove('show'); f.setAttribute('aria-hidden', 'true'); f.tabIndex = -1;
+    cashLine();                                                 // a Buy / Sell from the card: cash and bags follow
+  }, 250);
+}
+document.addEventListener('keydown', e => {                       // Esc while focus stayed on this page
+  if (e.key !== 'Escape' || !POP) return;
+  try { const b = $('iframe.eng').contentWindow.document.querySelector('.wip-back'); if (b && b._close) b._close(); } catch (x) {}
+});
+let TOAST_T = null;
+function toast(msg, ms = 6000) {
+  let t = $('.pb-toast');
+  if (!t) { t = document.createElement('div'); t.className = 'pb-toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+  t.textContent = msg; requestAnimationFrame(() => t.classList.add('on'));
+  clearTimeout(TOAST_T); TOAST_T = setTimeout(() => t.classList.remove('on'), ms);
+}
 let RS = null; window.addEventListener('resize', () => { clearTimeout(RS); RS = setTimeout(drawCharts, 150); });
 function paintSel() {
   const lists = ['all'].concat((DATA && DATA.now && DATA.now.lists) || []);
@@ -1028,6 +1099,8 @@ paintSplit();
     return;
   }
   document.documentElement.classList.add('pb-admin'); $('#gate').remove();
+  setTab(lsGet(tabKey()) || 'now', false);                         // the tab this user had open last time
+  if (TAB === 'back' && pendingReq()) toast('Still preparing the 1-year prices: they appear here by themselves, or check back in a few minutes.', 6000);
   try {
     const dly = dailyData();                       // big file: start it now, awaited with the screens
     const etf = await etfData();
