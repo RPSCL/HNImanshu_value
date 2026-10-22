@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<!-- legal.html — About, Pricing, Terms, Privacy, Refunds, Contact. Open to everyone (no login), so payment reviewers
+     (Razorpay) and visitors can read what HNImanshu is and is not.
+     BEFORE UPLOADING: replace every [FILL …] value below (search "FILL": name, city, email, phone, address). They must match your Razorpay KYC. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HNImanshu — About, Terms and Policies</title>
+<meta name="description" content="HNImanshu is stock-screening software for learning and research. Pricing, terms of use, privacy, refund policy and contact details.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{--mono:'IBM Plex Mono',ui-monospace,monospace;--sans:'DM Sans',system-ui,-apple-system,"Segoe UI",sans-serif}
+body,body.night{--bg:#0e0e0f;--panel:#141416;--line:#323238;--ink:#f0ece4;--mute:#c0b8ae;--faint:#807870;--accent:#d4b47a;--warn:#e09878;color-scheme:dark}
+body.day{--bg:#c8c1b5;--panel:#bdb6a8;--line:#7a7468;--ink:#060402;--mute:#281e12;--faint:#4a4238;--accent:#4c2e0a;--warn:#781c00;color-scheme:light}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:70px}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 var(--sans)}
+a{color:var(--accent)}
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.bar{max-width:860px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.home{font:700 15px var(--mono);letter-spacing:1px;text-decoration:none;color:var(--accent)}
+nav{display:flex;flex-wrap:wrap;gap:4px 14px;margin-left:auto}
+nav a{font:600 12.5px var(--mono);text-decoration:none;color:var(--mute)}
+nav a:hover{color:var(--accent)}
+main{max-width:860px;margin:0 auto;padding:8px 16px 60px}
+h1{font:700 26px var(--sans);margin:28px 0 6px}
+h2{font:700 19px var(--sans);margin:44px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
+h3{font:700 15px var(--sans);margin:22px 0 6px}
+p,li{color:var(--mute)}
+b,strong{color:var(--ink)}
+.note{border:1px solid var(--accent);border-radius:10px;padding:14px 16px;background:var(--panel);margin:18px 0}
+.note p{margin:0}
+.upd{font:500 12.5px var(--mono);color:var(--faint)}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:14px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+th{font:600 12px var(--mono);color:var(--faint)}
+td.r,th.r{text-align:right;white-space:nowrap}
+.fill{background:var(--warn);color:var(--bg);padding:0 6px;border-radius:4px;font-weight:700}
+footer{max-width:860px;margin:0 auto;padding:20px 16px 40px;font:500 12.5px var(--mono);color:var(--faint);border-top:1px solid var(--line)}
+@media (max-width:560px){h1{font-size:22px} nav{margin-left:0} th,td{padding:8px 6px}}
+</style>
+<script>try{if(localStorage.getItem('hnimanshu_theme')==='day')document.documentElement.dataset.t='day'}catch(e){}</script>
+</head>
+<body>
+<script>document.body.className=document.documentElement.dataset.t==='day'?'day':'night'</script>
+<header><div class="bar">
+  <a class="home" href="./">HNImanshu</a>
+  <nav><a href="#about">About</a><a href="#pricing">Pricing</a><a href="#terms">Terms</a><a href="#privacy">Privacy</a><a href="#refund">Refunds</a><a href="#contact">Contact</a></nav>
+</div></header>
+<main>
+<h1>About HNImanshu</h1>
+<p class="upd">Last updated: 22 October 2026</p>
+
+<div class="note"><p><b>HNImanshu is software, not advice.</b> It is a stock-screening and portfolio-tracking tool for learning and research.
+It does not recommend, advise or tip any stock, and never tells anyone to buy, sell or hold a security. HNImanshu is not registered with SEBI
+as an investment adviser or research analyst, and offers no advisory, portfolio-management or tip service of any kind.</p></div>
+
+<h2 id="about">What the product is</h2>
+<p>HNImanshu is a web application (software as a service) that takes the published financial results and market prices of companies listed on
+the National Stock Exchange of India and lets users sort, filter and study them with their own settings. Paid plans give access to more software
+features; they do not buy opinions, calls, targets or tips.</p>
+<ul>
+  <li><b>Valuation and Factor Screener:</b> tables of companies with ratios worked out from public data (for example price-to-earnings, debt, growth),
+    which the user filters and sorts with their own limits.</li>
+  <li><b>Portfolio (paper / tracking):</b> users type in their own transactions to track their own holdings and profit or loss. Nothing is bought or sold
+    through HNImanshu, and we do not hold or handle any user's money or securities.</li>
+  <li><b>Checklist:</b> shows how many of a fixed, published set of numeric checks a company's reported figures pass. It is a counting tool, not a rating
+    or a recommendation.</li>
+  <li><b>Portfolio Builder (backtest):</b> lets the user apply rules they choose to past data and see how such rules would have performed historically.
+    Past results do not predict future returns.</li>
+  <li><b>Telegram summary:</b> a weekly message with the user's own portfolio figures. It contains no stock tips or calls.</li>
+</ul>
+<p>Data comes from public sources and can be late, incomplete or wrong. Users make their own decisions and should consult a SEBI-registered
+adviser before investing.</p>
+
+<h2 id="pricing">Pricing</h2>
+<p>Plans are prepaid subscriptions to software features. Prices are in Indian rupees; 18% GST is added at checkout.</p>
+<table>
+  <thead><tr><th>Plan</th><th>What it unlocks</th><th class="r">Price (before GST)</th></tr></thead>
+  <tbody>
+    <tr><td><b>Free</b></td><td>NIFTY 500 screens, Valuation, Portfolio tracking</td><td class="r">₹0</td></tr>
+    <tr><td><b>Plus</b></td><td>All lists: Smallcap 500, Microcap 250 and other NSE companies</td><td class="r">₹499 / year</td></tr>
+    <tr><td><b>Prime</b> · 1 month</td><td rowspan="4">Everything in Plus, plus Portfolio Builder (backtest), Checklist and the weekly Telegram summary</td><td class="r">₹249</td></tr>
+    <tr><td><b>Prime</b> · 3 months</td><td class="r">₹597 (₹199 / month)</td></tr>
+    <tr><td><b>Prime</b> · 6 months</td><td class="r">₹894 (₹149 / month)</td></tr>
+    <tr><td><b>Prime</b> · 12 months</td><td class="r">₹1,188 (₹99 / month)</td></tr>
+  </tbody>
+</table>
+<p>Payments are processed by Razorpay. Access starts as soon as the payment is confirmed and ends on the date shown in your account menu.
+Plans do not renew on their own.</p>
+
+<h2 id="terms">Terms of use</h2>
+<p>By using HNImanshu you agree to these terms. The service is operated by <span class="fill">[FILL legal name of owner / business]</span>.</p>
+<h3>1. No advice</h3>
+<p>Everything on HNImanshu is general information produced by software from public data, for education and research. It is not investment, tax
+or legal advice, not a research report, and not an offer or solicitation to buy or sell any security. You alone are responsible for your
+investment decisions and their results.</p>
+<h3>2. Accounts</h3>
+<p>You need an account to use the screens. Keep your password private; you are responsible for activity on your account. One person per account.
+We may suspend accounts that misuse the service, share paid access, scrape data in bulk or try to break its security.</p>
+<h3>3. Paid plans</h3>
+<p>Paid plans unlock software features for the period bought. Prices may change for future purchases; a period already paid for is not affected.</p>
+<h3>4. Data and availability</h3>
+<p>We take care, but data can be delayed or wrong and the service may be unavailable at times. It is provided "as is", without warranties.
+To the extent the law allows, our total liability is limited to the amount you paid us in the 12 months before the claim.</p>
+<h3>5. Acceptable use</h3>
+<p>Do not copy, resell or republish the site's data or screens, and do not use HNImanshu to give paid tips or advice to others.</p>
+<h3>6. Law</h3>
+<p>These terms are governed by the laws of India; courts at <span class="fill">[FILL city]</span> have jurisdiction.</p>
+
+<h2 id="privacy">Privacy policy</h2>
+<ul>
+  <li><b>What we collect:</b> your username, or your name and email when you sign in with Google; the portfolio entries you type in; when you last
+    signed in; and plan and payment status. Anonymous counts of visitors online.</li>
+  <li><b>Payments:</b> card, UPI and bank details are entered on Razorpay's checkout and handled by Razorpay. We receive only the payment ID, amount
+    and status; we never see or store card numbers.</li>
+  <li><b>Where it is stored:</b> Google Firebase (authentication and database). Your portfolio can be read only by you and by the site administrator
+    for support.</li>
+  <li><b>Use:</b> only to run the service, provide support and prevent misuse. We do not sell or rent your data and show no third-party ads.</li>
+  <li><b>Deletion:</b> ask us at the contact below and we will delete your account and portfolio data, except payment records we must keep by law.</li>
+</ul>
+
+<h2 id="refund">Refund and cancellation policy</h2>
+<ul>
+  <li>Plans are prepaid, one-time purchases of digital access that starts immediately; nothing is shipped. There is nothing to cancel, as plans
+    do not renew automatically.</li>
+  <li>Prime can be tried free for 1 hour before buying, so paid plans are <b>not refundable</b> once access has started, except as below.</li>
+  <li>If you were charged twice, charged without access being switched on, or a payment failed but money was debited, write to us within 7 days
+    with the payment ID. Such amounts are refunded in full to the original payment method within 5–7 business days.</li>
+</ul>
+
+<h2 id="contact">Contact</h2>
+<p><b>Operator:</b> <span class="fill">[FILL legal name of owner / business]</span><br>
+<b>Email:</b> <span class="fill">[FILL support email]</span><br>
+<b>Phone:</b> <span class="fill">[FILL phone]</span><br>
+<b>Address:</b> <span class="fill">[FILL postal address]</span><br>
+<b>Telegram:</b> <a href="https://t.me/HNImanshu" target="_blank" rel="noopener">t.me/HNImanshu</a></p>
+<p>We reply within 2 working days.</p>
+</main>
+<footer>HNImanshu · stock-screening software · not investment advice · not a SEBI-registered adviser or research analyst</footer>
+</body>
+</html>

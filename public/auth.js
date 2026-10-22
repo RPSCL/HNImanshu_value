@@ -715,6 +715,18 @@ const hinted = () => { try { return localStorage.getItem(SIGNED_HINT) === "1"; }
 // Used again after more than an hour away (or a tab left open that long): the gate shows "Checking login…" and asks
 // Firebase's server again (a fresh token), so a deleted / disabled account is shut out.
 const AUTH_AT = "hni_auth_at", TRUST_MS = 60 * 60 * 1000;
+// Demo (review) logins: "Portfolio" is called "Paper portfolio" everywhere they look (no real money). Empty the list to switch off.
+const DEMO = ["razorpay@users.hnimanshu.app"];
+function markDemo(u) {
+  const on = !!(u && DEMO.includes((u.email || "").toLowerCase()));
+  window.hniDemo = on;
+  document.documentElement.classList.toggle("hni-demo", on);
+  if (!on) return;
+  const pf = NAV.find((x) => x.k === "portfolio"); if (pf) { pf.t = "Paper portfolio"; pf.s = "Practice holdings, no real money"; }
+  document.querySelectorAll("[data-pf-name]").forEach((el) => { el.textContent = "Paper portfolio"; });
+  document.querySelectorAll("[data-pf-sub]").forEach((el) => { el.textContent = "Practice holdings, no real money"; });
+  document.querySelectorAll("#pfBag").forEach((el) => { el.title = "Paper portfolio"; el.setAttribute("aria-label", "Paper portfolio"); });
+}
 const trusted = () => { try { return hinted() && Date.now() - (+localStorage.getItem(AUTH_AT) || 0) < TRUST_MS; } catch (e) { return false; } };
 const stampAuth = (on) => { try { on ? localStorage.setItem(AUTH_AT, String(Date.now())) : localStorage.removeItem(AUTH_AT); } catch (e) {} };
 let current = null;
@@ -731,7 +743,8 @@ const ready = new Promise((resolve) => {
     resolve();
     if ((GATED || LOGIN_ONLY) && !u) { toLanding(); return; }    // no login: the landing page, login box open, then back here
     if (GATED || LOGIN_ONLY) document.documentElement.classList.add("auth-ok");   // show the page at once
-    else paintSlot(u);                                         // screener: Login button or the user menu
+    if (!GATED) paintSlot(u);                                  // Valuation (login-only) too: the user menu in its #au-slot
+    markDemo(u);
     if (!u) { markPro(false, null); if (GATED) document.documentElement.classList.remove("hni-nav"); else mountNav(); return; }
     // Portfolio tab: the page saves / loads the user's holdings through this (Firestore hni_portfolio/{uid}, owner only)
     window.hniStore = {

@@ -437,6 +437,8 @@ const builtTxt = v => { const d = new Date(v); if (isNaN(d)) return String(v);
 const REVIEW = ['razorpay@users.hnimanshu.app'];
 async function reviewView() {
   document.documentElement.classList.add('pb-review');
+  const h1 = $('h1'); if (h1) h1.textContent = 'Paper portfolio';      // no builder here: just the practice holdings
+  document.title = 'HNImanshu — Paper portfolio';
   const out = $('#out');
   status('');
   out.innerHTML = '<p class="building" role="status"><i></i>Building…</p>';
@@ -455,7 +457,7 @@ async function reviewView() {
   });
   const rows = [...pos.values()].filter(p => p.qty > 1e-9);
   if (!rows.length) {
-    out.innerHTML = '<div class="rv-empty">Start adding stocks to your paper portfolio to see the details on this page. <a href="factor#/portfolio">Open Portfolio →</a></div>';
+    out.innerHTML = '<div class="rv-empty">Start adding stocks to your paper portfolio to see the details on this page. <a href="factor#/portfolio">Open Paper portfolio →</a></div>';
     return;
   }
   let info = {};                                          // name, industry, PE, PB, ROE, value score, momentum (the Factor Screener's own numbers)
