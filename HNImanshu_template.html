@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <style>html[data-auth="login"]:not(.auth-ok) body{visibility:hidden}</style>
+<script>try{if(localStorage.getItem("hni_signed")==="1"&&Date.now()-(+localStorage.getItem("hni_auth_at")||0)<36e5)document.documentElement.classList.add("auth-ok")}catch(e){}</script>
 <script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){document.body.style.visibility="visible";document.body.innerHTML='<p style="font:15px system-ui;padding:40px;text-align:center">Login could not load. <a href="./">Back to home</a></p>'}},15000)</script>
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
@@ -961,8 +962,8 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
 #wm-btn:active { transform: scale(0.98); }
 </style>
 <!-- login popup for the Fundamentals button (shared with the Fundamentals page) -->
-<link rel="stylesheet" href="auth.css?v=25">
-<script type="module" src="auth.js?v=25"></script>
+<link rel="stylesheet" href="auth.css?v=26">
+<script type="module" src="auth.js?v=26"></script>
 </head>
 <body class="night">
 <script>

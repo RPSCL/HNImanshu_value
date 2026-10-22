@@ -1237,7 +1237,12 @@ body.day .toggle-thumb{transform:translateX(16px)}
 .pf-left .wrap{max-height:max(340px,calc(100vh - 300px))}            /* each panel scrolls on its own */
 .pf-right .wrap{max-height:max(200px,calc(50vh - 175px))}
 .pf-h{font:700 12.5px var(--mono);color:var(--brass);margin:0;letter-spacing:.4px;white-space:nowrap;margin-right:auto}
-.pf-h span{font:600 11px var(--mono);color:var(--faint);margin-left:6px;padding:1px 7px;border:1px solid var(--line);border-radius:99px}
+.pf-zsort{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font:600 11px var(--mono);color:var(--mute);letter-spacing:0}
+.pf-zsort .fsel-menu{left:auto;right:-8px}
+.pf-zsort .fsel-btn{font:600 12px var(--mono)}
+.pf-zsort .fsel-opt{font:600 12.5px var(--sans);letter-spacing:0}
+#pfZDir{background:var(--panel2);color:var(--brass);border:1px solid var(--line);border-radius:8px;width:30px;height:28px;font:700 14px var(--mono);cursor:pointer}
+.pf-h > span{font:600 11px var(--mono);color:var(--faint);margin-left:6px;padding:1px 7px;border:1px solid var(--line);border-radius:99px}
 .pf-panel > .pf-h{margin-bottom:6px}
 .pf-co{font-size:11px;color:var(--faint);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pf-panel td small{font-size:11px;margin-left:4px}
@@ -3262,6 +3267,7 @@ async function pfLoadNow() {
   pfApplyRenames();
   PF_HELD = pfHeld();
   if ((location.hash || '') === '#/portfolio') { route(); setTimeout(pfBasketOpen, 200); } else pfMarkBags();   // a list from PF Builder: check it, then buy
+  pfWatch();
 }
 window.addEventListener('hni-ready', () => pfLoad());
 /* ---------- PF Builder → Portfolio ----------
@@ -3678,7 +3684,11 @@ function pfIdxHtml() {
 /* phone portfolio, laid out like Zerodha's Holdings: one summary card, then a card per stock.
    Tapping a stock opens a soft sheet with its value / momentum details, your holding and its news. */
 function pfPhone(P) {
-  const R = P.R, open = P.open.slice().sort((a, b) => b.value - a.value), closed = P.closed;
+  const R = P.R, closed = P.closed;
+  const SK = PF_ZSORT[lsGet('pfzsort')] ? lsGet('pfzsort') : 'value', SD = lsGet('pfzdir') === 'up' ? 1 : -1;   // phone sort, remembered
+  const open = P.open.slice().sort((a, b) => { const x = PF_ZSORT[SK].v(a), y = PF_ZSORT[SK].v(b);
+    if (x == null || x === '') return 1; if (y == null || y === '') return -1;   // blanks always last
+    return (typeof x === 'string' ? x.localeCompare(y) : x - y) * SD; });
   const cur = P.hold, inv = P.cost, pnl = cur - inv, cashOpen = lsGet('pfcash') === '1';
   const f2 = v => fmt(v, 2);
   const kv = (k, v, sub) => `<div><span>${k}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
@@ -3707,7 +3717,8 @@ function pfPhone(P) {
     p.innerHTML = `<h3 class="pf-h">${title} <span>${n}</span>${extra}</h3><div class="pf-zlist"></div>`; host.appendChild(p); return $('.pf-zlist', p); };
   const nl = pfNotListedSet();
   // holdings: Qty · Avg / % ; SYMBOL / P&L ; Invested / LTP (day %)
-  sec('Holdings', open.length).innerHTML = open.length ? open.map(r => {
+  const sortUi = open.length > 1 ? `<label class="pf-zsort"><span>Sort</span><select id="pfZSort" aria-label="Sort holdings by">${Object.entries(PF_ZSORT).map(([k, o]) => `<option value="${k}"${k === SK ? ' selected' : ''}>${o.label}</option>`).join('')}</select><button type="button" id="pfZDir" aria-label="Reverse order" title="Reverse order">${SD > 0 ? '↑' : '↓'}</button></label>` : '';
+  sec('Holdings', open.length, sortUi).innerHTML = open.length ? open.map(r => {
     const c = r.priced ? (r.pnl >= 0 ? 'up' : 'dn') : '';
     return `<div class="pf-zh" data-news="${esc(r.sym)}" role="button" tabindex="0">
       <div class="a"><span>Qty. ${fmt(r.qty, 0)} <i>•</i> Avg. ${f2(r.avg)}</span><span class="${c}">${r.priced ? pctTxt(r.pnlPct) : ''}</span></div>
@@ -3732,7 +3743,34 @@ function pfPhone(P) {
     return `<div class="pf-zt"><div class="a"><span><span class="pf-t ${x.t}">${TX_LABEL[x.t]}</span> ${esc(x.date || '')}</span><span>${signed(amt)}</span></div>
       <div class="b"><span>${x.sym ? `<b>${esc(x.sym)}</b> ${fmt(x.qty, 0)} @ ${f2(x.px)}` : 'Cash'}${x.ch ? ` <small>· ch ₹${f2(x.ch)}</small>` : ''}</span>${act}</div></div>`; }).join('')
     : '<p class="na pf-zempty">Every Pay in, Pay out, Buy and Sell shows here, newest first.</p>';
+  const zs = $('#pfZSort'), zd = $('#pfZDir');
+  if (zs) zs.addEventListener('change', () => { lsSet('pfzsort', zs.value); lsSet('pfzdir', PF_ZSORT[zs.value].up ? 'up' : 'dn'); pfRedraw(); });
+  if (zd) zd.addEventListener('click', () => { lsSet('pfzdir', SD > 0 ? 'dn' : 'up'); pfRedraw(); });
   pfWireTop();
+}
+/* phone Holdings sort: field → value; up = natural first direction (A→Z for text, high→low for numbers) */
+const PF_ZSORT = {
+  name:  {label: 'Stock name',  up: 1, v: r => r.sym},
+  day:   {label: "Day's P&L %", v: r => r.dayPct},
+  pnl:   {label: 'Overall P&L %', v: r => r.priced ? r.pnlPct : null},
+  value: {label: 'Current value', v: r => r.value},
+  remark:{label: 'Remark',      up: 1, v: r => r.remark || ''},
+};
+/* re-draw the portfolio where it is (route() jumps to the top) */
+function pfRedraw() { if ((location.hash || '') !== '#/portfolio') return; const y = window.scrollY; route(); window.scrollTo(0, y); }
+/* live prices: Firestore pushes hni_market/ltp the moment a new LTP lands → prices change on screen straight away */
+let PF_WATCH = null;
+async function pfWatch() {
+  if (PF_WATCH || !window.hniStore || !window.hniStore.watchMarket) return;
+  PF_WATCH = 1;
+  try { PF_WATCH = await window.hniStore.watchMarket(async m => {
+    if (!m || !m.asOf || (PF.mkt && m.asOf === PF.mkt.asOf) || PF.busy) return;
+    const first = !PF.mkt; PF.mkt = m; await pfApplyRenames(); PF_HELD = pfHeld();
+    if (PF_POLL) { clearInterval(PF_POLL); PF_POLL = null; }
+    if ((location.hash || '') !== '#/portfolio' || !PF.txns) return;
+    if (document.querySelector('.wip-back, .au-back.open')) return;   // a form is open: prices are in, the next draw shows them
+    pfRedraw(); if (!first) toast('Live prices updated · ' + m.asOf.slice(11) + ' IST');
+  }); } catch (e) { PF_WATCH = null; }
 }
 /* Portfolio row buttons (✎ holding, ✎ / × transaction, Remove closed): ONE click handler for the whole page, so
    rows re-drawn by the search box or added while scrolling work straight away */
@@ -4762,8 +4800,10 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
 AUTH_WEB = {
     "__AUTH_ATTR__": ' data-auth="required"',
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
-                     '<link rel="stylesheet" href="auth.css?v=25">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=25"></script>\n',
+                     # signed in and checked within the last hour → page shows at once; auth.js confirms quietly behind it
+                     '<script>try{if(localStorage.getItem("hni_signed")==="1"&&Date.now()-(+localStorage.getItem("hni_auth_at")||0)<36e5)document.documentElement.classList.add("auth-ok")}catch(e){}</script>\n'
+                     '<link rel="stylesheet" href="auth.css?v=26">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=26"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
