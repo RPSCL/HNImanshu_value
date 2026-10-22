@@ -357,7 +357,7 @@ jobs:
         if: steps.mode.outputs.mode != 'prices'
         run: |
           echo '${{ secrets.GOOGLE_CREDENTIALS }}' > serviceAccount.json
-          npm install -g firebase-tools
+          npm install -g firebase-tools@15.34.0   # pinned: 15.34.1 (22 Oct 2026, 03:48 IST) needs an extra Google permission; see NOTES
 
       # "Delete user" from the website's Users list: removes the login accounts noted in hni_deletes
       - name: "🗑 Finish account deletions"
