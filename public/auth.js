@@ -724,7 +724,6 @@ function markDemo(u) {
   try { localStorage.setItem("hni_demo", on ? "1" : "0"); } catch (e) {}   // pages show the demo view at once next time
   document.documentElement.classList.toggle("hni-demo", on);
   if (!on) return;
-  for (let i = NAV.length - 1; i >= 0; i--) if (NAV[i].k === "builder" || NAV[i].k === "weekly") NAV.splice(i, 1);   // no PF Builder / Telegram in Navigate
   const pf = NAV.find((x) => x.k === "portfolio"); if (pf) { pf.t = "Paper portfolio"; pf.s = "Practice holdings, no real money"; }
   document.querySelectorAll("[data-pf-name]").forEach((el) => { el.textContent = "Paper portfolio"; });
   document.querySelectorAll("[data-pf-sub]").forEach((el) => { el.textContent = "Practice holdings, no real money"; });
