@@ -980,7 +980,7 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
   <div id="wm-box">
     <h2>HNImanshu Valuation</h2>
     <p>*Free Trial</p>
-    <p>This platform helps you find good companies using data — not guesswork.</p>
+    <p>This tool lays out company data so you can study it yourself — not guesswork, and not advice.</p>
     <p>We use company financials like profits, growth, cash flow, and balance sheets, instead of tips or news.</p>
     <p>Each company is analyzed using multiple methods such as earnings, growth, valuation ratios, and future cash flows.</p>
     <p>Fair value is calculated using different models like Graham, Peter Lynch, DCF, and more — all combined into one estimate.</p>
@@ -997,7 +997,7 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
     <div class="wm-disclaimer">
       <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">
         <input type="checkbox" id="wm-check" style="margin-top:3px;cursor:pointer;">
-        <span>⚠️ A higher rank does not guarantee a good investment, and a lower rank does not mean a bad one.</span>
+        <span>⚠️ The sort order and model values are calculations, not recommendations. A higher place does not mean a good investment, and a lower one does not mean a bad one.</span>
       </label>
     </div>
     <button id="wm-btn" disabled style="opacity:0.5;cursor:not-allowed;">I Understand</button>
@@ -1026,7 +1026,7 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
   </div>
   <div class="h-stats">
     <div class="hstat"><div class="hstat-val" id="hs-total">—</div><div class="hstat-lbl">Universe</div></div>
-    <div class="hstat"><div class="hstat-val" id="hs-dv">—</div><div class="hstat-lbl">Deep Value</div></div>
+    <div class="hstat"><div class="hstat-val" id="hs-dv">—</div><div class="hstat-lbl">Far below model</div></div>
     <div class="hstat"><div class="hstat-val" id="hs-best">—</div><div class="hstat-lbl">A/B+</div></div>
   </div>
   <!-- Portfolio: the Fundamentals page's Portfolio tab (login needed, same first-tap handling as Fundamentals) -->
@@ -1085,7 +1085,7 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
       <div class="grade-pills" id="grade-pills"></div>
     </div>
     <div class="sb-section">
-      <div class="sb-label">Fair Value</div>
+      <div class="sb-label">Price vs model value</div>
       <div class="fv-pills" id="fv-pills"></div>
       <!-- UNHEALTHY STOCKS CHECKBOX — always on, below Overvalued -->
       <label class="unhealthy-row" id="unhealthy-row-desktop">
@@ -1166,14 +1166,14 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
       <table id="main-table">
         <thead>
           <tr>
-            <th data-col="FINAL_RANK"             data-dir="asc"  ># Rank</th>
+            <th data-col="FINAL_RANK"             data-dir="asc"  ># Sort order</th>
             <th data-col="COMPANY_NAME"           data-dir="asc"  >Company</th>
             <th data-col="INDUSTRY"               data-dir="asc"  >Industry</th>
             <th data-col="GRADE"                  data-dir="asc"  >Grade <button class="info-btn th-info-btn" id="grade-th-info-btn" aria-label="Grade info">i</button></th>
-            <th data-col="FV_GRADE"               data-dir="asc"  >FV Status</th>
+            <th data-col="FV_GRADE"               data-dir="asc"  >Price vs model</th>
             <th data-col="CMP"                    data-dir="asc"  >CMP ₹</th>
-            <th data-col="COMPOSITE_FAIR_VALUE"   data-dir="desc" >Fair Val</th>
-            <th data-col="UPSIDE_PCT"             data-dir="desc" >Upside%</th>
+            <th data-col="COMPOSITE_FAIR_VALUE"   data-dir="desc" >Model value</th>
+            <th data-col="UPSIDE_PCT"             data-dir="desc" >Gap to model %</th>
             <th data-col="MARGIN_OF_SAFETY_PCT"   data-dir="desc" >MOS%</th>
             <th data-col="PE"                     data-dir="asc"  >P/E</th>
             <th data-col="ROE_PCT"                data-dir="desc" >ROE%</th>
@@ -1188,7 +1188,7 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
             <th data-col="PIOTROSKI_SCORE"        data-dir="desc" >Piotroski</th>
             <th data-col="QUALITY_SCORE"          data-dir="desc" >Quality</th>
             <th data-col="COMBINED_SCORE"         data-dir="desc" >Combined</th>
-            <th data-col="FINAL_SCORE"            data-dir="desc" >Rank Score</th>
+            <th data-col="FINAL_SCORE"            data-dir="desc" >Composite score</th>
           </tr>
         </thead>
         <tbody id="tbody"></tbody>
@@ -1307,7 +1307,7 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
     </div>
     <div class="sheet-two-col">
       <div class="sheet-col-left">
-        <div class="sheet-label">Fair Value</div>
+        <div class="sheet-label">Price vs model value</div>
         <div class="sheet-fv-list" id="sheet-fv-btns"></div>
       </div>
       <div class="sheet-col-right">
@@ -1360,7 +1360,7 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
     <div class="it-row"><b>Piotroski</b> — Fresh YoY 9-signal F-Score (0–9)</div>
     <div class="it-row"><b>Quality</b> — Absolute levels + direction bonuses (0–13.4)</div>
     <div class="it-row"><b>Combined</b> — Piotroski + Quality, primary rank (0–22.4)</div>
-    <div class="it-row"><b>Rank Score</b> — Master composite: valuation + quality + penalties</div>
+    <div class="it-row"><b>Composite score</b> — Master composite: valuation + quality + penalties</div>
   </div>
   <div class="it-section">
     <div class="it-head">Penalized for</div>
@@ -1414,11 +1414,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
 const GC = {A:'#5a9e6f','B+':'#4a8f5e',B:'#6aaa7a',C:'#b8962e',D:'#c47a5a',E:'#a06878'};
 const FV_MAP = {
-  'DEEP VALUE':   {cls:'fv-DV', label:'Deep Value'},
-  'UNDERVALUED':  {cls:'fv-UV', label:'Undervalued'},
-  'FAIR':         {cls:'fv-FA', label:'Fair'},
-  'FULLY PRICED': {cls:'fv-FP', label:'Fully Priced'},
-  'OVERVALUED':   {cls:'fv-OV', label:'Overvalued'}
+  'DEEP VALUE':   {cls:'fv-DV', label:'Far below model value'},   // plain descriptions of the price vs the model value, not calls
+  'UNDERVALUED':  {cls:'fv-UV', label:'Below model value'},
+  'FAIR':         {cls:'fv-FA', label:'Near model value'},
+  'FULLY PRICED': {cls:'fv-FP', label:'Above model value'},
+  'OVERVALUED':   {cls:'fv-OV', label:'Far above model value'}
 };
 
 let universe='n500', rawData=DATASETS.n500, viewData=[];
@@ -1816,8 +1816,8 @@ function showDetail(sym){
 
   var ms=[
     {l:'CMP',           v:s.CMP?'₹'+s.CMP.toLocaleString('en-IN'):'—',              c:''},
-    {l:'Fair Value',    v:s.COMPOSITE_FAIR_VALUE?'₹'+Math.round(s.COMPOSITE_FAIR_VALUE).toLocaleString('en-IN'):'—', c:''},
-    {l:'Upside',        v:s.UPSIDE_PCT!=null?(s.UPSIDE_PCT>0?'+':'')+f1(s.UPSIDE_PCT)+'%':'—',    c:s.UPSIDE_PCT>0?'n-pos':'n-neg'},
+    {l:'Model value',    v:s.COMPOSITE_FAIR_VALUE?'₹'+Math.round(s.COMPOSITE_FAIR_VALUE).toLocaleString('en-IN'):'—', c:''},
+    {l:'Gap to model value',        v:s.UPSIDE_PCT!=null?(s.UPSIDE_PCT>0?'+':'')+f1(s.UPSIDE_PCT)+'%':'—',    c:s.UPSIDE_PCT>0?'n-pos':'n-neg'},
     {l:'MOS',           v:s.MARGIN_OF_SAFETY_PCT!=null?f1(s.MARGIN_OF_SAFETY_PCT)+'%':'—',        c:s.MARGIN_OF_SAFETY_PCT>0?'n-pos':'n-neg'},
     {l:'P/E',           v:f1(s.PE),                                                                c:''},
     {l:'Book Value',    v:s.BOOK_VALUE?'₹'+s.BOOK_VALUE:'—',                                      c:''},
@@ -1832,8 +1832,8 @@ function showDetail(sym){
     {l:'Piotroski',     v:s.PIOTROSKI_SCORE!=null?s.PIOTROSKI_SCORE:'—',                          c:piotClass(s.PIOTROSKI_SCORE)},
     {l:'Quality',       v:f1(s.QUALITY_SCORE),                                                    c:'n-neu'},
     {l:'Combined',      v:s.COMBINED_SCORE!=null?s.COMBINED_SCORE:'—',                            c:combinedClass(s.COMBINED_SCORE)},
-    {l:'Rank Score',    v:f1(s.FINAL_SCORE),                                                      c:'n-pos'},
-    {l:'Rank',          v:s.FINAL_RANK?'#'+s.FINAL_RANK:'—',                                      c:''},
+    {l:'Composite score',    v:f1(s.FINAL_SCORE),                                                      c:'n-pos'},
+    {l:'Sort order',    v:s.FINAL_RANK?'#'+s.FINAL_RANK:'—',                                      c:''},
   ];
   document.getElementById('dp-metrics').innerHTML=ms.map(function(m){
     return '<div class="dm"><div class="dm-l">'+m.l+'</div><div class="dm-v '+m.c+'">'+m.v+'</div></div>';
