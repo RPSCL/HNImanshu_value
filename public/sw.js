@@ -18,7 +18,7 @@ self.addEventListener("fetch", (e) => {
 	const url = new URL(req.url);
 	if (FOREVER.some((re) => re.test(req.url))) return e.respondWith(cacheFirst(req));
 	if (url.origin !== SAME || url.pathname.startsWith("/__/")) return;   // Firebase calls, reserved URLs: straight to the network
-	if (/^\/builder_[a-z]+\.json$/.test(url.pathname)) return e.respondWith(networkFirst(req));   // PF Builder prices: a price run may have just finished
+	if (/^\/(builder_[a-z]+|build_info)\.json$/.test(url.pathname)) return e.respondWith(networkFirst(req));   // PF Builder prices / build stamp: always the newest
 	e.respondWith(staleWhileRevalidate(req, e));
 });
 

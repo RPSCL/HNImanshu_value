@@ -252,6 +252,7 @@ function showUser(u, slot) {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") el.classList.remove("open"); });
   $(".au-out", el).addEventListener("click", async () => {
     try { localStorage.removeItem(PRO_HINT); } catch (e) {}
+    await clearUserCache();
     await signOut(auth); if (GATED) location.href = HOME; else location.reload();   // screener: reloads signed out
   });
   EXTRA.forEach((it) => $(".au-menu", el).insertBefore(itemBtn(it, el), $(".au-out", el)));
@@ -683,13 +684,20 @@ function fadeAway(el, done, ms = 5000) {                                // an in
 }
 window.hniFadeAway = fadeAway;
 
+// PF Builder keeps its finished lists in this browser (IndexedDB "hni-pb") until the user logs out
+const clearUserCache = () => new Promise((done) => {
+  try { const r = indexedDB.deleteDatabase("hni-pb"); r.onsuccess = r.onerror = r.onblocked = () => done(); setTimeout(done, 800); }
+  catch (e) { done(); }
+});
+window.hniClearCache = clearUserCache;
+
 // ---------- page wiring ----------
 const SIGNED_HINT = "hni_signed";                          // "1" = signed in last time (only a hint: Fundamentals checks for real)
 const hinted = () => { try { return localStorage.getItem(SIGNED_HINT) === "1"; } catch (e) { return false; } };
 let current = null;
 const ready = new Promise((resolve) => {
   onAuthStateChanged(auth, async (u) => {
-    if (u && expired(u)) { await signOut(auth); u = null; }   // 7-day session limit
+    if (u && expired(u)) { await clearUserCache(); await signOut(auth); u = null; }   // 7-day session limit
     current = u;
     try { localStorage.setItem(SIGNED_HINT, u ? "1" : "0"); } catch (e) {}   // lets the next visit open Fundamentals instantly
     resolve();

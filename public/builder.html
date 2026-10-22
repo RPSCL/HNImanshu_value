@@ -7,9 +7,9 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cstyle%3Erect{fill:%23141414}text{fill:%23d4b47a}@media (prefers-color-scheme:dark){rect{fill:%23f1e8d8}text{fill:%234c2e0a}}%3C/style%3E%3Crect width='32' height='32' rx='7'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='18' font-weight='bold' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E">
 <meta name="description" content="Split a fund into index ETFs, value stocks and momentum stocks by fixed rules, with a 1-year backtest.">
 <style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>
-<link rel="stylesheet" href="auth.css?v=23">
+<link rel="stylesheet" href="auth.css?v=24">
 <style>html:not(.pb-admin) .lead,html:not(.pb-admin) .card,html:not(.pb-admin) .tabs,html:not(.pb-admin) #out,html:not(.pb-admin) .disc{display:none}</style>
-<script type="module" src="auth.js?v=23"></script>
+<script type="module" src="auth.js?v=24"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>
@@ -204,6 +204,10 @@ details.sec>.body{padding:0 14px 14px}
 .cch{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;justify-content:space-between}
 .cch .rh{font:500 11.5px var(--mono);color:var(--faint);margin:0 0 6px}
 .lead2{color:var(--mute);font-size:12.5px;margin:0 0 12px}
+/* while the lists are worked out */
+.building{display:flex;align-items:center;gap:10px;margin:28px 2px;font:600 15px var(--mono);color:var(--mute)}
+.building i{width:10px;height:10px;border-radius:50%;background:var(--brass);animation:bld 1.1s ease-in-out infinite}
+@keyframes bld{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
 /* stocks already in your Portfolio: blue text (not green / red), a tinted row, a bar on the left and a green bag */
 :root{--held:#8cc8ff;--heldbg:rgba(120,180,255,.11);--heldbar:#5aa8ff;--bagc:#3ccf6e}
 :root[data-theme=day]{--held:#0a3a8c;--heldbg:rgba(20,80,190,.12);--heldbar:#1d58c4;--bagc:#0b7a2c}
@@ -403,6 +407,24 @@ async function screens(etf) {
   w.eval('setHistorical(false, null, true)');
   return {now, back};
 }
+/* finished Today / 1-year-back lists, kept in this browser (IndexedDB "hni-pb") until the user logs out. Reused while
+   build_info.json's fingerprint (the CSVs + the screening code) is unchanged, so the page opens at once. */
+const pbDb = () => new Promise((ok, bad) => {
+  const r = indexedDB.open('hni-pb', 1);
+  r.onupgradeneeded = () => r.result.createObjectStore('kv');
+  r.onsuccess = () => ok(r.result); r.onerror = () => bad(r.error);
+});
+async function cacheGet(k) {
+  try { const db = await pbDb(); return await new Promise(ok => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => ok(q.result || null); q.onerror = () => ok(null); }); }
+  catch (e) { return null; }
+}
+async function cachePut(k, v) { try { const db = await pbDb(); db.transaction('kv', 'readwrite').objectStore('kv').put(v, k); } catch (e) {} }
+let INFO_P = null;
+const buildInfo = () => INFO_P = INFO_P || fetch('build_info.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null);
+/* "2026-10-19T02:41+05:30" → "19 Oct 2026, 2:41 am"; a date only → "17 Oct 2026" */
+const builtTxt = v => { const d = new Date(v); if (isNaN(d)) return String(v);
+  const day = d.toLocaleDateString('en-IN', {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata'});
+  return /T\d/.test(v) ? day + ', ' + d.toLocaleTimeString('en-IN', {hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata'}) : day; };
 let ETF_P = null;
 const etfData = () => ETF_P = ETF_P || fetch('builder_etf.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null);
 /* saved daily closes (etf_prices/daily_close.csv → build.py → builder_daily.json): drive the backtest charts; optional */
@@ -1103,10 +1125,20 @@ paintSplit();
   if (TAB === 'back' && pendingReq()) toast('Still preparing the 1-year prices: they appear here by themselves, or check back in a few minutes.', 6000);
   try {
     const dly = dailyData();                       // big file: start it now, awaited with the screens
-    const etf = await etfData();
-    DATA = Object.assign({etf, daily: await dly}, await screens(etf));
+    const [etf, info] = await Promise.all([etfData(), buildInfo()]);
+    const uid = (window.hniStore && window.hniStore.uid) || '';
+    let sc = null;
+    const c = await cacheGet('screens');           // lists built earlier in this browser, same data + code → used as they are
+    if (c && info && info.data && c.v === info.data && c.uid === uid) sc = c.s;
+    if (!sc) {
+      $('#out').innerHTML = '<p class="building" role="status"><i></i>Building…</p>';
+      sc = await screens(etf);
+      if (info && info.data) cachePut('screens', {v: info.data, uid, s: sc});   // kept until logout (auth.js clears it)
+    }
+    DATA = Object.assign({etf, daily: await dly}, sc);
     paintSel();
-    READY = `Ready · data as of ${DATA.now.date}${DATA.back ? ' · backtest from ' + DATA.back.date : ''}`; if (READY) status(READY);
+    READY = `Ready · data as of ${DATA.now.date}${DATA.back ? ' · backtest from ' + DATA.back.date : ''}${info && info.others ? ' · last built ' + builtTxt(info.others) : ''}`;
+    if (READY) status(READY);
     paint();
   } catch (e) { status(e.message || 'Could not load the screens.', true); }
 })();
