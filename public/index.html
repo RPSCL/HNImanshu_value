@@ -117,10 +117,13 @@ body.night{--dg-glow:rgba(127,212,162,.22)}
 body.day{--dg-glow:rgba(31,107,69,.40)}
 .demo iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .demo .soon{position:absolute;inset:0;display:grid;place-items:center;color:#e9dcff;font:600 15px var(--mono);text-align:center;padding:20px}
-.demo .x{position:absolute;top:-6px;right:-6px;height:34px;padding:0 12px;border-radius:999px;border:1px solid rgba(255,255,255,.4);background:rgba(8,30,20,.78);
-  color:#fff;font:600 13px var(--mono);cursor:pointer;z-index:3;display:inline-flex;align-items:center;gap:6px}
+.demo .vid{position:absolute;inset:0}
+/* Close sits inside the video, top right: no outline; half-faded while the video plays (web), full on hover */
+.demo .x{position:absolute;top:10px;right:10px;height:32px;padding:0 12px;border:0;border-radius:8px;background:rgba(0,0,0,.55);
+  color:#fff;font:600 13px var(--mono);cursor:pointer;z-index:3;display:inline-flex;align-items:center;gap:6px;transition:opacity .3s,background .15s}
 .demo .x b{font-size:18px;font-weight:400;line-height:1}
-.demo .x:hover{background:#1f6b45}
+.demo .x:hover,.demo .x:focus-visible{opacity:1!important;background:rgba(0,0,0,.8);outline:none}
+.demo.playing .x{opacity:.5}
 
 /* bottom, centred */
 .foot{padding:18px 16px 26px;text-align:center;font:500 12.5px var(--mono);color:var(--faint);display:flex;flex-direction:column;gap:6px;opacity:0}
@@ -158,6 +161,7 @@ body.day{--dg-glow:rgba(31,107,69,.40)}
   .demo .stage{position:absolute;inset:0}
   .demo .frame{max-width:none;width:100%;height:100%;aspect-ratio:auto;border-radius:0;box-shadow:none}
   .demo .x{top:max(10px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right))}
+  .demo.playing .x{opacity:1}                                           /* phone: always fully visible (no hover on a phone) */
   .top{padding:14px 16px;gap:16px;justify-content:flex-end}
   .top .au-av{height:38px}
   .top .au-nm{max-width:42vw}
@@ -208,7 +212,7 @@ body.day{--dg-glow:rgba(31,107,69,.40)}
       <p class="t2">Indian stocks valued from company financials: NIFTY 500, Smallcap 500 and Microcap 250.</p>
     </div>
     <button type="button" class="demo-btn" id="demoBtn" aria-haspopup="dialog"><span class="pl"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg></span>View demo</button>
-    <div class="demo" id="demo" role="dialog" aria-modal="true" aria-label="Demo video"><div class="stage"><button type="button" class="x" aria-label="Close video"><b>×</b> Close</button><div class="frame"></div></div></div>
+    <div class="demo" id="demo" role="dialog" aria-modal="true" aria-label="Demo video"><div class="stage"><div class="frame"><div class="vid"></div><button type="button" class="x" aria-label="Close video"><b>×</b> Close</button></div></div></div>
   </section>
 
   <nav class="go" aria-label="Pages">
@@ -243,13 +247,43 @@ body.day{--dg-glow:rgba(31,107,69,.40)}
 /* "View demo": paste the YouTube link here (any form: youtu.be/…, youtube.com/watch?v=…, /shorts/…, /embed/…) */
 var DEMO_VIDEO = "";
 (function () {
-  var btn = document.getElementById('demoBtn'), box = document.getElementById('demo'), frame = box.querySelector('.frame');
+  var btn = document.getElementById('demoBtn'), box = document.getElementById('demo'), frame = box.querySelector('.vid'), player = null;
   function ytId(u) { var m = String(u).match(/(?:youtu\.be\/|[?&]v=|\/(?:embed|shorts|live)\/)([\w-]{11})/); return m ? m[1] : ''; }
+  /* YouTube's player script (loaded only on the first click): tells us playing / paused / ended.
+     Ended → the window closes by itself. If the script can't load, a plain player is used (no auto-close). */
+  var ytWait = null;
+  function ytApi() {
+    if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+    return ytWait = ytWait || new Promise(function (ok, bad) {
+      var prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = function () { if (prev) prev(); ok(window.YT); };
+      var sc = document.createElement('script'); sc.src = 'https://www.youtube.com/iframe_api'; sc.onerror = function () { ytWait = null; bad(); };
+      document.head.appendChild(sc);
+      setTimeout(function () { if (!(window.YT && window.YT.Player)) { ytWait = null; bad(); } }, 8000);
+    });
+  }
+  function plain(id) {
+    frame.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&rel=0&modestbranding=1&playsinline=1" title="HNImanshu demo" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>';
+  }
   function open() {
     var id = ytId(DEMO_VIDEO);
-    frame.innerHTML = id
-      ? '<iframe src="https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&rel=0&modestbranding=1&playsinline=1" title="HNImanshu demo" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>'
-      : '<div class="soon">The demo video is coming soon.</div>';
+    box.classList.remove('playing');
+    if (!id) frame.innerHTML = '<div class="soon">The demo video is coming soon.</div>';   // no link: stays open until closed
+    else {
+      frame.innerHTML = '<div id="ytp"></div>';
+      ytApi().then(function (YT) {
+        if (!box.classList.contains('open')) return;
+        player = new YT.Player('ytp', { host: 'https://www.youtube-nocookie.com', videoId: id, width: '100%', height: '100%',
+          playerVars: { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1 },
+          events: {
+            onReady: function (e) { try { e.target.playVideo(); } catch (x) {} },
+            onStateChange: function (e) {
+              box.classList.toggle('playing', e.data === 1);         // 1 playing: Close fades to half (web)
+              if (e.data === 0) close();                              // 0 ended: close the window
+            }
+          } });
+      }).catch(function () { if (box.classList.contains('open') && !player) plain(id); });
+    }
     box.classList.add('open'); box.querySelector('.x').focus();
   }
   var phone = function () { return matchMedia('(max-width:760px)').matches; };
@@ -265,7 +299,12 @@ var DEMO_VIDEO = "";
     var fe = document.fullscreenElement || document.webkitFullscreenElement, ex = document.exitFullscreen || document.webkitExitFullscreen;
     if (fe && ex) try { Promise.resolve(ex.call(document)).catch(function () {}); } catch (e) {}
   }
-  function close() { box.classList.remove('open'); frame.innerHTML = ''; leaveFull(); btn.focus(); }   // removing the player stops the sound
+  function close() {
+    if (!box.classList.contains('open')) return;
+    box.classList.remove('open', 'playing');
+    try { if (player && player.destroy) player.destroy(); } catch (e) {}
+    player = null; frame.innerHTML = ''; leaveFull(); btn.focus();
+  }   // removing the player stops the sound
   btn.addEventListener('click', function () { if (phone()) goFull(); });                              // must start inside the tap
   ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (ev) {                               // phone back gesture left full screen → close
     document.addEventListener(ev, function () { if (!(document.fullscreenElement || document.webkitFullscreenElement) && box.classList.contains('open') && phone()) close(); });
