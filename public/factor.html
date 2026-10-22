@@ -2289,7 +2289,7 @@ function symPicker(input, onPick) {
 const PF_SRC_TAB = {'': 'Industries', value: 'Value', momentum: 'Momentum', all: 'All Stocks', method: 'Methodology'};
 function pfSrcHere() {
   const h = (location.hash || '#/').replace(/^#\/?/, '').split(/[/?]/)[0];
-  return h === 'portfolio' ? 'Portfolio' : 'Factor Screener → ' + (PF_SRC_TAB[h] || h || 'Industries');
+  return h === 'portfolio' ? pfName() : 'Factor Screener → ' + (PF_SRC_TAB[h] || h || 'Industries');
 }
 function pfTradeForm(x) {
   const edit = !!x.id, held = () => { const R = pfReplay(PF.txns.filter(t => t !== x)); return (R.pos[f.sym.value.trim().toUpperCase()] || {}).qty || 0; };
@@ -2541,7 +2541,7 @@ function methodView() {
   <p><b>Momentum tab:</b> strongest first, showing <b>70 and above</b> by default (the strong trends). Filters has every Value-screen filter plus <b>Max momentum</b>, e.g. 90 to skip stocks that have already run very far.
   <b>Value screen</b> uses Min momentum 40 by default, to skip cheap stocks that are still falling. With <b>Historical</b> on, momentum uses only prices up to that date, so it can be backtested.</p>
 
-  <h2>Portfolio</h2>
+  <h2>${pfName()}</h2>
   <p>Your own holdings, saved to your login (only you can see them). Everything is worked out from your list of transactions, so editing or deleting a wrong entry fixes all the numbers after it.</p>
   ${tbl(
     g('Pay in / Pay out', 'Money you add or take out. Your opening cash is a Pay in.', 'Pay in ₹5,00,000 on day one.')
@@ -2873,11 +2873,13 @@ if (WEB) {                                                  // website: back but
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
 }
-/* page name under the HNImanshu wordmark (and the tab title): Portfolio on #/portfolio, Factor Screener everywhere else */
+/* page name under the HNImanshu wordmark (and the tab title): Portfolio on #/portfolio, Factor Screener everywhere else.
+   Demo (review) login: "Paper portfolio" (auth.js window.hniDemo) */
+function pfName() { return window.hniDemo ? 'Paper portfolio' : 'Portfolio'; }
 (function () {
   const t = $('header .brand .tagline');
-  const set = () => { const pf = /^#\/portfolio/.test(location.hash); if (t) t.textContent = pf ? 'Portfolio' : 'Factor Screener'; document.title = 'HNImanshu — ' + (pf ? 'Portfolio' : 'Factor Screener'); };
-  set(); window.addEventListener('hashchange', set);
+  const set = () => { const pf = /^#\/portfolio/.test(location.hash); if (t) t.textContent = pf ? pfName() : 'Factor Screener'; document.title = 'HNImanshu — ' + (pf ? pfName() : 'Factor Screener'); };
+  set(); window.addEventListener('hashchange', set); window.addEventListener('hni-ready', set);
 })();
 /* Telegram alerts are part of Prime (like PF Builder): not Prime → the plans popup (auth.js window.hniPlans) */
 $('#weeklyBtn').addEventListener('click', async () => {
