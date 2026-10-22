@@ -4,8 +4,10 @@ permissions:
   contents: write
 
 # never let two runs commit at the same time (a light run waits for the weekly full run)
+# The weekly scrape parts and price parts (modes 1 and 2) queue in their own lane, so a news build arriving meanwhile can
+# never knock a waiting scrape / price part out of the queue (GitHub keeps only one waiting run per group).
 concurrency:
-  group: smart-build
+  group: ${{ (github.event.inputs.force_full == '1' || github.event.inputs.force_full == '2') && 'smart-weekly' || 'smart-build' }}
   cancel-in-progress: false
 
 on:
@@ -32,6 +34,16 @@ on:
           - "2"
           - "3"
           - "4"
+      lists:
+        description: "Only for mode 1 — which list to scrape:  all  |  n500 = NIFTY 500  |  ns500 = Smallcap 500  |  nm250 = Microcap 250"
+        required: false
+        type: choice
+        default: "all"
+        options:
+          - "all"
+          - "n500"
+          - "ns500"
+          - "nm250"
       price_part:
         description: "Only for mode 2 — which third of the stocks:  1 = first  |  2 = middle  |  3 = last"
         required: false
@@ -166,13 +178,19 @@ jobs:
         timeout-minutes: 3
         run: python others.py --list-only
 
-      - name: "🚀 Full run (1) — scrape"
+      # Full run in parts (Oracle timetable): Saturday 00:00 NIFTY 500, 01:00 Smallcap 500, 02:00 Microcap 250; each part
+      # builds + deploys, so the site gets each list as soon as it is done. "all" = the three in one run (by hand).
+      - name: "🚀 Full run (1) — scrape ${{ github.event.inputs.lists || 'all' }}"
         if: steps.mode.outputs.mode == 'full'
         run: |
-          python archive_csv.py
-          python n500.py
-          python nm250.py
-          python ns500.py
+          L="${{ github.event.inputs.lists }}"; L="${L:-all}"
+          if [ "$L" = "all" ] || [ "$L" = "n500" ]; then python archive_csv.py; fi   # weekly snapshot: once, with the first part
+          case "$L" in
+            n500)  python n500.py ;;
+            ns500) python ns500.py ;;
+            nm250) python nm250.py ;;
+            *)     python n500.py; python nm250.py; python ns500.py ;;
+          esac
 
       # Angel prices (fetch_prices.py → prices.csv): ONLY in prices mode (2), one third of the stocks per run:
       #   Saturday 02:00 / 04:00 / 06:00 IST → part 1 / 2 / 3 (after the 00:00 full scrape), or by hand with mode 2 + price_part.
