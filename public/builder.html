@@ -30,7 +30,8 @@
 html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans)}
 a{color:inherit}
 .wrap{max-width:1100px;margin:0 auto;padding:16px}
-header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:6px 0 14px;border-bottom:1px solid var(--line)}
+/* full-width header, same as the Factor Screener / Portfolio page */
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 24px;background:var(--panel);border-bottom:1px solid var(--line)}
 .logo{display:flex;align-items:center;gap:9px;text-decoration:none}
 .logo svg{width:32px;height:32px;flex-shrink:0}
 .wm{font:700 13px var(--mono);display:flex;align-items:baseline;gap:1px}
@@ -54,7 +55,7 @@ header .global{display:flex;align-items:center;gap:10px}
   .hnav{gap:6px}
   .hnav .btn{width:36px;padding:0;justify-content:center;border-radius:50%}
   .hnav .lg{display:none}
-  header{flex-wrap:nowrap}
+  header{flex-wrap:nowrap;padding:10px 12px}
   header .global .au-user{position:relative;top:auto;right:auto}   /* auth.css pins the avatar for Fundamentals' phone header; here it sits in the row (relative: its menu opens right under it) */
   header .global{gap:8px}
   .logo .tagline{white-space:nowrap}
@@ -111,7 +112,6 @@ tbody tr:hover td{background:var(--hover)}
 /* ---- PF Builder: sections, charts ---- */
 :root{--dd:#ff6b5e;--c-bench:#7aa2d6;--c-g:#e0b840;--c-j:#78cc90;--c-m:#9b8cf0;--c-h:#d48ae0;--c-f:#e09878;--c-a:#5fc9c9;--c-i:#c8c8c8}
 :root[data-theme=day]{--dd:#b3261e;--c-bench:#1f4e8c;--c-g:#8a5a00;--c-j:#0b6b24;--c-m:#4a3fb0;--c-h:#8a2a9c;--c-f:#a03a14;--c-a:#0a6a6a;--c-i:#444}
-header{padding:8px 0 14px}
 h1{margin:22px 0 6px}
 .how{margin:0 0 16px;border:1px solid var(--line);border-radius:10px;background:var(--panel);max-width:860px}
 .how>summary{cursor:pointer;padding:9px 14px;font:600 12.5px var(--mono);color:var(--mute);list-style:none}
@@ -226,7 +226,9 @@ tbody tr.held:hover td{background:var(--heldbg);filter:brightness(1.08)}
 .bag svg{display:block}
 .sym[data-pop]{cursor:pointer}
 /* stock popup: the Factor Screener's own stock card, shown on top of this page */
-.eng.show{position:fixed;left:0;top:0;width:100vw;height:100vh;height:100dvh;visibility:visible;z-index:600;background:transparent;color-scheme:normal}
+.eng.show{position:fixed;left:0;top:0;width:100vw;height:100vh;height:100dvh;visibility:visible;z-index:600;background:transparent;color-scheme:dark}
+/* the frame's colour scheme must match the page inside it (dark / light), or the browser paints it solid black behind the popup */
+:root[data-theme=day] .eng.show{color-scheme:light}
 .pb-toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,16px);z-index:700;max-width:calc(100vw - 32px);background:var(--panel2);color:var(--ink);
   border:1px solid var(--brass);border-radius:10px;padding:10px 16px;font:600 12.5px/1.45 var(--mono);box-shadow:0 10px 28px rgba(0,0,0,.35);
   opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
@@ -243,8 +245,7 @@ tbody tr.held:hover td{background:var(--heldbg);filter:brightness(1.08)}
 <body>
 <div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>
 <script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){var w=document.getElementById("auWait");if(w)w.innerHTML='Login could not load. <a href="./">Back to screener</a>';}},10000);</script>
-<div class="wrap">
-  <header>
+<header class="top">
     <a class="logo" href="./" aria-label="HNImanshu home"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="7" fill="var(--panel2)"/><text x="16" y="23" font-family="Georgia,serif" font-size="18" font-weight="bold" fill="var(--brass)" text-anchor="middle">H</text></svg><div><div class="wm"><span class="hni">HNI</span><span class="manshu">manshu</span></div><div class="tagline">Portfolio Builder</div></div></a>
     <span class="sp"></span>
     <div class="global">
@@ -260,10 +261,11 @@ tbody tr.held:hover td{background:var(--heldbg);filter:brightness(1.08)}
       <span class="toggle-icon sun-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></span>
     </div>
     </div>
-  </header>
+</header>
+<div class="wrap">
 
   <h1>Portfolio Builder</h1>
-  <p class="lead" id="gate" style="display:block">Checking admin access…</p>
+  <p class="lead" id="gate" style="display:block">Opening PF Builder…</p>
   <details class="how lead"><summary>How it works</summary>
     <p>Enter a fund amount. It is split between <b>index ETFs</b>, <b>value stocks</b> (Deep value screen) and
     <b>momentum stocks</b> (top 15 of the Momentum screen), equal weight inside each part, using the same data and

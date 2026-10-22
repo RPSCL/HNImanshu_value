@@ -130,7 +130,7 @@ body.day{--dg-glow:rgba(31,107,69,.40)}
 
 /* bottom, centred */
 /* Prime + "a tool, not advice": full width under the hero and the links */
-.info{flex:1 1 100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;max-width:980px;margin:0 auto;opacity:0}
+.info{flex:1 1 100%;min-width:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;max-width:980px;margin:0 auto;opacity:0}
 .go-anim .info{animation:up .7s 1.9s ease forwards}
 .ibox{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:18px 20px;display:flex;flex-direction:column;gap:10px;box-shadow:0 10px 28px var(--shade,rgba(0,0,0,.25))}
 .ibox h2{margin:0;display:flex;align-items:center;gap:8px;font:700 15px var(--sans);color:var(--ink)}
@@ -150,13 +150,21 @@ body.day .prime-box .ibtn{border-color:#4c1d95;color:#4c1d95}
 .prime-box .p-on{display:none}
 html.hni-pro .prime-box .p-on{display:inline}
 html.hni-pro .prime-box .p-off{display:none}
-@media (max-width:700px){.info{gap:12px}.ibox{padding:16px}}
+/* phone: the two boxes side by side in their own strip that scrolls sideways (the page itself never does) */
+@media (max-width:700px){
+  .info{display:flex;gap:12px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;
+    padding:4px 2px 14px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+  .info::-webkit-scrollbar{height:5px}
+  .info::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+  .ibox{flex:0 0 86%;scroll-snap-align:start;padding:16px;box-shadow:none}
+}
 /* About / Pricing / Terms / Privacy / Refunds / Contact: legal.html's text in an overlay, in this page's own colours */
-.lg{position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
+.lg{position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.6)}
 .lg.open{display:flex}
 html.lg-lock,html.lg-lock body{overflow:hidden}
+html.lg-lock .main,html.lg-lock .foot,html.lg-lock .top{visibility:hidden}   /* nothing behind the overlay is painted while it scrolls */
 .lg-box{position:relative;width:min(860px,100%);height:min(88vh,900px);height:min(88dvh,900px);display:flex;flex-direction:column;background:var(--bg);color:var(--ink);
-  border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 70px var(--shade,rgba(0,0,0,.4));overflow:hidden}
+  border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 32px rgba(0,0,0,.35);overflow:hidden}
 .lg-top{flex:none;display:flex;align-items:center;gap:8px;padding:12px 56px 0 18px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
 .lg-top::-webkit-scrollbar{display:none}
 .lg-top button{flex:none;border:0;background:none;color:var(--faint);font:600 12.5px var(--mono);padding:8px 6px 11px;cursor:pointer;border-bottom:2px solid transparent}
@@ -164,7 +172,7 @@ html.lg-lock,html.lg-lock body{overflow:hidden}
 .lg-top button.on{color:var(--accent);border-bottom-color:var(--accent)}
 .lg-x{position:absolute;top:8px;right:10px;width:36px;height:36px;border:0;border-radius:50%;background:var(--panel);color:var(--ink);font-size:22px;line-height:1;cursor:pointer;z-index:2}
 .lg-x:hover{background:var(--panel2)}
-.lg-body{position:relative;flex:1;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:4px 24px 40px;font-size:14.5px;line-height:1.65}
+.lg-body{position:relative;flex:1;overflow-y:auto;contain:content;will-change:scroll-position;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:4px 24px 40px;font-size:14.5px;line-height:1.65}
 .lg-body h1{font:700 23px var(--sans);margin:22px 0 4px}
 .lg-body h2{font:700 18px var(--sans);margin:36px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
 .lg-body h3{font:700 14.5px var(--sans);margin:20px 0 6px}
@@ -458,6 +466,8 @@ document.getElementById('theme-toggle').addEventListener('click', function () {
       if (!m) throw 'no main'; html = m.innerHTML; return html;
     });
   }
+  // the text is fetched quietly 1 s after the intro animation ends (~3 s), so the overlay opens at once
+  addEventListener('load', function () { setTimeout(function () { load().catch(function () {}); }, 3200); });
   function mark(id) { box.querySelectorAll('.lg-top button').forEach(function (b) { b.classList.toggle('on', b.dataset.id === id); }); }
   function go(id) {
     var el = body.querySelector('#' + id);
@@ -475,16 +485,26 @@ document.getElementById('theme-toggle').addEventListener('click', function () {
     box.addEventListener('click', function (e) { if (e.target === box) close(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && box.classList.contains('open')) close(); });
     box.querySelector('.lg-top').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) go(b.dataset.id); });
-    body.addEventListener('scroll', function () {                        // the tab follows what is on screen
-      if (busy) return; var cur = 'about';
-      TABS.forEach(function (t) { var el = body.querySelector('#' + t[0]); if (el && el.offsetTop - 40 <= body.scrollTop) cur = t[0]; });
-      if (body.scrollTop + body.clientHeight >= body.scrollHeight - 4) cur = 'contact'; mark(cur);
+    var tick = false;
+    body.addEventListener('scroll', function () {                        // the tab follows what is on screen (once a frame)
+      if (busy || tick) return; tick = true;
+      requestAnimationFrame(function () {
+        tick = false; var cur = 'about', y = body.scrollTop;
+        (body._tops || []).forEach(function (t) { if (t[1] - 40 <= y) cur = t[0]; });
+        if (y + body.clientHeight >= body.scrollHeight - 4) cur = 'contact'; mark(cur);
+      });
     }, { passive: true });
   }
   function open(id) {
     if (!box) build();
     box.classList.add('open'); document.documentElement.classList.add('lg-lock'); mark(id);
-    load().then(function (h) { if (!body.querySelector('h1')) body.innerHTML = h; requestAnimationFrame(function () { go(id); }); })
+    load().then(function (h) {
+      if (!body.querySelector('h1')) body.innerHTML = h;
+      requestAnimationFrame(function () {
+        body._tops = TABS.map(function (t) { var el = body.querySelector('#' + t[0]); return [t[0], el ? el.offsetTop : 0]; });
+        go(id);
+      });
+    })
       .catch(function () { location.href = 'legal#' + id; });                  // offline / not deployed yet: the page itself
   }
   document.addEventListener('click', function (e) {
