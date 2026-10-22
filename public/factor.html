@@ -1440,12 +1440,12 @@ function pfBasketOpen() {
     <p class="pf-calc">${items.length} picks${b.scope ? ' (' + esc(b.scope) + ')' : ''} · fund ${rs(b.fund)}${b.date ? ' · data as of ' + esc(b.date) : ''}. Quantities are at the LTP and stay within your cash, charges included.</p>
     <div class="pfb-tw"><table class="pfb-tbl"><thead><tr><th>Stock</th><th class="r">Qty</th><th class="r">LTP ₹</th><th class="r">Amount ₹</th></tr></thead>
       <tbody>${fit.rows.map(row).join('')}</tbody></table></div>
-    <div class="pfb-sum"><span>Cash available <b>${rs(cash)}</b></span><span>To invest <b>${rs(fit.tot)}</b> <i>incl. charges ${rs(fit.rows.reduce((s, r) => s + r.ch, 0))}</i></span><span>Cash after <b>${rs(cash - fit.tot)}</b></span></div>
+    <div class="pfb-sum"><span>Paper cash available <b>${rs(cash)}</b></span><span>To invest <b>${rs(fit.tot)}</b> <i>incl. charges ${rs(fit.rows.reduce((s, r) => s + r.ch, 0))}</i></span><span>Paper cash after <b>${rs(cash - fit.tot)}</b></span></div>
     ${fit.rows.some(r => !r.qty) ? '<p class="pf-calc">Greyed rows: one unit costs more than that pick\'s share of the cash, so they are skipped.</p>' : ''}
-    ${short > 0 ? `<p class="pf-calc">Your cash is ${rs(short)} short of the builder's ${rs(b.fund)}${cash > 0 ? ', so every pick is scaled down alike' : ''}.</p>` : ''}
+    ${short > 0 ? `<p class="pf-calc">Your paper cash is ${rs(short)} short of the builder's ${rs(b.fund)}${cash > 0 ? ', so every pick is scaled down alike' : ''}.</p>` : ''}
     <p class="pf-err"></p>
-    <button type="submit" class="btn primary"${fit.rows.some(r => r.qty) ? '' : ' disabled'}>Buy within cash · ${fit.rows.filter(r => r.qty).length} stocks</button>
-    ${short > 0 ? `<button type="button" class="btn ghost" data-payin>Pay in ${rs(short)} and buy the full list</button>` : ''}
+    <button type="submit" class="btn primary"${fit.rows.some(r => r.qty) ? '' : ' disabled'}>Buy within paper cash · ${fit.rows.filter(r => r.qty).length} stocks</button>
+    ${short > 0 ? `<button type="button" class="btn ghost" data-payin>Paper pay-in ${rs(short)} and buy the full list</button>` : ''}
   </form>`, {sheet: true});
   const f = $('form', w);
   const save = async (plan, payIn) => {
@@ -1626,7 +1626,7 @@ const PFC = {
   closed: {k:'closed', label:'Closed', v:r => r.last || '', f:r => r.last ? esc(r.last) : NA},
   rm: {k:'rm', label:'', noCsv:1, v:r => null, f:r => `<button type="button" class="pf-rm" data-rm="${r.ci}" title="Remove this closed position and all its trades">Remove</button>`},
 };
-const TX_LABEL = {buy:'Buy', sell:'Sell', in:'Pay in', out:'Pay out'};
+const TX_LABEL = {buy:'Buy', sell:'Sell', in:'Paper pay-in', out:'Paper pay-out'};
 const TXC = {
   src: {k:'src', label:'Remark', l:1, tip:'Where the trade came from', v:r => r.x.src || '', f:r => r.x.src ? `<span class="pf-src">${esc(r.x.src)}</span>` : NA},
   date: {k:'date', label:'Date', l:1, v:r => r.x.date || '', f:r => r.x.date ? esc(r.x.date) : NA},
@@ -1635,8 +1635,8 @@ const TXC = {
   what: {k:'what', label:'Detail', l:1, v:r => r.sym, x:r => r.x.sym ? `${r.x.sym} ${r.x.qty} @ ${r.x.px}` : '',
          f:r => r.x.sym ? `<b>${esc(r.x.sym)}</b> <span class="na">${fmt(r.x.qty, 0)} @ ${fmt(r.x.px, 2)}</span>` : NA},
   mwhat: {k:'what', label:'Detail', l:1, v:r => r.sym, f:r => (r.x.sym ? `<b>${esc(r.x.sym)}</b> <span class="na">${fmt(r.x.qty, 0)} @ ${fmt(r.x.px, 2)}</span>` : NA) + (r.x.src ? `<div class="pf-src">${esc(r.x.src)}</div>` : '')},   // phone: remark under the detail
-  amt: {k:'tamt', label:'Cash ₹', tip:'Effect on cash, charges included', v:r => r.amt,
-        f:r => `<span title="${r.x.ch ? 'Charges ₹' + fmt(r.x.ch, 2) + ' · ' : ''}Cash after ₹${fmt(r.cash, 0)}">${signed(r.amt)}</span>`},
+  amt: {k:'tamt', label:'Paper cash ₹', tip:'Effect on paper cash, charges included', v:r => r.amt,
+        f:r => `<span title="${r.x.ch ? 'Charges ₹' + fmt(r.x.ch, 2) + ' · ' : ''}Paper cash after ₹${fmt(r.cash, 0)}">${signed(r.amt)}</span>`},
   act: {k:'tact', label:'', noCsv:1, v:r => null, f:r => PF_LAST && PF_LAST.lock.has(r.x.id)
          ? `<span class="pf-lock" title="Part of a closed position: remove it from the Closed list instead">🔒</span>` : `<span class="pf-acts2"><button type="button" class="pf-ico" data-edit="${esc(r.x.id)}" title="Edit" aria-label="Edit">✎</button><button type="button" class="pf-ico del" data-del="${esc(r.x.id)}" title="Delete" aria-label="Delete">×</button></span>`},
 };
@@ -1743,14 +1743,14 @@ function portfolioView() {
     ${pfNotListed(open)}
     ${R.bad ? `<p class="pf-err">A sale of ${esc(R.bad.sym)} on ${esc(R.bad.date || 'an undated day')} is larger than the shares held then. Check the dates in Transactions.</p>` : ''}
     <div class="pf-sum">
-      ${tile('Net gain', arr(gain) + rs(gain, true), gainPct == null ? '' : pctTxt(gainPct, 1) + ' on money put in', 'gain')}
+      ${tile('Net gain', arr(gain) + rs(gain, true), gainPct == null ? '' : pctTxt(gainPct, 1) + ' on paper money put in', 'gain')}
       ${tile('Day gain', plain(P.day), P.day == null ? 'live prices not on yet' : pctTxt(P.dayPct))}
-      ${tile('Net worth', rs(worth), 'holdings + cash')}
-      ${tile('Cash', `<span class="${R.cash < 0 ? 'dn' : ''}">${rs(R.cash)}</span>`, R.cash < 0 && !R.payIn ? 'add a Pay in' : 'free to invest')}
+      ${tile('Net worth', rs(worth), 'holdings + paper cash')}
+      ${tile('Paper cash', `<span class="${R.cash < 0 ? 'dn' : ''}">${rs(R.cash)}</span>`, R.cash < 0 && !R.payIn ? 'add a paper pay-in' : 'free to invest')}
       ${tile('Holdings', rs(hold), `${open.length} open · cost ${rs(cost)}`)}
       ${tile('Unrealised', plain(unreal), cost ? `${pctTxt(unreal / cost * 100, 1)} on cost` : 'open positions')}
       ${tile('Realised', plain(R.realized - R.charges), `after ₹${fmt(R.charges, 0)} charges`)}
-      ${tile('Money in', rs(deposits), `in ${rs(R.payIn)} · out ${rs(R.payOut)}`)}
+      ${tile('Paper money in', rs(deposits), `in ${rs(R.payIn)} · out ${rs(R.payOut)}`)}
     </div>
     <div class="pf-grid"><div class="pf-left"></div><div class="pf-right"></div></div>`);
   const L = $('.pf-left'), RT = $('.pf-right'), phone = isPhone();
@@ -1758,24 +1758,24 @@ function portfolioView() {
                       : [PFC.edit, PFC.sym, PFC.rem, PFC.vd, PFC.qty, PFC.avg, PFC.cmp, ...(P.day != null ? [PFC.day] : []), PFC.val, PFC.pnl, PFC.wt, PFC.score, PFC.mom, PFC.trend, PFC.flags];
   open.forEach(r => { r.vd = verdict(r.sym, P); });
   pfPanel(L, 'Holdings', open.length, makeTable('pf', hCols, open, {sortKey:'val', sortDir:-1, search:!phone || open.length > 6, noIndex:true, csv:() => 'Portfolio_holdings'}));
-  if (!open.length) L.querySelector('tbody').innerHTML = `<tr><td class="l na" colspan="13">No open holdings. Start with <b>Pay in</b> (your opening cash), then <b>+ Buy / Sell</b> — or tap the bag next to any industry name on the other tabs.</td></tr>`;
+  if (!open.length) L.querySelector('tbody').innerHTML = `<tr><td class="l na" colspan="13">No open holdings. Start with <b>Paper pay-in</b> (your opening paper cash), then <b>+ Buy / Sell</b> — or tap the bag next to any industry name on the other tabs.</td></tr>`;
   pfNewsPanel(RT, open.map(r => r.sym));
   pfPanel(RT, 'Closed', closed.length, makeTable('pfc', phone ? [PFC.csym, PFC.net, PFC.rm] : [PFC.csym, PFC.cqty, PFC.cpx, PFC.net, PFC.closed, PFC.rm],
     closed, {sortKey:'closed', sortDir:-1, noIndex:true, csv:() => 'Portfolio_closed'}));
-  if (!closed.length) RT.querySelector('tbody').innerHTML = '<tr><td class="l na" colspan="5">Stocks you sell fully move here; the money goes back to Cash.</td></tr>';
+  if (!closed.length) RT.querySelector('tbody').innerHTML = '<tr><td class="l na" colspan="5">Stocks you sell fully move here; the paper money goes back to Paper cash.</td></tr>';
   const ledRows = R.led.map(l => ({x: l.x, cash: l.cash, sym: l.x.sym || '', name: '', ind: '',
     amt: l.x.t === 'in' ? l.x.amt : l.x.t === 'out' ? -l.x.amt : l.x.t === 'buy' ? -(l.x.qty * l.x.px + (l.x.ch || 0)) : l.x.qty * l.x.px - (l.x.ch || 0)})).reverse();
   pfPanel(RT, 'Transactions', ledRows.length, makeTable('pft', phone ? [TXC.mtype, TXC.mwhat, TXC.amt, TXC.act] : [TXC.date, TXC.type, TXC.what, TXC.src, TXC.amt, TXC.act],
     ledRows, {noIndex:true, csv:() => 'Portfolio_transactions'}));
   const tb = RT.querySelectorAll('.tbar')[1];
   if (tb && ledRows.length) tb.querySelector('.pf-h').insertAdjacentHTML('afterend', '<button type="button" class="pf-rm all" id="pfWipe" title="Delete every entry in your portfolio">Delete all</button>');
-  if (!ledRows.length) RT.querySelectorAll('tbody')[1].innerHTML = '<tr><td class="l na" colspan="5">Every Pay in, Pay out, Buy and Sell shows here, newest first. ✎ edits, × deletes.</td></tr>';
+  if (!ledRows.length) RT.querySelectorAll('tbody')[1].innerHTML = '<tr><td class="l na" colspan="5">Every Paper pay-in, Paper pay-out, Buy and Sell shows here, newest first. ✎ edits, × deletes.</td></tr>';
   pfWireTop();
 }
 /* the action buttons and "Delete all" (desktop and phone) */
 function pfWireTop() {
   view.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => {
-    const k = b.dataset.open; k === 'trade' ? pfTradeForm({}) : k === 'rates' ? pfRatesForm() : k === 'ltp' ? pfRefresh(b) : pfCashForm({t: 'in'});   // cash: Pay in / Pay out picked inside
+    const k = b.dataset.open; k === 'trade' ? pfTradeForm({}) : k === 'rates' ? pfRatesForm() : k === 'ltp' ? pfRefresh(b) : pfCashForm({t: 'in'});   // cash: Paper money in / out picked inside
   }));
   const wipe = $('#pfWipe');
   if (wipe) wipe.addEventListener('click', () => typeConfirm('Delete all', `Every holding, closed position, pay in / out and trade (${PF.txns.length} entries) is deleted. Your charge rates stay.`,
@@ -1786,7 +1786,7 @@ const IC_TAX = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stro
 const IC_REF = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.35-5.65"/><path d="M20 4v4.6h-4.6"/></svg>';
 const pfActsHtml = () => `<div class="pf-top"><div class="pf-acts">
     <button type="button" class="btn primary" data-open="trade">+ Buy / Sell</button>
-    <button type="button" class="btn" data-open="cash">Pay in / out</button>
+    <button type="button" class="btn" data-open="cash">Paper money in / out</button>
     <button type="button" class="btn ghost ico" data-open="rates" title="Charges &amp; taxes on each trade" aria-label="Charges and taxes">${IC_TAX}</button>
     ${pfCanRefresh() ? `<button type="button" class="btn ghost ico ltp${PF_POLL ? ' spin' : ''}" data-open="ltp" title="Refresh live prices${pfAsOf().full ? ' (now as of ' + esc(pfAsOf().full) + ' IST)' : ''}" aria-label="Refresh live prices"${PF_POLL ? ' disabled' : ''}>${IC_REF}${pfAsOf().short ? `<span class="pf-asof">${esc(pfAsOf().short)}</span>` : ''}</button>` : ''}
   </div>${pfIdxHtml()}</div>`;
@@ -1830,13 +1830,13 @@ function pfPhone(P) {
       <div class="pf-zl"><span>P&amp;L</span><b>${plain(pnl, 2)}<small>${inv ? pctTxt(pnl / inv * 100) : ''}</small></b></div>
       <div class="pf-zl"><span>Day's P&amp;L</span><b>${P.day == null ? '<small>live prices not on yet</small>' : `${plain(P.day, 2)}<small>${pctTxt(P.dayPct)}</small>`}</b></div>
       <details class="pf-cash"${cashOpen ? ' open' : ''}>
-        <summary><span>Cash <b>${rs(R.cash)}</b></span><span>Net gain <b>${arr(P.gain)}${rs(P.gain, true)}</b></span></summary>
+        <summary><span>Paper cash <b>${rs(R.cash)}</b></span><span>Net gain <b>${arr(P.gain)}${rs(P.gain, true)}</b></span></summary>
         <div class="pf-cg">
-          ${kv('Net worth', rs(P.worth), 'holdings + cash')}
-          ${kv('Net gain', arr(P.gain) + rs(P.gain, true), P.gainPct == null ? '' : pctTxt(P.gainPct, 1) + ' on money put in')}
-          ${kv('Cash', rs(R.cash), R.cash < 0 && !R.payIn ? 'add a Pay in' : 'free to invest')}
+          ${kv('Net worth', rs(P.worth), 'holdings + paper cash')}
+          ${kv('Net gain', arr(P.gain) + rs(P.gain, true), P.gainPct == null ? '' : pctTxt(P.gainPct, 1) + ' on paper money put in')}
+          ${kv('Paper cash', rs(R.cash), R.cash < 0 && !R.payIn ? 'add a paper pay-in' : 'free to invest')}
           ${kv('Realised', plain(R.realized - R.charges), `after ₹${fmt(R.charges, 0)} charges`)}
-          ${kv('Money in', rs(P.deposits), `in ${rs(R.payIn)} · out ${rs(R.payOut)}`)}
+          ${kv('Paper money in', rs(P.deposits), `in ${rs(R.payIn)} · out ${rs(R.payOut)}`)}
         </div>
       </details>
     </section>
@@ -1856,14 +1856,14 @@ function pfPhone(P) {
       <div class="a"><span>Invested ${f2(r.qty * r.avg)}</span><span>LTP ${r.ltp == null ? '–' : f2(r.ltp)}${r.dayPct != null ? ` <em class="${r.day >= 0 ? 'up' : 'dn'}">(${pctTxt(r.dayPct)})</em>` : ''}</span></div>
       ${r.remark ? `<div class="a pf-zsrc"><span class="pf-src">${esc(r.remark)}</span></div>` : ''}
     </div>`; }).join('')
-    : '<p class="na pf-zempty">No open holdings. Start with <b>Pay in</b>, then <b>+ Buy / Sell</b>, or tap the bag next to any industry name on the other tabs.</p>';
+    : '<p class="na pf-zempty">No open holdings. Start with <b>Paper pay-in</b>, then <b>+ Buy / Sell</b>, or tap the bag next to any industry name on the other tabs.</p>';
   pfNewsPanel(host, open.map(r => r.sym));
   // closed: SYMBOL / net ; bought · sold · date / Remove
   sec('Closed', closed.length).innerHTML = closed.length ? closed.slice().sort((a, b) => String(b.last || '').localeCompare(String(a.last || ''))).map(r => `<div class="pf-zt">
       <div class="b"><b>${esc(r.sym)}</b><b>${signed(r.realized - r.charges)}</b></div>
       <div class="a"><span>${fmt(r.sQty, 0)} sold · ${f2(r.bQty ? r.bAmt / r.bQty : null)} → ${f2(r.sQty ? r.sAmt / r.sQty : null)}${r.last ? ' · ' + esc(r.last) : ''}</span>
         <button type="button" class="pf-rm" data-rm="${r.ci}">Remove</button></div></div>`).join('')
-    : '<p class="na pf-zempty">Stocks you sell fully move here; the money goes back to Cash.</p>';
+    : '<p class="na pf-zempty">Stocks you sell fully move here; the paper money goes back to Paper cash.</p>';
   // transactions: Type · date / cash effect ; detail / ✎ ×
   const led = R.led.slice().reverse();
   sec('Transactions', led.length, led.length ? '<button type="button" class="pf-rm all" id="pfWipe" title="Delete every entry in your portfolio">Delete all</button>' : '').innerHTML = led.length ? led.map(l => {
@@ -1871,8 +1871,8 @@ function pfPhone(P) {
     const act = R.lock.has(x.id) ? '<span class="pf-lock" title="Part of a closed position: remove it from the Closed list instead">🔒</span>'
       : `<span class="pf-acts2"><button type="button" class="pf-ico" data-edit="${esc(x.id)}" aria-label="Edit">✎</button><button type="button" class="pf-ico del" data-del="${esc(x.id)}" aria-label="Delete">×</button></span>`;
     return `<div class="pf-zt"><div class="a"><span><span class="pf-t ${x.t}">${TX_LABEL[x.t]}</span> ${esc(x.date || '')}</span><span>${signed(amt)}</span></div>
-      <div class="b"><span>${x.sym ? `<b>${esc(x.sym)}</b> ${fmt(x.qty, 0)} @ ${f2(x.px)}` : 'Cash'}${x.ch ? ` <small>· ch ₹${f2(x.ch)}</small>` : ''}</span>${act}</div></div>`; }).join('')
-    : '<p class="na pf-zempty">Every Pay in, Pay out, Buy and Sell shows here, newest first.</p>';
+      <div class="b"><span>${x.sym ? `<b>${esc(x.sym)}</b> ${fmt(x.qty, 0)} @ ${f2(x.px)}` : 'Paper cash'}${x.ch ? ` <small>· ch ₹${f2(x.ch)}</small>` : ''}</span>${act}</div></div>`; }).join('')
+    : '<p class="na pf-zempty">Every Paper pay-in, Paper pay-out, Buy and Sell shows here, newest first.</p>';
   const zs = $('#pfZSort'), zd = $('#pfZDir');
   if (zs) zs.addEventListener('change', () => { lsSet('pfzsort', zs.value); lsSet('pfzdir', PF_ZSORT[zs.value].up ? 'up' : 'dn'); pfRedraw(); });
   if (zd) zd.addEventListener('click', () => { lsSet('pfzdir', SD > 0 ? 'dn' : 'up'); pfRedraw(); });
@@ -1918,7 +1918,7 @@ document.addEventListener('click', e => {
     const x = PF.txns.find(t => t.id === b.dataset.del); if (!x) return;
     const rest = PF.txns.filter(t => t !== x), bad = pfReplay(rest).bad;
     if (bad) return modal('Can\'t delete', `<p>Without this ${TX_LABEL[x.t].toLowerCase()}, the sale of ${esc(bad.sym)}${bad.date ? ' on ' + esc(bad.date) : ''} would be more than the shares held. Delete or edit that sale first.</p>`);
-    return typeConfirm(`Delete ${TX_LABEL[x.t].toLowerCase()}`, `${x.sym ? `<b>${esc(x.sym)}</b> ${fmt(x.qty, 0)} @ ₹${fmt(x.px, 2)}` : `₹${fmt(x.amt, 0)}`}${x.date ? ' on ' + esc(x.date) : ''}. Holdings and cash are recalculated.`,
+    return typeConfirm(`Delete ${TX_LABEL[x.t].toLowerCase()}`, `${x.sym ? `<b>${esc(x.sym)}</b> ${fmt(x.qty, 0)} @ ₹${fmt(x.px, 2)}` : `₹${fmt(x.amt, 0)}`}${x.date ? ' on ' + esc(x.date) : ''}. Holdings and paper cash are recalculated.`,
       async () => { PF.txns = rest; await pfSave(); route(); });
   }
   if (b.dataset.rm != null) {
@@ -2324,7 +2324,7 @@ function pfTradeForm(x) {
     $('.pf-err', w).textContent = over ? `You hold ${fmt(h, 0)}; you can't sell ${fmt(q, 0)}.` : ($('.pf-err', w).textContent.startsWith('You hold') ? '' : $('.pf-err', w).textContent);
     if (!chTyped) f.ch.value = q > 0 && p > 0 ? pfCharges(t, q, p) : '';
     const ch = +f.ch.value || 0;
-    $('.pf-calc', w).textContent = q > 0 && p > 0 ? (t === 'buy' ? `Cash out ₹${fmt(q * p + ch, 2)} (₹${fmt(q * p, 2)} + charges)` : `Cash in ₹${fmt(q * p - ch, 2)} (₹${fmt(q * p, 2)} − charges)`) : '';
+    $('.pf-calc', w).textContent = q > 0 && p > 0 ? (t === 'buy' ? `Paper cash out ₹${fmt(q * p + ch, 2)} (₹${fmt(q * p, 2)} + charges)` : `Paper cash in ₹${fmt(q * p - ch, 2)} (₹${fmt(q * p, 2)} − charges)`) : '';
   };
   symPicker(f.sym, it => { if (it && it.nse && it.name) f.nm.value = it.name; calc(); f.qty.focus(); });   // NSE stock: its name filled in
   w.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => { t = b.dataset.t; seg(); calc(); }));
@@ -2395,11 +2395,11 @@ function pfRenameForm(old) {
 /* Pay in / Pay out (new, or edit) */
 function pfCashForm(x) {
   const edit = !!x.id;
-  const w = modal(edit ? 'Edit cash entry' : 'Pay in / Pay out', `<form class="pf-form" autocomplete="off">
-    <div class="seg"><button type="button" data-t="in">Pay in</button><button type="button" data-t="out">Pay out</button></div>
+  const w = modal(edit ? 'Edit paper money entry' : 'Paper money in / out', `<form class="pf-form" autocomplete="off">
+    <div class="seg"><button type="button" data-t="in">Paper pay-in</button><button type="button" data-t="out">Paper pay-out</button></div>
     <label class="fld"><span>Amount ₹</span><input name="amt" type="number" min="0" step="any" required></label>
     <label class="fld"><span>Date</span><input name="date" type="date"></label>
-    <p class="pf-calc">Pay in = money added (your opening cash too). Pay out = money taken out.</p><p class="pf-err"></p>
+    <p class="pf-calc">Paper pay-in = paper money added (your opening paper cash too). Paper pay-out = paper money taken out.</p><p class="pf-err"></p>
     <button type="submit" class="btn primary">Save</button></form>`);
   const f = $('form', w); let t = x.t || 'in';
   f.amt.value = x.amt || ''; f.date.value = x.date || today();
