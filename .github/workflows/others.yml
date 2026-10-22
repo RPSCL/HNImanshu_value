@@ -75,7 +75,10 @@ jobs:
           git config --global user.name  "github-actions"
           git config --global user.email "actions@github.com"
           [ -f EQUITY_L.csv ] && git add EQUITY_L.csv
-          [ -f Nifty_Others_Fundamentals.csv ] && git add Nifty_Others_Fundamentals.csv
+          if [ -f Nifty_Others_Fundamentals.csv ] && ! git diff --quiet -- Nifty_Others_Fundamentals.csv; then
+            TZ=Asia/Kolkata date '+%Y-%m-%dT%H:%M+05:30' > others_built.txt     # when the CSV was written (PF Builder shows it)
+            git add Nifty_Others_Fundamentals.csv others_built.txt
+          fi
           [ -f old_csv.zip ] && git add old_csv.zip
           git diff --cached --quiet && { echo "Nothing new to commit"; exit 0; }
           git commit -m "Others fundamentals update (half ${{ github.event.inputs.half || 'scheduled' }}) [skip ci]"
