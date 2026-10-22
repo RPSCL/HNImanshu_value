@@ -773,6 +773,36 @@ def quality_extras(r, F, cut):
     pat = series(r, F.get("A_PL_PAT_CR", []), acut)[-10:]
     if len(pat) >= 3:
         out["pyr"] = [sum(1 for p in pat if p[2] > 0), len(pat)]
+    # Checklist tab (Prime): 3-year sales / profit growth, 5-year cash flow, share dilution, NPA trend
+    if len(rev) >= 4:
+        a, b = rev[-4], rev[-1]
+        yrs = (b[0] - a[0]).days / 365.25
+        if a[2] > 0 and b[2] > 0 and yrs >= 2.5:
+            out["sg3"] = round(((b[2] / a[2]) ** (1 / yrs) - 1) * 100, 2)
+    patr = latest_run(series(r, F.get("A_PL_PAT_CR", []), acut), cut)
+    if len(patr) >= 4:
+        a, b = patr[-4], patr[-1]
+        yrs = (b[0] - a[0]).days / 365.25
+        if a[2] > 0 and b[2] > 0 and yrs >= 2.5:
+            out["pg3"] = round(((b[2] / a[2]) ** (1 / yrs) - 1) * 100, 2)
+    cfo = {p[0]: p[2] for p in series(r, F.get("C_CF_OPERATING_CR", []), acut)}
+    y5 = [p for p in patr[-5:] if p[0] in cfo]
+    if len(y5) >= 3:
+        out["cfo5"] = round(sum(cfo[p[0]] for p in y5), 1)                       # cumulative operating cash flow, ₹ Cr
+        sp = sum(p[2] for p in y5)
+        if sp > 0:
+            out["cp5"] = round(out["cfo5"] / sp, 2)                              # CFO ÷ PAT, cumulative
+    eps = {p[0]: p[2] for p in series(r, F.get("A_PL_EPS_BASIC", []), acut)}
+    shs = [(p[0], p[2] / eps[p[0]]) for p in patr if eps.get(p[0], 0) > 0 and p[2] > 0]   # implied share count
+    if len(shs) >= 2:
+        new = shs[-1]
+        old = next((x for x in shs if (new[0] - x[0]).days <= 5 * 366), shs[0])
+        yrs, ratio = (new[0] - old[0]).days / 365.25, new[1] / old[1]
+        if yrs >= 2.5 and 0.4 < ratio < 2.5:                                     # outside that band: a split / bonus, not dilution
+            out["dil5"] = round((ratio - 1) * 100, 1)
+    gq = series(r, F.get("Q_PL_GNPA_PCT", []), qcut)
+    if len(gq) >= 5 and (cut - gq[-1][0]).days < 200:
+        out["gnpaT"] = round(gq[-1][2] - gq[-5][2], 2)                           # Gross NPA now minus a year ago, pp
     pro = series(r, F.get("pro", []), scut)
     if len(pro) >= 2:
         then = next((p for p in pro if (pro[-1][0] - p[0]).days <= 3 * 366), pro[0])
@@ -1619,6 +1649,25 @@ nav{display:flex;align-items:center;gap:2px;padding:0 16px;border-bottom:1px sol
 nav a{padding:11px 14px 9px;color:var(--mute);font:500 12px var(--mono);letter-spacing:.3px;border-bottom:2px solid transparent;white-space:nowrap}
 nav a:hover{color:var(--ink);text-decoration:none}
 nav a.on{color:var(--brass);border-color:var(--brass)}
+/* Checklist tab: Prime. Free accounts see it in purple with a crown; Prime members see a plain tab */
+nav a.ck-tab .ck-cr{display:none;width:12px;height:12px;margin-left:6px;vertical-align:-1px}
+html:not(.hni-pro) nav a.ck-tab{color:#b892f5}
+html:not(.hni-pro) nav a.ck-tab .ck-cr{display:inline-block}
+body.day nav a.ck-tab:not(.on){color:inherit}
+html:not(.hni-pro) body.day nav a.ck-tab{color:#5b2d9c}
+.ck-seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:0 0 12px}
+.ck-seg button{border:0;background:transparent;color:var(--mute);font:600 12px var(--mono);padding:8px 14px;cursor:pointer}
+.ck-seg button.on{background:var(--brassbg);color:var(--brass)}
+.ck-rules{border:1px solid var(--line);border-radius:10px;background:var(--panel);margin:0 0 14px;max-width:980px}
+.ck-rules>summary{cursor:pointer;padding:10px 14px;font:600 12.5px var(--mono);color:var(--mute)}
+.ck-rules table{width:100%;border-collapse:collapse;font-size:12.5px}
+.ck-rules td{padding:6px 14px;border-top:1px solid var(--line);color:var(--mute)}
+.ck-rules td:first-child{color:var(--ink)}
+.ck-rules .nd{color:var(--faint);font-style:italic}
+.ck-ok{display:inline-block;padding:1px 7px;border-radius:6px;font:600 11.5px var(--mono);background:rgba(120,204,144,.15);color:var(--up,#78cc90)}
+.ck-lockbox{padding:28px 20px;border:1px dashed #9b6bdf;border-radius:12px;max-width:640px;margin:24px auto;text-align:center;color:var(--mute);line-height:1.6}
+.ck-lockbox b{display:block;font:700 16px var(--mono);color:var(--ink);margin-bottom:6px}
+.ck-lockbox button{margin-top:12px}
 
 main{padding:20px 24px 56px;max-width:1880px;margin:0 auto}
 h2.page{font:700 18px/1.2 var(--mono);margin:2px 0 14px;letter-spacing:.2px}
@@ -1778,6 +1827,7 @@ __AUTH_BODY__<script>
   <a href="#/" data-t="home">Industries</a>
   <a href="#/value" data-t="value">Value screen</a>
   <a href="#/momentum" data-t="momentum">Momentum</a>
+  <a href="#/checklist" data-t="checklist" class="ck-tab">Checklist<svg class="ck-cr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-label="Prime"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg></a>
   <a href="#/all" data-t="all">All Stocks</a>
   <a href="#/method" data-t="method">Methodology</a>
 </nav>
@@ -2302,6 +2352,7 @@ const assetCols = () => [C.pta].concat(has('pfa') ? [C.pfa] : [], has('invp') ? 
 const view = $('#view');
 /* phone: two menu buttons replace the tab row and the row of screens */
 const TABS = [['#/value', 'Value screen', 'Cheap, good-quality stocks by screen'], ['#/momentum', 'Momentum', 'Strongest price trends'],
+              ['#/checklist', 'Checklist', 'Stocks that pass every quality rule (Prime)'],
               ['#/', 'Industries', 'Industry PE, PB, ROE'], ['#/all', 'All Stocks', 'Every stock with every column'], ['#/method', 'Methodology', 'How every number is worked out']];
 function syncMnav() {
   const h = location.hash || '#/', t = TABS.find(x => x[0] === h) || (h.startsWith('#/industry/') ? TABS[2] : null);
@@ -3079,6 +3130,104 @@ function momentumView() {
   if (!V().some(s => ok(s.momS))) view.insertAdjacentHTML('beforeend', GF.uni === OTH
     ? '<p class="hint">No momentum for the Others list yet: it needs their prices, which the next weekly price update (Saturday) adds.</p>'
     : '<p class="hint">No momentum for this date yet (it needs prices.csv), so nothing to list.</p>');
+}
+
+
+/* ---------- CHECKLIST (Prime): two fixed rule sets, non-financial and financial companies ----------
+   A stock is listed only if it passes EVERY rule that has data, and at least 70% of the rules that can have data do.
+   Rules this site has no data for yet (promoter pledge, capital adequacy, insurer solvency, embedded value, 5-year
+   own-history PE) are shown as "no data" and never count for or against. Ranked by valuation vs its sector:
+   PE ÷ industry median PE (non-financials), PB ÷ industry median PB (financials); cheapest first. */
+const CK_MIN_DATA = 0.7;
+let CK_SEG = lsGet('ckseg') === 'fin' ? 'fin' : 'nonfin';
+const ckIns = s => s.fin && /insur|life\b|general\b.*assur/i.test((s.ind || '') + ' ' + (s.name || ''));
+const ckBank = s => s.fin && !ckIns(s) && (s.gnpa != null || /\bbank\b/i.test(s.name || ''));
+const ckType = s => !s.fin ? 'nonfin' : ckIns(s) ? 'ins' : ckBank(s) ? 'bank' : 'nbfc';
+const ckTTM = s => s.qp && s.qp.length >= 4 ? s.qp.slice(-4).reduce((a, b) => a + b, 0) : (ok(s.ttm) ? s.ttm : null);
+const ckPct = (v, d = 1) => (v > 0 ? '+' : '') + fmt(v, d) + '%';
+/* [label, value, test, shown] ; value null = no data for this stock; test null = rule with no data source (always "no data") */
+function ckRules(s) {
+  const t = ckType(s), R = [], add = (label, v, test, show) => R.push({label, v, test, show: show || (x => fmt(x))});
+  add('5Y sales CAGR ≥ 8%', s.sg5, v => v >= 8, ckPct);
+  if (t === 'nonfin') add('3Y sales CAGR ≥ 5%', s.sg3, v => v >= 5, ckPct);
+  add('3Y profit CAGR ≥ 8%', s.pg3, v => v >= 8, ckPct);
+  add('TTM profit positive', ckTTM(s), v => v > 0, v => v > 0 ? 'yes' : 'loss');
+  if (t === 'nonfin') {
+    add('ROCE ≥ 15%', s.roce, v => v >= 15, v => fmt(v) + '%');
+    add('ROE ≥ 12%', s.roe, v => v >= 12, v => fmt(v) + '%');
+    add('Operating cash flow positive (5Y total)', s.cfo5, v => v > 0, v => '₹' + fmt(v, 0) + ' Cr');
+    add('CFO ÷ PAT ≥ 0.8 (5Y total)', s.cp5, v => v >= 0.8, v => fmt(v, 2) + 'x');
+    add('Debt ÷ Equity ≤ 0.5', s.de, v => v <= 0.5, v => fmt(v, 2));
+    add('Interest coverage ≥ 3×', s.icov, v => v >= 3, v => fmt(v, 1) + 'x');
+    add('Promoter pledge ≤ 10%', null, null);
+    add('Share dilution ≤ 10% (5Y)', s.dil5, v => v <= 10, ckPct);
+    add('PE below 5Y own median', null, null);
+  } else {
+    add('ROE ≥ 12%', s.roe, v => v >= 12, v => fmt(v) + '%');
+    if (t === 'bank') {
+      add('ROA ≥ 0.8%', s.roa, v => v >= 0.8, v => fmt(v, 2) + '%');
+      add('Gross NPA ≤ 5%', s.gnpa, v => v <= 5, v => fmt(v, 2) + '%');
+      add('Net NPA ≤ 1.5%', s.nnpa, v => v <= 1.5, v => fmt(v, 2) + '%');
+      add('Provision coverage ≥ 70%', s.pcr, v => v >= 70, v => fmt(v, 0) + '%');
+      add('Gross NPA stable or falling (1Y)', s.gnpaT, v => v <= 0.25, v => (v > 0 ? '+' : '') + fmt(v, 2) + ' pp');
+      add('Capital adequacy ≥ 15%', null, null);
+    } else if (t === 'nbfc') {
+      add('ROA ≥ 1.5%', s.roa, v => v >= 1.5, v => fmt(v, 2) + '%');
+      add('Capital adequacy above minimum', null, null);
+    } else {
+      add('Solvency ratio above minimum', null, null);
+      add('Embedded value / persistency', null, null);
+    }
+  }
+  R.forEach(r => { r.pass = r.test && r.v != null ? !!r.test(r.v) : null; });
+  return R;
+}
+function ckResult(s) {
+  const R = ckRules(s), can = R.filter(r => r.test), known = can.filter(r => r.pass != null);
+  const fail = known.filter(r => !r.pass);
+  return {R, pass: !fail.length && can.length && known.length / can.length >= CK_MIN_DATA, known: known.length, can: can.length, fail};
+}
+const ckMedPB = ind => { const g = industries[ind]; return g ? g.medPB : null; };
+const ckVal = s => s.fin ? (s.pb != null && ckMedPB(s.ind) ? (s.pb / ckMedPB(s.ind) - 1) * 100 : null) : prem(s);
+function checklistView() {
+  setNav('checklist'); view.innerHTML = '';
+  if (!PRO) {
+    view.insertAdjacentHTML('beforeend', `<div class="ck-lockbox"><b>Checklist is part of Prime</b>Two fixed quality checklists, one for
+      manufacturing / FMCG / IT / pharma and one for banks, NBFCs and insurers. Only the stocks that pass every rule are listed, cheapest
+      versus their sector first.<br><button type="button" class="btn primary" id="ckPlans">See plans</button></div>`);
+    $('#ckPlans').addEventListener('click', () => window.hniPlans && window.hniPlans());
+    if (window.hniPlans) window.hniPlans();
+    return;
+  }
+  if (BACK) {
+    view.insertAdjacentHTML('beforeend', `<div class="pf-note">The checklist uses today's numbers. <button type="button" class="btn" id="ckNow">Switch Historical off</button></div>`);
+    $('#ckNow').addEventListener('click', () => setHistorical(false));
+    return;
+  }
+  const all = V(), mine = all.filter(s => (CK_SEG === 'fin') === !!s.fin);
+  const res = new Map(mine.map(s => [s.sym, ckResult(s)]));
+  const rows = mine.filter(s => res.get(s.sym).pass);
+  view.insertAdjacentHTML('beforeend', `<div class="ck-seg" role="tablist"><button type="button" data-seg="nonfin" class="${CK_SEG === 'nonfin' ? 'on' : ''}">Non-financial companies</button><button type="button" data-seg="fin" class="${CK_SEG === 'fin' ? 'on' : ''}">Banks, NBFCs and insurers</button></div>`);
+  view.querySelectorAll('.ck-seg button').forEach(b => b.addEventListener('click', () => { CK_SEG = b.dataset.seg; lsSet('ckseg', CK_SEG); checklistView(); }));
+  const ruleList = (CK_SEG === 'fin' ? [['Banks', {fin: true, gnpa: 1}], ['NBFCs', {fin: true, name: 'x'}], ['Insurers', {fin: true, name: 'Life Insurance'}]] : [['All', {}]])
+    .map(([who, x]) => ckRules(Object.assign({sym: 'x'}, x)).map(r => `<tr><td>${esc(r.label)}</td><td>${who === 'All' ? '' : esc(who)}</td><td class="${r.test ? '' : 'nd'}">${r.test ? 'must pass' : 'no data yet: not counted'}</td></tr>`).join('')).join('');
+  view.insertAdjacentHTML('beforeend', `<details class="ck-rules"><summary>The rules (${CK_SEG === 'fin' ? 'financial' : 'non-financial'} companies) · listed only if every rule with data passes</summary><table>${ruleList}</table></details>`);
+  stats([['Pass', rows.length], ['Checked', mine.length], ['Median PE', fmt(median(rows.map(s => s.pe)))], ['Median ROE', fmt(median(rows.map(s => s.roe))) + '%']], rows);
+  const R = s => res.get(s.sym);
+  const cell = (label) => s => { const r = R(s).R.find(x => x.label === label); return !r || r.v == null ? NA : r.show(r.v); };
+  const val = {k: 'ckv', label: 'vs sector', tip: CK_SEG === 'fin' ? 'PB vs the industry median PB (negative = cheaper)' : 'PE vs the industry median PE (negative = cheaper)',
+    v: ckVal, f: s => { const v = ckVal(s); return v == null ? NA : `<span class="pill ${v <= 0 ? 'disc' : 'prem'}">${ckPct(v, 0)}</span>`; }};
+  const pass = {k: 'ckp', label: 'Rules', tip: 'rules passed / rules with data (rules with no data are not counted)', v: s => R(s).known,
+    x: s => `${R(s).known}/${R(s).can}`, f: s => `<span class="ck-ok" title="${esc(R(s).R.filter(r => r.pass != null).map(r => '✓ ' + r.label + ': ' + r.show(r.v)).join('\n'))}">✓ ${R(s).known}/${R(s).can}</span>`};
+  const col = (k, label, tip) => ({k, label, tip, v: s => { const r = R(s).R.find(x => x.label === tip); return r ? r.v : null; }, f: cell(tip)});
+  const cols = CK_SEG === 'fin'
+    ? [C.sym, C.name, C.ind, val, C.pb, C.pe, pass, C.roe, C.roa, C.gnpa, C.nnpa, C.pcr, col('sg5', '5Y sales', '5Y sales CAGR ≥ 8%'), col('pg3', '3Y profit', '3Y profit CAGR ≥ 8%'), C.cmp, C.mcap]
+    : [C.sym, C.name, C.ind, val, C.pe, C.pb, pass, C.roce, C.roe, col('sg5', '5Y sales', '5Y sales CAGR ≥ 8%'), col('sg3', '3Y sales', '3Y sales CAGR ≥ 5%'),
+       col('pg3', '3Y profit', '3Y profit CAGR ≥ 8%'), col('cp5', 'CFO ÷ PAT', 'CFO ÷ PAT ≥ 0.8 (5Y total)'), C.de, {k: 'icov', label: 'Int. cover', v: s => s.icov, f: s => s.icov == null ? NA : fmt(s.icov, 1) + 'x'},
+       col('dil5', 'Dilution 5Y', 'Share dilution ≤ 10% (5Y)'), C.cmp, C.mcap];
+  view.appendChild(makeTable('ck_' + CK_SEG, cols, rows, {sortKey: 'ckv', sortDir: 1, search: true, csv: () => 'Checklist_' + CK_SEG}));
+  const why = mine.length - rows.length;
+  view.insertAdjacentHTML('beforeend', `<p class="hint">${rows.length} of ${mine.length} ${CK_SEG === 'fin' ? 'financial' : 'non-financial'} stocks in this list pass. The other ${why} fail at least one rule or have too little data (fewer than ${Math.round(CK_MIN_DATA * 100)}% of the rules). Valuation (vs sector) only ranks, it never excludes. Educational screen, not investment advice.</p>`);
 }
 
 /* ---------- PORTFOLIO: a small portfolio manager, built from one list of transactions ----------
@@ -4319,6 +4468,7 @@ function route() {
   else if (h === '#/method') methodView();
   else if (h === '#/all') allView();
   else if (h === '#/momentum') momentumView();
+  else if (h === '#/checklist') checklistView();
   else if (h === '#/portfolio') portfolioView();
   else homeView();
   meta();
@@ -4417,7 +4567,7 @@ function setPro(p) {
   PRO = !!p; uniFill();
   uniPick(PRO ? (was ? cur : UNI_WANT) : FREE_LIST);
   if (us._paint) us._paint(); uniHintPaint();
-  if (us.value !== cur) route();
+  if (us.value !== cur || (was !== PRO && (location.hash || '') === '#/checklist')) route();
   if (PRO && window.hniMore) window.hniMore('oth');          // Others: every other NSE stock, for Prime
 }
 (function () {
