@@ -103,6 +103,15 @@ html.hni-pro[data-theme=day], html.hni-pro body.day{
   --bg:#d9cdea;--panel:#cdbfe1;--panel2:#e3d9f0;--hover:#c3b2dc;--line:#7c6c96;--sdot:#8a78a8;
   --bg2:#cdbfe1;--bg3:#e3d9f0;--bg4:#c3b2dc;--border:#7c6c96;--border2:#5d4f76}
 
+/* ---------- Plus members (not Prime): Deep Teal page at night, Soft Mint by day (auth.js puts .hni-plus on <html>) ---------- */
+html.hni-plus, html.hni-plus body.night{
+  --bg:#06171a;--panel:#0a1f23;--panel2:#0f282d;--hover:#143238;--line:#24494f;--sdot:#2e5a61;
+  --bg2:#0a1f23;--bg3:#0f282d;--bg4:#143238;--border:#24494f;--border2:#335d63}
+html.hni-plus[data-theme=day], html.hni-plus body.day{
+  --bg:#cfe7de;--panel:#c1ded2;--panel2:#dcefe7;--hover:#b2d5c7;--line:#62897c;--sdot:#749c8f;
+  --bg2:#c1ded2;--bg3:#dcefe7;--bg4:#b2d5c7;--border:#62897c;--border2:#4a6f63}
+.au-user.au-plusm .au-av{box-shadow:0 0 0 2px var(--au-field),0 0 0 4px #2bb3a3}
+
 /* avatar ring + "Prime · valid till …" under the name in the menu */
 .au-user.au-prime .au-av{box-shadow:0 0 0 2px var(--au-field),0 0 0 4px #9b6bdf}
 .au-who .au-ptag{display:block;margin-top:5px;white-space:nowrap;font:600 11px var(--au-mono);color:var(--au-acc)}   /* Prime: normal accent on the purple page */
@@ -112,6 +121,8 @@ html.hni-free body.day .au-menu .au-get,html.hni-free[data-theme=day] .au-menu .
 /* ---------- Prime plans popup ("Choose a plan"): dark purple buttons and outlines ---------- */
 .au-plans{--au-go:#5b2d9c;--au-go-hi:#8b5cf6;--au-go-ink:#fff;--au-go-txt:#b892f5}
 .au-plan{width:min(420px,100%);padding:26px 24px 20px;text-align:center}
+.au-plans .au-plan{display:flex;flex-direction:column}                 /* same height for Plus and Prime (auth.js fitPlans): the button sits at the bottom */
+.au-plans .au-plan .au-gst{margin-top:auto;padding-top:16px}
 .au-plan .au-title{font:700 21px var(--au-sans);letter-spacing:0;margin:0 0 6px}
 .au-plan .au-x{top:14px;right:14px;width:34px;height:34px;color:#e5484d;font-size:30px;font-weight:300}
 .au-plan .au-x:hover{color:#ff6369;background:transparent}
