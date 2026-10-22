@@ -21,9 +21,7 @@ concurrency:
   cancel-in-progress: false
 
 on:
-  schedule:
-    - cron: "30 18 * * 6"   # Sunday 00:00 IST (= Saturday 18:30 UTC) → half 1
-    - cron: "30 20 * * 6"   # Sunday 02:00 IST (= Saturday 20:30 UTC) → half 2
+  # Sunday 00:00 IST half 1, 02:00 IST half 2: started by the Oracle server's crontab (oracle/trigger.sh)
   workflow_dispatch:
     inputs:
       half:
