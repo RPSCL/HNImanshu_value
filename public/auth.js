@@ -640,6 +640,7 @@ function mountNav() {                                                   // the b
 }
 function closeNav() { if (navBox) { navBox.classList.remove("open"); syncLock(); } }
 function openNav() {
+  document.querySelectorAll(".au-user.open").forEach((el) => el.classList.remove("open"));   // the user menu closes when Navigate opens
   if (!navBox) {
     navBox = document.createElement("div");
     navBox.className = "au-back hni-navsheet";
