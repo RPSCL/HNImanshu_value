@@ -1657,6 +1657,8 @@ nav a.on{color:var(--brass);border-color:var(--brass)}
 /* Checklist tab: Prime. Free accounts see it in purple with a crown; Prime members see a plain tab */
 nav a.ck-tab .ck-cr{display:none;width:12px;height:12px;margin-left:6px;vertical-align:-1px}
 html:not(.hni-pro) nav a.ck-tab{color:#b892f5}
+/* demo (review) login: All Stocks only */
+html.hni-demo #nav a:not([data-t=all]),html.hni-demo #histGrp,html.hni-demo #histSep,html.hni-demo #pfBuilder,html.hni-demo #weeklyBtn,html.hni-demo #saveHtml{display:none!important}
 html:not(.hni-pro) nav a.ck-tab .ck-cr{display:inline-block}
 body.day nav a.ck-tab:not(.on){color:inherit}
 html:not(.hni-pro) body.day nav a.ck-tab{color:#5b2d9c}
@@ -1832,7 +1834,6 @@ __AUTH_BODY__<script>
   <a href="#/" data-t="home">Industries</a>
   <a href="#/value" data-t="value">Value screen</a>
   <a href="#/momentum" data-t="momentum">Momentum</a>
-  <a href="#/checklist" data-t="checklist" class="ck-tab">Checklist<svg class="ck-cr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-label="Plus"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg></a>
   <a href="#/all" data-t="all">All Stocks</a>
   <a href="#/method" data-t="method">Methodology</a>
 </nav>
@@ -2357,7 +2358,6 @@ const assetCols = () => [C.pta].concat(has('pfa') ? [C.pfa] : [], has('invp') ? 
 const view = $('#view');
 /* phone: two menu buttons replace the tab row and the row of screens */
 const TABS = [['#/value', 'Value screen', 'Cheap, good-quality stocks by screen'], ['#/momentum', 'Momentum', 'Strongest price trends'],
-              ['#/checklist', 'Checklist', 'Stocks that pass every quality rule (Prime)'],
               ['#/', 'Industries', 'Industry PE, PB, ROE'], ['#/all', 'All Stocks', 'Every stock with every column'], ['#/method', 'Methodology', 'How every number is worked out']];
 function syncMnav() {
   const h = location.hash || '#/', t = TABS.find(x => x[0] === h) || (h.startsWith('#/industry/') ? TABS[2] : null);
@@ -2372,7 +2372,7 @@ function menuSheet(title, items, pick) {
 }
 $('#mnavTab').addEventListener('click', () => {
   const h = location.hash || '#/';
-  menuSheet('Go to', TABS.map(t => ({name: t[1], sub: t[2], href: t[0], on: t[0] === h || (t[0] === '#/' && h.startsWith('#/industry/'))})),
+  menuSheet('Go to', TABS.filter(t => !isDemo() || t[0] === '#/all').map(t => ({name: t[1], sub: t[2], href: t[0], on: t[0] === h || (t[0] === '#/' && h.startsWith('#/industry/'))})),
     it => { if (it.href[0] === '#') location.hash = it.href; else window.open(it.href, '_blank', 'noopener'); });   // the builder: its own tab
 });
 $('#mnavPre').addEventListener('click', () => {
@@ -4489,7 +4489,14 @@ function backInfo() {                                    // small popover behind
                  : 'No prices.csv yet, so price filters and columns are off at this date.'}`
     + (bt ? `<span class="bt">This tab: <b>${bt.lvl}</b>. ${bt.why} <a href="#/method">Details</a></span>` : '');
 }
+/* Demo (review) login: only All Stocks and the Paper portfolio. auth.js keeps the hint (hni_demo) so the right page shows at once. */
+const DEMO_HINT = (() => { try { return localStorage.getItem('hni_demo') === '1'; } catch (e) { return false; } })();
+const isDemo = () => window.hniDemo != null ? !!window.hniDemo : DEMO_HINT;
+if (DEMO_HINT) document.documentElement.classList.add('hni-demo');
+window.addEventListener('hni-ready', () => { if (isDemo() && !/^#\/(all|portfolio)$/.test(location.hash || '')) route(); });
 function route() {
+  if (isDemo() && !/^#\/(all|portfolio)$/.test(location.hash || '')) history.replaceState(null, '', location.pathname + location.search + '#/all');
+  const pb = $('#pfBackV'); if (pb) pb.href = isDemo() ? '#/all' : '#/value';
   const h0 = location.hash || '#/';
   if (h0 === '#/portfolio' && GF.back) { PF_RESUME = GF.backP; return setHistorical(false, null, true); }   // Portfolio: today only
   if (h0 !== '#/portfolio' && PF_RESUME && !GF.back) { const k = PF_RESUME; PF_RESUME = null; return setHistorical(true, k, true); }   // back on
@@ -4503,7 +4510,6 @@ function route() {
   else if (h === '#/method') methodView();
   else if (h === '#/all') allView();
   else if (h === '#/momentum') momentumView();
-  else if (h === '#/checklist') checklistView();
   else if (h === '#/portfolio') portfolioView();
   else homeView();
   meta();
@@ -4803,9 +4809,9 @@ AUTH_WEB = {
     "__AUTH_ATTR__": ' data-auth="required"',
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
                      # signed in and checked within the last hour → page shows at once; auth.js confirms quietly behind it
-                     '<script>try{if(localStorage.getItem("hni_signed")==="1"&&Date.now()-(+localStorage.getItem("hni_auth_at")||0)<36e5)document.documentElement.classList.add("auth-ok")}catch(e){}</script>\n'
-                     '<link rel="stylesheet" href="auth.css?v=26">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=26"></script>\n',
+                     '<script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>\n'
+                     '<link rel="stylesheet" href="auth.css?v=27">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=27"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
