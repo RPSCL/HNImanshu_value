@@ -1827,7 +1827,7 @@ __AUTH_BODY__<script>
   <a href="#/" data-t="home">Industries</a>
   <a href="#/value" data-t="value">Value screen</a>
   <a href="#/momentum" data-t="momentum">Momentum</a>
-  <a href="#/checklist" data-t="checklist" class="ck-tab">Checklist<svg class="ck-cr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-label="Prime"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg></a>
+  <a href="#/checklist" data-t="checklist" class="ck-tab">Checklist<svg class="ck-cr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-label="Plus"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg></a>
   <a href="#/all" data-t="all">All Stocks</a>
   <a href="#/method" data-t="method">Methodology</a>
 </nav>
@@ -3191,7 +3191,7 @@ const ckMedPB = ind => { const g = industries[ind]; return g ? g.medPB : null; }
 const ckVal = s => s.fin ? (s.pb != null && ckMedPB(s.ind) ? (s.pb / ckMedPB(s.ind) - 1) * 100 : null) : prem(s);
 function checklistView() {
   setNav('checklist'); view.innerHTML = '';
-  if (!PRO) {
+  if (!PRIMEF) {
     view.insertAdjacentHTML('beforeend', `<div class="ck-lockbox"><b>Checklist is part of Prime</b>Two fixed quality checklists, one for
       manufacturing / FMCG / IT / pharma and one for banks, NBFCs and insurers. Only the stocks that pass every rule are listed, cheapest
       versus their sector first.<br><button type="button" class="btn primary" id="ckPlans">See plans</button></div>`);
@@ -3199,11 +3199,8 @@ function checklistView() {
     if (window.hniPlans) window.hniPlans();
     return;
   }
-  if (BACK) {
-    view.insertAdjacentHTML('beforeend', `<div class="pf-note">The checklist uses today's numbers. <button type="button" class="btn" id="ckNow">Switch Historical off</button></div>`);
-    $('#ckNow').addEventListener('click', () => setHistorical(false));
-    return;
-  }
+  /* Historical on: the same rules on the numbers as they stood on the back date; the table then also shows the price return
+     since (and the "Since" strip), i.e. a backtest of the checklist */
   const all = V(), mine = all.filter(s => (CK_SEG === 'fin') === !!s.fin);
   const res = new Map(mine.map(s => [s.sym, ckResult(s)]));
   const rows = mine.filter(s => res.get(s.sym).pass);
@@ -4537,7 +4534,9 @@ const us = $('#uniSel');
    locked for free accounts (picking one opens the plans popup). Prime members and admins start on All lists and get Others too.
    PRO starts from auth.js's hint (last visit), then the real answer (setPro, below) corrects it. */
 const FREE_LIST = 'NIFTY 500';
-let PRO = (() => { try { return localStorage.getItem('hni_pro') === '1'; } catch (e) { return false; } })();
+// PRO = all lists unlocked (Plus, Prime or admin); PRIMEF = Prime or admin (the Checklist tab)
+let PRO = (() => { try { return localStorage.getItem('hni_plus') === '1' || localStorage.getItem('hni_pro') === '1'; } catch (e) { return false; } })();
+let PRIMEF = (() => { try { return localStorage.getItem('hni_pro') === '1'; } catch (e) { return false; } })();
 const UNI_WANT = GF.uni;                                    // last visit's list: may be one added later (hniMore)
 const uniFill = () => {
   const lists = D.lists.filter(l => l !== OTH).concat(OTH);  // Others is always listed (its stocks load for Prime)
@@ -4567,12 +4566,19 @@ function setPro(p) {
   PRO = !!p; uniFill();
   uniPick(PRO ? (was ? cur : UNI_WANT) : FREE_LIST);
   if (us._paint) us._paint(); uniHintPaint();
-  if (us.value !== cur || (was !== PRO && (location.hash || '') === '#/checklist')) route();
-  if (PRO && window.hniMore) window.hniMore('oth');          // Others: every other NSE stock, for Prime
+  if (us.value !== cur) route();
+  if (PRO && window.hniMore) window.hniMore('oth');          // Others: every other NSE stock, for Plus / Prime
+}
+function setPrimeF(p) {
+  const was = PRIMEF; PRIMEF = !!p;
+  if (was !== PRIMEF && (location.hash || '') === '#/checklist') route();
 }
 (function () {
-  const go = () => { const w = window.hniBuilder || window.hniAdmin; if (w) w.then(setPro).catch(() => setPro(false)); };
-  go(); window.addEventListener('hni-ready', go);
+  const go = () => {
+    const l = window.hniPlus || window.hniBuilder || window.hniAdmin; if (l) l.then(setPro).catch(() => setPro(false));
+    const b = window.hniBuilder || window.hniAdmin; if (b) b.then(setPrimeF).catch(() => setPrimeF(false));
+  };
+  go(); window.addEventListener('hni-ready', go); window.addEventListener('hni-tier', go);
   window.addEventListener('hashchange', uniHintPaint);
 })();
 /* add the stocks of fundamentals_<tag>.json (+ its back / sparkline files) to this page; data loaded before
@@ -4599,7 +4605,7 @@ window.hniMore = async tag => {
 /* day / night: same key as the screener, so both pages always match */
 /* ---------- themed dropdown: hides the native <select>, keeps it as the source of truth ---------- */
 const CHEV = '<svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const FSEL_CROWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-label="Prime"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg>';
+const FSEL_CROWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-label="Plus"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg>';
 const closeFsel = except => document.querySelectorAll('.fsel.open').forEach(w => { if (w !== except) w.classList.remove('open'); });
 function fancySelect(sel) {
   if (sel.dataset.fancy) return;
@@ -4630,7 +4636,7 @@ function fancySelect(sel) {
     e.preventDefault(); e.stopPropagation();
     const o = e.target.closest('.fsel-opt'); if (!o) return;
     wrap.classList.remove('open'); btn.focus();
-    if (sel.options[+o.dataset.i].dataset.lock) { if (window.hniPlans) window.hniPlans(); return; }   // Prime list, free account
+    if (sel.options[+o.dataset.i].dataset.lock) { if (window.hniPlans) window.hniPlans(null, 'plus'); return; }   // Prime list, free account
     if (+o.dataset.i !== sel.selectedIndex) {
       sel.selectedIndex = +o.dataset.i;
       paint();
@@ -4756,8 +4762,8 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
 AUTH_WEB = {
     "__AUTH_ATTR__": ' data-auth="required"',
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
-                     '<link rel="stylesheet" href="auth.css?v=21">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=21"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=22">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=22"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
