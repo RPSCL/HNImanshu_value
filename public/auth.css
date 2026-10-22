@@ -130,6 +130,14 @@ html.hni-free body.day .au-menu .au-get,html.hni-free[data-theme=day] .au-menu .
 .au-opt-m small{display:block;margin-top:2px;font:500 11.5px var(--au-sans);color:var(--au-faint)}
 .au-opt-p{font:500 18px var(--au-sans);color:var(--au-faint);white-space:nowrap}
 .au-gst{margin:16px 0 18px;font-size:13.5px;color:var(--au-faint)}
+/* Plus / Prime switch at the top of the plans popup */
+.au-tier{display:flex;gap:4px;margin:0 auto 14px;padding:4px;border:1px solid var(--au-line);border-radius:10px;max-width:280px}
+.au-tier button{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;border:0;border-radius:7px;background:transparent;
+  color:var(--au-mute);font:600 14px var(--au-sans);cursor:pointer}
+.au-tier button .au-crown{width:15px;height:15px;margin:0;vertical-align:0;color:currentColor}
+.au-tier button.on{background:var(--au-go);color:var(--au-go-ink)}
+.au-tier button.on .au-crown,body.day .au-tier button.on .au-crown,[data-theme=day] .au-tier button.on .au-crown{color:var(--au-go-ink)}
+.au-tier button:not(.on):hover{color:var(--au-ink)}
 /* free trial (1 hour, ₹0): a slim card above the plans, only for free accounts that never had it */
 .au-trial{display:flex;align-items:center;gap:14px;margin:0 0 14px;padding:12px 16px;border:1px dashed var(--au-go-hi);border-radius:10px;text-align:left;
   background:color-mix(in srgb,var(--au-go) 8%,transparent)}

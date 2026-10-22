@@ -69,9 +69,14 @@ const MARKET = ["hni_market", "ltp"];             // latest prices for held stoc
 // "⟳" live prices: a Cloudflare Worker (ltp_worker.js) starts the price job on GitHub. No secret here: the GitHub
 // token lives in the Worker, which also checks the login and allows one run every few minutes.
 const LTP_HOOK = "https://hni-ltp.himanshushekhar8.workers.dev/run";
-// Prime plans (₹ per month, before GST). The pay Worker (pay_worker.js) has the SAME table and is the one that counts:
-// it makes the Razorpay order and, once paid, moves hni_prime/{uid}.until forward by the months bought.
-const PLANS = [{ m: 1, pm: 999 }, { m: 3, pm: 899 }, { m: 6, pm: 799 }, { m: 12, pm: 599 }];
+// Two levels (₹ before GST). The pay Worker (pay_worker.js) has the SAME tables and is the one that counts: it makes the
+// Razorpay order and, once paid, moves hni_plus/{uid} or hni_prime/{uid}.until forward by the months bought.
+//   Plus  ₹499 a year: all lists (Smallcap 500, Microcap 250, Others)
+//   Prime ₹249 / 199 / 149 / 99 a month for 1 / 3 / 6 / 12 months: Plus + Portfolio Builder, Checklist, Telegram alerts
+const PRIME_PLANS = [{ m: 1, pm: 249 }, { m: 3, pm: 199 }, { m: 6, pm: 149 }, { m: 12, pm: 99 }];
+const PLUS_PLANS = [{ m: 12, total: 499 }];
+const TIERS = { plus: PLUS_PLANS, prime: PRIME_PLANS };
+const PLUS_HINT = "hni_plus";                      // "1" = Plus, Prime or admin last time: all lists show at once
 const GST = 0.18;
 // Address of the pay Worker (Cloudflare, pay_worker.js). Empty = payments not switched on yet ("Proceed to pay" says payments
 // open soon). Nothing here is secret: the Razorpay secret, the prices that are charged and the right to switch Prime on all
@@ -323,7 +328,7 @@ if (!EMBED) {
 }
 
 // ---------- Prime: purple theme, "Prime · till …" in the menu, the plans popup and payment ----------
-let PRIME = null, planBox = null, planSel = 0, planBusy = false;
+let PRIME = null, PLUS = null, planBox = null, planSel = 0, planBusy = false, planTier = "prime";
 let TRIAL_P = null, TRIAL_USED = null;                                 // free trial already used by this account? (hni_trials/{uid})
 let PLAN_NEXT = null;                                                  // page to open once paid (PF Builder), else stay here
 const isGoogle = (u) => !!(u && (u.providerData || []).some((x) => x.providerId === "google.com"));
@@ -332,20 +337,26 @@ let PRO_NOW = (() => { try { return localStorage.getItem(PRO_HINT) === "1"; } ca
 const CROWN = '<svg class="au-crown" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg>';
 const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
 const dateTxt = (ms) => new Date(ms).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-const payable = (p) => Math.round(p.pm * p.m * (1 + GST));          // what Razorpay charges, GST included (the Worker works it out the same way)
-function markPro(admin, p) {
+const total = (p) => p.total != null ? p.total : p.pm * p.m;          // ₹ for the whole period, before GST
+const payable = (p) => Math.round(total(p) * (1 + GST));            // what Razorpay charges, GST included (the Worker works it out the same way)
+function markPro(admin, p, plus) {
   PRIME = p;
+  if (plus !== undefined) PLUS = plus;
   const on = !!(admin || p);
   PRO_NOW = on;
   document.documentElement.classList.toggle("hni-pro", on);           // auth.css: darkest purple (night) / light purple (day)
   tabIcon(on);                                                         // purple tab icon for Prime / admin
   document.documentElement.classList.toggle("hni-free", !on && !!current);   // free account: Prime buttons in purple
-  try { if (current) localStorage.setItem(PRO_HINT, on ? "1" : "0"); else localStorage.removeItem(PRO_HINT); } catch (e) {}
+  try {
+    if (current) { localStorage.setItem(PRO_HINT, on ? "1" : "0"); localStorage.setItem(PLUS_HINT, on || PLUS ? "1" : "0"); }
+    else { localStorage.removeItem(PRO_HINT); localStorage.removeItem(PLUS_HINT); }
+  } catch (e) {}
   markUser();
   watchEnd(admin ? null : p);                                          // trial / Prime ends while the page is open → popup
   try { if (current && !admin && p && p.until) localStorage.setItem(pendKey(), JSON.stringify({ until: p.until, trial: !!p.trial })); } catch (e) {}
+  try { if (current && !admin && PLUS && PLUS.until) localStorage.setItem(pendKey() + "_plus", JSON.stringify({ until: PLUS.until })); } catch (e) {}
   if (current && !admin && !EXTRA.some((it) => it.cls === "au-get"))
-    addItem(p ? "Extend Prime" : "Get Prime", openPlans, "au-get");
+    addItem(p ? "Extend Prime" : PLUS ? "Upgrade to Prime" : "Get Plus or Prime", () => openPlans(), "au-get");
 }
 function markUser() {                                                  // avatar ring + "Prime · till 18 Jan 2027" under the name
   document.querySelectorAll(".au-user").forEach((el) => {
@@ -353,9 +364,10 @@ function markUser() {                                                  // avatar
     const who = $(".au-who", el);
     let t = who && $(".au-ptag", who);
     if (!who) return;
-    if (!PRIME) { if (t) t.remove(); return; }
+    if (!PRIME && !PLUS) { if (t) t.remove(); return; }
     if (!t) { t = document.createElement("span"); t.className = "au-ptag"; who.appendChild(t); }
-    t.textContent = PRIME.trial ? "Free trial · till " + new Date(PRIME.until).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })
+    t.textContent = !PRIME ? "Plus · " + (PLUS.until ? "valid till " + dateTxt(PLUS.until) : "no end date")
+      : PRIME.trial ? "Free trial · till " + new Date(PRIME.until).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })
       : "Prime · " + (PRIME.until ? "valid till " + dateTxt(PRIME.until) : "no end date");
   });
 }
@@ -367,13 +379,10 @@ function buildPlans() {
     <div class="au-box au-plan" role="dialog" aria-modal="true" aria-labelledby="auPlanT">
       <button class="au-x" type="button" aria-label="Close">×</button>
       <h2 class="au-title" id="auPlanT">Choose a plan</h2>
-      <p class="au-plan-lead">${CROWN}<span></span></p>
+      <div class="au-tier" role="tablist"><button type="button" role="tab" data-tier="plus">Plus</button><button type="button" role="tab" data-tier="prime">${CROWN}Prime</button></div>
+      <p class="au-plan-lead"><span></span></p>
       <div class="au-trial" hidden><div><b>Free trial</b><small></small></div><button type="button" class="au-trial-go">Start · ₹0</button></div>
-      <div class="au-opts" role="radiogroup" aria-labelledby="auPlanT">${PLANS.map((p, k) => `
-        <label class="au-opt"><input type="radio" name="auPlan" value="${k}">
-          <span class="au-opt-m">${p.m} month${p.m > 1 ? "s" : ""}${p.m > 1 ? `<small>${inr(p.pm * p.m)} for ${p.m} months</small>` : ""}</span>
-          <span class="au-opt-p">${inr(p.pm)}/mo</span></label>`).join("")}
-      </div>
+      <div class="au-opts" role="radiogroup" aria-labelledby="auPlanT"></div>
       <p class="au-gst">Price excludes ${Math.round(GST * 100)}% GST</p>
       <button class="au-pay" type="button"></button>
       <p class="au-plan-msg" aria-live="polite"></p>
@@ -386,33 +395,49 @@ function buildPlans() {
   planBox.addEventListener("change", (e) => { if (e.target.name === "auPlan") { planSel = +e.target.value; planMsg(""); paintPlans(); } });
   $(".au-pay", planBox).addEventListener("click", pay);
   $(".au-trial-go", planBox).addEventListener("click", startTrial);
+  planBox.querySelectorAll(".au-tier button").forEach((b) => b.addEventListener("click", () => { if (planBusy) return; setTier(b.dataset.tier); planMsg(""); paintPlans(); }));
   return planBox;
 }
+// Plus / Prime toggle: the options under it are drawn for the level picked (12 months preselected: the best value)
+function setTier(t) {
+  planTier = t === "plus" ? "plus" : "prime";
+  const L = TIERS[planTier];
+  planSel = L.length - 1;
+  $(".au-opts", planBox).innerHTML = L.map((p, k) => `
+        <label class="au-opt"><input type="radio" name="auPlan" value="${k}">
+          <span class="au-opt-m">${p.m} month${p.m > 1 ? "s" : ""}${p.m > 1 ? `<small>${inr(total(p))} for ${p.m} months${p.total != null ? " · " + inr(p.total / 12) + " a month" : ""}</small>` : ""}</span>
+          <span class="au-opt-p">${p.total != null ? inr(p.total) + "/yr" : inr(p.pm) + "/mo"}</span></label>`).join("");
+}
 function paintPlans() {
-  const p = PLANS[planSel];
+  const L = TIERS[planTier], p = L[planSel], plus = planTier === "plus";
+  planBox.querySelectorAll(".au-tier button").forEach((b) => { const on = b.dataset.tier === planTier; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
   planBox.querySelectorAll(".au-opt").forEach((el, k) => {
     el.classList.toggle("on", k === planSel); $("input", el).checked = k === planSel; $("input", el).disabled = planBusy;
   });
-  $(".au-plan-lead span", planBox).textContent = PRIME
-    ? (PRIME.until ? `You are Prime till ${dateTxt(PRIME.until)}. New months are added after that.` : "You are Prime with no end date.")
-    : "Telegram alerts, and Portfolio Builder are a part of Prime.";
+  $(".au-plan-lead span", planBox).textContent = plus
+    ? (PRIME || PRO_NOW ? "Prime already includes everything in Plus." : PLUS && PLUS.until ? `You are Plus till ${dateTxt(PLUS.until)}. A new year is added after that.`
+       : "All lists: Smallcap 500, Microcap 250 and every other NSE stock (Others), on top of NIFTY 500.")
+    : PRIME ? (PRIME.until ? `You are Prime till ${dateTxt(PRIME.until)}. New months are added after that.` : "You are Prime with no end date.")
+    : "Portfolio Builder, Checklist and Telegram alerts, plus everything in Plus.";
   const tr = $(".au-trial", planBox), g = isGoogle(current);
-  tr.hidden = PRO_NOW || PRIME || TRIAL_USED !== false;               // only for a free account that never had the trial
+  tr.hidden = plus || PRO_NOW || PRIME || TRIAL_USED !== false;       // Prime tab only, for an account that never had the trial
   $("small", tr).textContent = g ? "1 hour of Prime, once per Google account" : "Needs a Google sign-in (log in with Google)";
   $(".au-trial-go", tr).disabled = planBusy || !g;
   const b = $(".au-pay", planBox);
-  b.disabled = planBusy;
-  if (!planBusy) b.textContent = `Proceed to pay ${inr(payable(p))}`;
+  const nope = plus && (PRIME || PRO_NOW);                              // already has it through Prime / admin
+  b.disabled = planBusy || nope;
+  if (!planBusy) b.textContent = nope ? "Included in your Prime" : `Proceed to pay ${inr(payable(p))}`;
 }
 function planMsg(t, kind) {
   const el = $(".au-plan-msg", planBox);
   el.textContent = t || ""; el.className = "au-plan-msg" + (kind ? " " + kind : "");
 }
 // next: the page to open after a successful payment / trial (e.g. "builder"). Not paid → the visitor stays on this page.
-function openPlans(next) {
+// tier: which tab the popup opens on ("plus" for the lists, else Prime)
+function openPlans(next, tier) {
   PLAN_NEXT = typeof next === "string" ? next : null;
   if (!current) return openPopup(PLAN_NEXT);                           // signed out: log in first
-  buildPlans(); planMsg(""); paintPlans();
+  buildPlans(); setTier(tier === "plus" && !PRIME && !PRO_NOW ? "plus" : "prime"); planMsg(""); paintPlans();
   if (TRIAL_P && TRIAL_USED === null) TRIAL_P.then((t) => { TRIAL_USED = t.used; if (planBox) paintPlans(); });
   planBox.classList.add("open"); syncLock();
   setTimeout(() => { const i = planBox.querySelector("input:checked"); if (i) i.focus(); }, 30);
@@ -439,22 +464,22 @@ const loadRazorpay = () => RZP = RZP || new Promise((ok, bad) => {
   document.head.appendChild(s);
 });
 async function pay() {
-  const p = PLANS[planSel], u = current;
+  const p = TIERS[planTier][planSel], u = current, tier = planTier, name = tier === "plus" ? "Plus" : "Prime";
   if (planBusy || !u) return;
   if (!PAY_HOOK) return planMsg("Online payment opens soon. Please check back in a little while.");
   planBusy = true; paintPlans(); $(".au-pay", planBox).textContent = "Opening payment…"; planMsg("");
   try {
-    const o = await payCall("/order", { months: p.m });                // the Worker prices it from its own table, not from this page
+    const o = await payCall("/order", { tier, months: p.m });          // the Worker prices it from its own table, not from this page
     if (!o || o.error || !o.order_id) throw new Error((o && o.error) || "Couldn't start the payment.");
     await loadRazorpay().catch(() => { throw new Error("Unable to complete payment (Razorpay: unreachable)"); });
     const v = await new Promise((resolve, reject) => {
       const rz = new window.Razorpay({
         key: o.key, order_id: o.order_id, amount: o.amount, currency: o.currency || "INR",
-        name: "HNImanshu", description: `Prime · ${p.m} month${p.m > 1 ? "s" : ""}`,
+        name: "HNImanshu", description: `${name} · ${p.m} month${p.m > 1 ? "s" : ""}`,
         prefill: { name: nameOf(u), email: u.email && !u.email.endsWith("@" + USER_DOMAIN) ? u.email : "" },
         theme: { color: "#5b2d9c" },
         handler: async (res) => {                                      // paid: the Worker checks Razorpay's signature, then extends Prime
-          planMsg("Payment received. Switching Prime on…");
+          planMsg(`Payment received. Switching ${name} on…`);
           try {
             const r = await payCall("/verify", res);
             if (r && r.ok) resolve(r);
@@ -469,11 +494,12 @@ async function pay() {
       });
       rz.open();
     });
-    planMsg((v.note ? v.note + " " : "") + `Prime is on, valid till ${dateTxt(v.until)}. ${PLAN_NEXT ? "Opening Portfolio Builder…" : "Reloading…"}`, "ok");
+    planMsg((v.note ? v.note + " " : "") + `${name} is on, valid till ${dateTxt(v.until)}. ${PLAN_NEXT && tier === "prime" ? "Opening Portfolio Builder…" : "Reloading…"}`, "ok");
     try { localStorage.setItem(PRO_HINT, "1"); } catch (e) {}
-    setTimeout(() => { if (PLAN_NEXT) location.href = PLAN_NEXT; else location.reload(); }, 1600);
+    try { localStorage.setItem(PLUS_HINT, "1"); } catch (e) {}
+    setTimeout(() => { if (PLAN_NEXT && tier === "prime") location.href = PLAN_NEXT; else location.reload(); }, 1600);
   } catch (e) {
-    if (e.paid) planMsg(`Payment received, Prime not confirmed yet (${e.message}). It switches on by itself within a few minutes; reload this page then.`, "bad");
+    if (e.paid) planMsg(`Payment received, ${name} not confirmed yet (${e.message}). It switches on by itself within a few minutes; reload this page then.`, "bad");
     else if (e.message) planMsg(e.message, "bad");
   } finally { planBusy = false; paintPlans(); }
 }
@@ -487,7 +513,7 @@ async function startTrial() {
     const r = await payCall("/trial", {});
     if (!r || !r.ok) { if (r && /already/.test(r.error || "")) TRIAL_USED = true; throw new Error((r && r.error) || "Couldn't start the trial."); }
     planMsg(`Free trial on till ${new Date(r.until).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}. ${PLAN_NEXT ? "Opening Portfolio Builder…" : "Reloading…"}`, "ok");
-    try { localStorage.setItem(PRO_HINT, "1"); } catch (e) {}
+    try { localStorage.setItem(PRO_HINT, "1"); localStorage.setItem(PLUS_HINT, "1"); } catch (e) {}
     setTimeout(() => { if (PLAN_NEXT) location.href = PLAN_NEXT; else location.reload(); }, 1400);
   } catch (e) { planMsg(e.message || "Unable to start the free trial (Server: error)", "bad"); }
   finally { planBusy = false; if (planBox) paintPlans(); }
@@ -507,17 +533,19 @@ function primeEnded() {
   const p = PRIME;
   if (!p || !p.until || p.until > Date.now() + 1000) return;
   window.hniPrimeInfo = Promise.resolve(null); window.hniPrime = Promise.resolve(false); window.hniBuilder = Promise.resolve(false);
-  markPro(false, null);
+  window.hniPlus = Promise.resolve(!!PLUS); window.dispatchEvent(new Event("hni-tier"));   // pages re-check what is unlocked
+  markPro(false, null, PLUS);
   TRIAL_USED = true;
   const onBuilder = document.documentElement.classList.contains("pb-admin");
   document.documentElement.classList.remove("pb-admin");              // PF Builder: its contents go at once
-  endPopup(p.trial, onBuilder);
+  endPopup(p.trial ? "trial" : "prime", onBuilder);
 }
 // "Free trial expired" / "Prime has ended": shown once, right when it ends, or on the next visit / login after it ended
 const pendKey = () => current ? "hni_pend_" + current.uid : "";        // last Prime seen on this browser: {until, trial}
 const seenKey = () => current ? "hni_tseen_" + current.uid : "";       // trial-ended popup already shown
-function endPopup(trial, reload) {
-  try { localStorage.removeItem(pendKey()); if (trial) localStorage.setItem(seenKey(), "1"); } catch (e) {}
+function endPopup(kind, reload) {                                       // kind: "trial" | "prime" | "plus"
+  const trial = kind === "trial";
+  try { localStorage.removeItem(pendKey() + (kind === "plus" ? "_plus" : "")); if (trial) localStorage.setItem(seenKey(), "1"); } catch (e) {}
   if (!endBox) {
     endBox = document.createElement("div");
     endBox.className = "au-back au-plans au-ended";
@@ -528,17 +556,18 @@ function endPopup(trial, reload) {
     document.body.appendChild(endBox);
     const close = (plans) => {
       endBox.classList.remove("open"); syncLock();
-      if (plans) openPlans(endBox._reload ? "builder" : null); else if (endBox._reload) location.reload();
+      if (plans) openPlans(endBox._reload ? "builder" : null, endBox._kind === "plus" ? "plus" : null); else if (endBox._reload) location.reload();
     };
     $(".au-x", endBox).addEventListener("click", () => close(false));
     endBox.addEventListener("click", (e) => { if (e.target === endBox) close(false); });
     endBox.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") close(false); });
     $(".au-pay", endBox).addEventListener("click", () => close(true));
   }
-  endBox._reload = reload;
-  $(".au-title", endBox).textContent = trial ? "Free trial expired" : "Prime has ended";
+  endBox._reload = reload; endBox._kind = kind;
+  $(".au-title", endBox).textContent = trial ? "Free trial expired" : kind === "plus" ? "Plus has ended" : "Prime has ended";
   $(".au-plan-lead", endBox).textContent = trial
     ? "Your 1-hour free trial is over. Choose a plan to keep Portfolio Builder and Telegram alerts."
+    : kind === "plus" ? "Your Plus year has ended: back to NIFTY 500 only. Renew to keep Smallcap 500, Microcap 250 and Others."
     : "Your Prime plan has ended. Choose a plan to keep Portfolio Builder and Telegram alerts.";
   document.querySelectorAll(".au-back.open").forEach((b) => { if (b !== endBox) b.classList.remove("open"); });
   endBox.classList.add("open"); syncLock();
@@ -548,10 +577,12 @@ function endPopup(trial, reload) {
 // next visit / login after Prime or the trial ran out (while away): the same popup, once
 async function endedSince() {
   let was = null; try { was = JSON.parse(localStorage.getItem(pendKey()) || "null"); } catch (e) {}
-  if (was && was.until && was.until <= Date.now()) return setTimeout(() => endPopup(!!was.trial, false), 900);
+  if (was && was.until && was.until <= Date.now()) return setTimeout(() => endPopup(was.trial ? "trial" : "prime", false), 900);
+  let wp = null; try { wp = JSON.parse(localStorage.getItem(pendKey() + "_plus") || "null"); } catch (e) {}
+  if (wp && wp.until && wp.until <= Date.now() && !PLUS) return setTimeout(() => endPopup("plus", false), 900);
   const t = TRIAL_P && await TRIAL_P;                                   // trial taken on another device / browser
   let seen = true; try { seen = !!localStorage.getItem(seenKey()); } catch (e) {}
-  if (t && t.used && t.until && t.until <= Date.now() && !seen) setTimeout(() => endPopup(true, false), 900);
+  if (t && t.used && t.until && t.until <= Date.now() && !seen) setTimeout(() => endPopup("trial", false), 900);
 }
 
 // ---------- phone: one "Navigate to" button (fork icon, drawn one line at a time) → every other page in one overlay ----------
@@ -704,6 +735,16 @@ const ready = new Promise((resolve) => {
       } catch (e) { return null; }                     // ended (rules refuse) or offline
     })();
     window.hniPrime = window.hniPrimeInfo.then((p) => !!p);
+    // Plus member? hni_plus/{uid} = {until, …}, same rules as Prime. → {until} or null
+    window.hniPlusInfo = (async () => {
+      try {
+        await needFS();
+        const d = await getDoc(doc(db, "hni_plus", u.uid));
+        if (!d.exists()) return null;
+        const t = d.data().until, until = t && t.toMillis ? t.toMillis() : null;
+        return until && until <= Date.now() ? null : { until };
+      } catch (e) { return null; }
+    })();
     TRIAL_USED = null;                                                // free trial taken before? (only the owner can read it)
     TRIAL_P = (async () => {                                         // → {used, until}
       try { await needFS(); const d = await getDoc(doc(db, "hni_trials", u.uid));
@@ -712,11 +753,13 @@ const ready = new Promise((resolve) => {
     })();
     // PF Builder (button on Fundamentals + the page itself): admins and prime members. Everyone else sees the plans.
     window.hniBuilder = (async () => (await window.hniAdmin) || (await window.hniPrime))();
+    // all lists (Smallcap 500, Microcap 250, Others): Plus, Prime or admin
+    window.hniPlus = (async () => (await window.hniBuilder) || !!(await window.hniPlusInfo))();
     window.hniPlans = openPlans;
     window.dispatchEvent(new Event("hni-ready"));
     if (GATED) showUser(u);
     mountNav();
-    Promise.all([window.hniAdmin, window.hniPrimeInfo]).then(([admin, p]) => { markPro(!!admin, p); if (!admin && !p) endedSince(); });
+    Promise.all([window.hniAdmin, window.hniPrimeInfo, window.hniPlusInfo]).then(([admin, p, plus]) => { markPro(!!admin, p, plus); if (!admin && !p) endedSince(); });
     idle(() => { record(u); loadExt(u); }, 1500);
   });
 });
