@@ -7,9 +7,9 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cstyle%3Erect{fill:%23141414}text{fill:%23d4b47a}@media (prefers-color-scheme:dark){rect{fill:%23f1e8d8}text{fill:%234c2e0a}}%3C/style%3E%3Crect width='32' height='32' rx='7'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='18' font-weight='bold' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E">
 <meta name="description" content="Split a fund into index ETFs, value stocks and momentum stocks by fixed rules, with a 1-year backtest.">
 <style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>
-<link rel="stylesheet" href="auth.css?v=24">
+<link rel="stylesheet" href="auth.css?v=25">
 <style>html:not(.pb-admin) .lead,html:not(.pb-admin) .card,html:not(.pb-admin) .tabs,html:not(.pb-admin) #out,html:not(.pb-admin) .disc{display:none}</style>
-<script type="module" src="auth.js?v=24"></script>
+<script type="module" src="auth.js?v=25"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>
@@ -204,6 +204,11 @@ details.sec>.body{padding:0 14px 14px}
 .cch{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;justify-content:space-between}
 .cch .rh{font:500 11.5px var(--mono);color:var(--faint);margin:0 0 6px}
 .lead2{color:var(--mute);font-size:12.5px;margin:0 0 12px}
+/* review account (REVIEW below): its paper portfolio only, no builder */
+html.pb-review .card,html.pb-review .tabs,html.pb-review details.how,html.pb-review .disc{display:none!important}
+.rv-empty{margin:26px 0;padding:22px 20px;border:1px dashed var(--line);border-radius:12px;background:var(--panel);color:var(--mute);font-size:15px;line-height:1.6;max-width:760px}
+.rv-empty a{color:var(--brass)}
+.rv-tot td{font-weight:700;border-top:2px solid var(--line)}
 /* while the lists are worked out */
 .building{display:flex;align-items:center;gap:10px;margin:28px 2px;font:600 15px var(--mono);color:var(--mute)}
 .building i{width:10px;height:10px;border-radius:50%;background:var(--brass);animation:bld 1.1s ease-in-out infinite}
@@ -425,6 +430,71 @@ const buildInfo = () => INFO_P = INFO_P || fetch('build_info.json', {cache: 'no-
 const builtTxt = v => { const d = new Date(v); if (isNaN(d)) return String(v);
   const day = d.toLocaleDateString('en-IN', {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata'});
   return /T\d/.test(v) ? day + ', ' + d.toLocaleTimeString('en-IN', {hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata'}) : day; };
+/* ---------- REVIEW ACCOUNT (for Razorpay's website check) ----------
+   These logins see no Today / backtest builder: until they add stocks to their (paper) Portfolio, one line asking them to;
+   after that, a detailed table of what they hold. To switch it off: empty the list (const REVIEW = [];). */
+const REVIEW = ['razorpay@users.hnimanshu.app'];
+async function reviewView() {
+  document.documentElement.classList.add('pb-review');
+  const out = $('#out');
+  status('');
+  out.innerHTML = '<p class="building" role="status"><i></i>Building…</p>';
+  let d = {}, mkt = null;
+  try { d = await window.hniStore.load() || {}; mkt = await window.hniStore.market().catch(() => null); } catch (e) {}
+  const tx = Array.isArray(d.txns) ? d.txns.slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))) : [];
+  const pos = new Map();                                   // average-cost holdings: buys add qty + cost, sells take out at the average
+  tx.forEach(x => {
+    if ((x.t !== 'buy' && x.t !== 'sell') || !x.sym) return;
+    const k = String(x.sym).toUpperCase().trim(), p = pos.get(k) || {sym: k, qty: 0, cost: 0, name: x.name || ''};
+    const q = +x.qty || 0, px = +x.px || 0;
+    if (x.t === 'buy') { p.qty += q; p.cost += q * px + (+x.ch || 0); }
+    else if (p.qty > 0) { const avg = p.cost / p.qty; p.qty -= q; p.cost -= avg * q; }
+    if (x.name) p.name = x.name;
+    pos.set(k, p);
+  });
+  const rows = [...pos.values()].filter(p => p.qty > 1e-9);
+  if (!rows.length) {
+    out.innerHTML = '<div class="rv-empty">Start adding stocks to your paper portfolio to see the details on this page. <a href="factor#/portfolio">Open Portfolio →</a></div>';
+    return;
+  }
+  let info = {};                                          // name, industry, PE, PB, ROE, value score, momentum (the Factor Screener's own numbers)
+  try {
+    const w = await engine();
+    info = JSON.parse(w.eval(`JSON.stringify(Object.fromEntries(${JSON.stringify(rows.map(r => r.sym))}.map(s => { const t = TODAY.get(s) || {};
+      return [s, {name: t.name, ind: t.ind, url: t.url, cmp: t.cmp, pe: t.pe, pb: t.pb, roe: t.roe, score: t.score, mom: t.momS}]; })))`));
+  } catch (e) {}
+  const P = (mkt && mkt.prices) || {};
+  rows.forEach(r => {
+    const i = info[r.sym] || {}, lv = P[r.sym] || {};
+    Object.assign(r, i, {name: i.name || r.name || r.sym});
+    r.avg = r.cost / r.qty; r.ltp = lv.ltp || i.cmp || null; r.prev = lv.prev || null;
+    r.value = r.ltp != null ? r.qty * r.ltp : null; r.pnl = r.value != null ? r.value - r.cost : null;
+    r.pnlPct = r.pnl != null && r.cost > 0 ? r.pnl / r.cost * 100 : null;
+    r.day = r.ltp != null && r.prev ? r.qty * (r.ltp - r.prev) : null;
+  });
+  const tv = rows.reduce((s, r) => s + (r.value || 0), 0), tc = rows.reduce((s, r) => s + r.cost, 0);
+  rows.forEach(r => { r.wt = tv > 0 && r.value != null ? r.value / tv * 100 : null; });
+  rows.sort((a, b) => (b.value || 0) - (a.value || 0));
+  const td = rows.some(r => r.day != null) ? rows.reduce((s, r) => s + (r.day || 0), 0) : null;
+  const sg = v => v == null ? '–' : `<span class="${v >= 0 ? 'pos' : 'neg'}">${v > 0 ? '+' : v < 0 ? '−' : ''}${fmt(Math.abs(v), 0)}</span>`;
+  out.innerHTML = `<div class="kpis">
+      <div class="kpi"><span>Invested</span><b>${rsK(tc)}</b></div>
+      <div class="kpi"><span>Value</span><b>${rsK(tv)}</b></div>
+      <div class="kpi"><span>P&amp;L</span><b class="${tv - tc >= 0 ? 'pos' : 'neg'}">${rsK(tv - tc)} (${pct(tc ? (tv - tc) / tc * 100 : null)})</b></div>
+      <div class="kpi"><span>Day</span><b class="${(td || 0) >= 0 ? 'pos' : 'neg'}">${td == null ? '–' : rsK(td)}</b></div>
+      <div class="kpi"><span>Holdings</span><b>${rows.length}</b></div>
+      <div class="kpi"><span>Prices as of</span><b>${esc((mkt && mkt.asOf) || 'last close')}</b></div></div>
+    <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th>Industry</th><th class="r">Qty</th><th class="r">Avg ₹</th><th class="r">LTP ₹</th>
+      <th class="r">Invested ₹</th><th class="r">Value ₹</th><th class="r">P&amp;L ₹</th><th class="r">P&amp;L %</th><th class="r">Day ₹</th><th class="r">Weight</th>
+      <th class="r">PE</th><th class="r">PB</th><th class="r">ROE %</th><th class="r">Value score</th><th class="r">Momentum</th></tr></thead><tbody>${rows.map(r => `<tr>
+      <td>${symCell(r)}</td><td class="nm" title="${esc(r.name)}">${esc(r.name)}</td><td class="nm">${esc(r.ind || '–')}</td><td class="r">${fmt(r.qty, 0)}</td>
+      <td class="r">${fmt(r.avg, 2)}</td><td class="r">${fmt(r.ltp, 2)}</td><td class="r">${fmt(r.cost, 0)}</td><td class="r">${fmt(r.value, 0)}</td>
+      <td class="r">${sg(r.pnl)}</td><td class="r">${pill(r.pnlPct)}</td><td class="r">${sg(r.day)}</td><td class="r">${num(r.wt) ? fmt(r.wt, 1) + '%' : '–'}</td>
+      <td class="r">${fmt(r.pe, 1)}</td><td class="r">${fmt(r.pb, 2)}</td><td class="r">${fmt(r.roe, 1)}</td><td class="r">${num(r.score) ? fmt(r.score, 0) : '–'}</td><td class="r">${num(r.mom) ? Math.round(r.mom) : '–'}</td></tr>`).join('')}
+      <tr class="rv-tot"><td>Total</td><td class="nm"></td><td></td><td></td><td></td><td></td><td class="r">${fmt(tc, 0)}</td><td class="r">${fmt(tv, 0)}</td><td class="r">${sg(tv - tc)}</td>
+      <td class="r">${pill(tc ? (tv - tc) / tc * 100 : null)}</td><td class="r">${sg(td)}</td><td class="r">100%</td><td colspan="5"></td></tr></tbody></table></div>
+    <p class="note">Paper portfolio: no real money. Prices are the latest live prices (market hours) or the last close. Numbers from the Factor Screener's data.</p>`;
+}
 let ETF_P = null;
 const etfData = () => ETF_P = ETF_P || fetch('builder_etf.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null);
 /* saved daily closes (etf_prices/daily_close.csv → build.py → builder_daily.json): drive the backtest charts; optional */
@@ -1121,6 +1191,7 @@ paintSplit();
     return;
   }
   document.documentElement.classList.add('pb-admin'); $('#gate').remove();
+  if (REVIEW.includes(((window.hniStore && window.hniStore.email) || '').toLowerCase())) return reviewView();   // review account: paper portfolio only
   setTab(lsGet(tabKey()) || 'now', false);                         // the tab this user had open last time
   if (TAB === 'back' && pendingReq()) toast('Still preparing the 1-year prices: they appear here by themselves, or check back in a few minutes.', 6000);
   try {

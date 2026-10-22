@@ -708,6 +708,7 @@ const ready = new Promise((resolve) => {
     // Portfolio tab: the page saves / loads the user's holdings through this (Firestore hni_portfolio/{uid}, owner only)
     window.hniStore = {
       uid: u.uid,                                            // PF Builder remembers its last tab per user
+      email: u.email || "",                                  // PF Builder: the review account sees its paper portfolio instead
       load: async () => { await needFS(); const d = await getDoc(doc(db, PORTFOLIO, u.uid)); return d.exists() ? d.data() : {}; },             // {txns, rates} (or old {items})
       save: async (data) => { await needFS(); return setDoc(doc(db, PORTFOLIO, u.uid), { txns: data.txns || [], rates: data.rates || {}, updated: serverTimestamp() }); },
       market: async () => { await needFS(); const d = await getDoc(doc(db, ...MARKET)); return d.exists() ? d.data() : null; },
