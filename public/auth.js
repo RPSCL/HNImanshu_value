@@ -79,6 +79,10 @@ const GST = 0.18;
 const PAY_HOOK = "https://hni-pay.himanshushekhar8.workers.dev";
 const HOME = "./";                                // the screener
 const GATED = document.documentElement.dataset.auth === "required";
+// Valuation: its own header and Login slot, but only for signed-in visitors (data-auth="login"). Signed out → the landing page.
+const LOGIN_ONLY = document.documentElement.dataset.auth === "login";
+const toLanding = () => location.replace("./?login=" + encodeURIComponent(location.pathname.replace(/^\//, "") + location.hash));
+if (LOGIN_ONLY) { try { if (localStorage.getItem("hni_signed") !== "1") toLanding(); } catch (e) {} }   // never signed in here: go at once
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -561,7 +565,7 @@ const NAV_ICON = {
   weekly: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#29a9eb"/><path d="M5.4 11.6l11.5-4.4c.5-.2 1 .1.8.9l-2 9.3c-.1.6-.5.8-1.1.5l-3-2.2-1.5 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5.1c.2-.2 0-.3-.4-.1l-6.9 4.4-3-.9c-.6-.2-.7-.6.1-1z" fill="#fff"/></svg>',
 };
 const NAV = [
-  { k: "valuation", t: "Valuation", s: "Every stock valued and ranked", href: "valuation", open: true },
+  { k: "valuation", t: "Valuation", s: "Every stock valued and ranked", href: "valuation" },
   { k: "factor", t: "Factor Screener", s: "Industries, value and momentum screens", href: "factor#/" },
   { k: "portfolio", t: "Portfolio", s: "Your holdings and P&L", href: "factor#/portfolio" },
   { k: "builder", t: "Portfolio Builder", s: "ETFs + value + momentum, with a backtest", href: "builder", prime: true },
@@ -658,11 +662,8 @@ const ready = new Promise((resolve) => {
     current = u;
     try { localStorage.setItem(SIGNED_HINT, u ? "1" : "0"); } catch (e) {}   // lets the next visit open Fundamentals instantly
     resolve();
-    if (GATED && !u) {                                        // no login: back to the screener with the popup open
-      location.replace(HOME + "?login=" + encodeURIComponent(location.pathname.replace(/^\//, "") + location.hash));
-      return;
-    }
-    if (GATED) document.documentElement.classList.add("auth-ok");   // show the page at once
+    if ((GATED || LOGIN_ONLY) && !u) { toLanding(); return; }    // no login: the landing page, login box open, then back here
+    if (GATED || LOGIN_ONLY) document.documentElement.classList.add("auth-ok");   // show the page at once
     else paintSlot(u);                                         // screener: Login button or the user menu
     if (!u) { markPro(false, null); if (GATED) document.documentElement.classList.remove("hni-nav"); else mountNav(); return; }
     // Portfolio tab: the page saves / loads the user's holdings through this (Firestore hni_portfolio/{uid}, owner only)
