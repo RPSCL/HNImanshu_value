@@ -613,8 +613,8 @@ const NAV_ICON = {
   weekly: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#29a9eb"/><path d="M5.4 11.6l11.5-4.4c.5-.2 1 .1.8.9l-2 9.3c-.1.6-.5.8-1.1.5l-3-2.2-1.5 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5.1c.2-.2 0-.3-.4-.1l-6.9 4.4-3-.9c-.6-.2-.7-.6.1-1z" fill="#fff"/></svg>',
 };
 const NAV = [
-  { k: "valuation", t: "Valuation", s: "Every stock valued and ranked", href: "valuation" },
-  { k: "factor", t: "Factor Screener", s: "Industries, value and momentum screens", href: "factor#/" },
+  { k: "valuation", t: "Valuation", s: "Model values from company financials", href: "valuation" },
+  { k: "factor", t: "Factor Screener", s: "Filter stocks with your own limits", href: "factor#/" },
   { k: "portfolio", t: "Portfolio", s: "Your holdings and P&L", href: "factor#/portfolio" },
   { k: "builder", t: "Portfolio Builder", s: "ETFs + value + momentum, with a backtest", href: "builder", prime: true },
   { k: "weekly", t: "Telegram alerts", s: "Your portfolio summary every week", prime: true },
@@ -716,13 +716,14 @@ const hinted = () => { try { return localStorage.getItem(SIGNED_HINT) === "1"; }
 // Firebase's server again (a fresh token), so a deleted / disabled account is shut out.
 const AUTH_AT = "hni_auth_at", TRUST_MS = 60 * 60 * 1000;
 // Demo (review) logins: "Portfolio" is called "Paper portfolio" everywhere they look (no real money). Empty the list to switch off.
-const DEMO = ["razorpay@users.hnimanshu.app"];
+const DEMO = ["razorpay@users.hnimanshu.app", "demo@users.hnimanshu.app"];
 function markDemo(u) {
   const on = !!(u && DEMO.includes((u.email || "").toLowerCase()));
   window.hniDemo = on;
   try { localStorage.setItem("hni_demo", on ? "1" : "0"); } catch (e) {}   // pages show the demo view at once next time
   document.documentElement.classList.toggle("hni-demo", on);
   if (!on) return;
+  for (let i = NAV.length - 1; i >= 0; i--) if (NAV[i].k === "builder" || NAV[i].k === "weekly") NAV.splice(i, 1);   // no PF Builder / Telegram in Navigate
   const pf = NAV.find((x) => x.k === "portfolio"); if (pf) { pf.t = "Paper portfolio"; pf.s = "Practice holdings, no real money"; }
   document.querySelectorAll("[data-pf-name]").forEach((el) => { el.textContent = "Paper portfolio"; });
   document.querySelectorAll("[data-pf-sub]").forEach((el) => { el.textContent = "Practice holdings, no real money"; });

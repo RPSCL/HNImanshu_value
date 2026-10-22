@@ -16,8 +16,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");}catch(e){}})()</script>
-<link rel="stylesheet" href="auth.css?v=27">
-<script type="module" src="auth.js?v=27"></script>
+<link rel="stylesheet" href="auth.css?v=28">
+<script type="module" src="auth.js?v=28"></script>
 <style>
 /* same colours and names as the other pages, so auth.css (popup, avatar, Prime purple) fits without changes */
 :root{--mono:'IBM Plex Mono',ui-monospace,monospace;--sans:'DM Sans',system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -148,6 +148,7 @@ body.day .prime-box{border-color:#4c1d95;background:linear-gradient(160deg,rgba(
 body.day .prime-box h2 svg,body.day .prime-box li::before{color:#4c1d95}
 body.day .prime-box .ibtn{border-color:#4c1d95;color:#4c1d95}
 .prime-box .p-on{display:none}
+html.hni-demo .card.prime,html.hni-demo .prime-box{display:none}   /* demo (review) logins: no PF Builder */
 html.hni-pro .prime-box .p-on{display:inline}
 html.hni-pro .prime-box .p-off{display:none}
 /* phone: the two boxes side by side in their own strip that scrolls sideways (the page itself never does) */
