@@ -1058,6 +1058,35 @@ def build(deploy=False):
         subprocess.run(["firebase", "deploy"])
 
 
+def write_build_info(out: Path) -> None:
+    """public/build_info.json: when the data was last built, shown on the PF Builder page.
+    others = when Nifty_Others_Fundamentals.csv was last written (others_built.txt, stamped by others.yml when the CSV
+    changes; before the first such run: the newest DATE_DOWNLOADED in the CSV, a date only). built = this build."""
+    ist = zoneinfo.ZoneInfo("Asia/Kolkata")
+    info = {"built": datetime.now(ist).isoformat(timespec="minutes")}
+    try:
+        info["others"] = (BASE / "others_built.txt").read_text().strip() or None
+    except OSError:
+        info["others"] = None
+    if not info["others"]:
+        try:
+            d = pd.read_csv(OTH_CSV, usecols=["DATE_DOWNLOADED"], low_memory=False)["DATE_DOWNLOADED"].dropna().astype(str)
+            info["others"] = d.max() if len(d) else None
+        except Exception:
+            pass
+    # fingerprint of the data the screens are worked out from: PF Builder keeps its finished lists until this changes
+    import hashlib
+    h = hashlib.sha1()
+    for f in (N500_CSV, SC250_CSV, MC250_CSV, OTH_CSV, BASE / "prices.csv", BASE / "fundamentals.py", BASE / "public" / "builder.html"):   # data + the code that screens it
+        try:
+            h.update(Path(f).read_bytes())
+        except OSError:
+            h.update(b"-")
+    info["data"] = h.hexdigest()[:16]
+    out.write_text(json.dumps(info), encoding="utf-8")
+    print(f"  build_info.json: Others last written {info['others']}, built {info['built']}, data {info['data']}")
+
+
 # =========================
 # ▶ RUN
 # =========================
@@ -1078,3 +1107,4 @@ if __name__ == "__main__":
         write_builder_daily(OUTPUT.parent / "builder_daily.json")
         sys.exit(0 if n else 1)          # no ETF priced → fail, so a stale file is never redeployed as "updated"
     build(args.deploy)
+    write_build_info(OUTPUT.parent / "build_info.json")
