@@ -720,6 +720,7 @@ const DEMO = ["razorpay@users.hnimanshu.app"];
 function markDemo(u) {
   const on = !!(u && DEMO.includes((u.email || "").toLowerCase()));
   window.hniDemo = on;
+  try { localStorage.setItem("hni_demo", on ? "1" : "0"); } catch (e) {}   // pages show the demo view at once next time
   document.documentElement.classList.toggle("hni-demo", on);
   if (!on) return;
   const pf = NAV.find((x) => x.k === "portfolio"); if (pf) { pf.t = "Paper portfolio"; pf.s = "Practice holdings, no real money"; }

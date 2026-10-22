@@ -15,8 +15,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="auth.css?v=26">
-<script type="module" src="auth.js?v=26"></script>
+<script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");}catch(e){}})()</script>
+<link rel="stylesheet" href="auth.css?v=27">
+<script type="module" src="auth.js?v=27"></script>
 <style>
 /* same colours and names as the other pages, so auth.css (popup, avatar, Prime purple) fits without changes */
 :root{--mono:'IBM Plex Mono',ui-monospace,monospace;--sans:'DM Sans',system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -128,6 +129,28 @@ body.day{--dg-glow:rgba(31,107,69,.40)}
 .demo.playing .x{opacity:.5}
 
 /* bottom, centred */
+/* Prime + "a tool, not advice": full width under the hero and the links */
+.info{flex:1 1 100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;max-width:980px;margin:0 auto;opacity:0}
+.go-anim .info{animation:up .7s 1.9s ease forwards}
+.ibox{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:18px 20px;display:flex;flex-direction:column;gap:10px;box-shadow:0 10px 28px var(--shade,rgba(0,0,0,.25))}
+.ibox h2{margin:0;display:flex;align-items:center;gap:8px;font:700 15px var(--sans);color:var(--ink)}
+.ibox h2 svg{flex:none;color:var(--accent)}
+.ibox ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px}
+.ibox li{font-size:13px;line-height:1.5;color:var(--faint);padding-left:16px;position:relative}
+.ibox li::before{content:"✓";position:absolute;left:0;top:0;color:var(--accent);font-weight:700}
+.ibox li b{display:block;color:var(--ink);font-size:13.5px;font-weight:600}
+.ibtn{align-self:flex-start;margin-top:4px;padding:8px 14px;border-radius:9px;border:1px solid var(--accent);color:var(--accent);text-decoration:none;font:600 12.5px var(--mono)}
+.ibtn:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.prime-box{border-color:#5b2d9c;background:linear-gradient(160deg,rgba(46,16,101,.45),var(--panel) 70%)}
+.prime-box h2 svg,.prime-box li::before{color:#b892f5}
+.prime-box .ibtn{border-color:#8b5cf6;color:#c9b3f5}
+body.day .prime-box{border-color:#4c1d95;background:linear-gradient(160deg,rgba(76,29,149,.16),var(--panel) 70%)}
+body.day .prime-box h2 svg,body.day .prime-box li::before{color:#4c1d95}
+body.day .prime-box .ibtn{border-color:#4c1d95;color:#4c1d95}
+.prime-box .p-on{display:none}
+html.hni-pro .prime-box .p-on{display:inline}
+html.hni-pro .prime-box .p-off{display:none}
+@media (max-width:700px){.info{gap:12px}.ibox{padding:16px}}
 .foot{padding:18px 16px 26px;text-align:center;font:500 12.5px var(--mono);color:var(--faint);display:flex;flex-direction:column;gap:6px;opacity:0}
 .foot a{color:var(--accent);text-decoration:none;border-bottom:1px dotted currentColor}
 .foot a:hover{border-bottom-style:solid}
@@ -223,15 +246,15 @@ body.day{--dg-glow:rgba(31,107,69,.40)}
     <span class="lbl">Go to</span>
     <a class="card" href="valuation" data-auth-link>
       <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>
-      <span class="tx"><b>Valuation</b><small>Every stock valued and ranked</small></span><span class="chev" aria-hidden="true">›</span>
+      <span class="tx"><b>Valuation</b><small>Model values worked out from company financials</small></span><span class="chev" aria-hidden="true">›</span>
     </a>
     <a class="card" href="factor" data-auth-link>
       <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 20h18"/><path d="M6 16v-5M11 16V6M16 16v-8M21 16v-3"/></svg></span>
-      <span class="tx"><b>Factor Screener</b><small>Industries, value and momentum screens</small></span><span class="chev" aria-hidden="true">›</span>
+      <span class="tx"><b>Factor Screener</b><small>Filter stocks with your own limits</small></span><span class="chev" aria-hidden="true">›</span>
     </a>
     <a class="card" href="factor#/portfolio" data-auth-link>
       <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg></span>
-      <span class="tx"><b data-pf-name>Portfolio</b><small data-pf-sub>Your holdings and P&amp;L</small></span><span class="chev" aria-hidden="true">›</span>
+      <span class="tx"><b data-pf-name>Paper portfolio</b><small data-pf-sub>Track holdings and P&amp;L you type in · no money moves here</small></span><span class="chev" aria-hidden="true">›</span>
     </a>
     <a class="card prime" href="builder" data-auth-link data-prime-link>
       <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 10.5H4.8L3.5 21.5H10z" fill="currentColor" fill-opacity=".18"/><path d="M6.9 10.5V8.8a3 3 0 0 1 3.1-3"/><g transform="translate(1.2 -0.6) rotate(-42 16.5 11)"><path d="M12.6 3.4h8a1 1 0 0 1 1 1v2.8a1 1 0 0 1-1 1h-8l-1.9-2.4z" fill="currentColor" stroke-width="1"/><path d="M16.6 8.2v10.4" stroke-width="3"/></g></svg></span>
@@ -240,6 +263,29 @@ body.day{--dg-glow:rgba(31,107,69,.40)}
       <span class="chev" aria-hidden="true">›</span>
     </a>
   </nav>
+
+  <section class="info" aria-label="Prime and how HNImanshu works">
+    <div class="ibox prime-box">
+      <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg>
+        <span class="p-off">Become a Prime member</span><span class="p-on">Included in your Prime</span></h2>
+      <ul>
+        <li><b>Portfolio Builder</b>Set your own mix of index ETFs, value and momentum, see the result today and test the same rules on the past year.</li>
+        <li><b>News on Telegram</b>Headlines about the stocks in your portfolio, collected through Google's news search and sent to you on Telegram.</li>
+        <li><b>Everything in Plus</b>Smallcap 500, Microcap 250 and every other NSE stock.</li>
+      </ul>
+      <a class="ibtn p-off" href="builder" data-auth-link data-prime-link>See Prime plans</a>
+    </div>
+    <div class="ibox tool-box">
+      <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M16 11h0M8 15h2M12 15h2M8 19h0"/></svg>
+        A tool, not advice</h2>
+      <ul>
+        <li><b>Software, like a spreadsheet</b>It works out ratios from companies' published results and public prices. You choose every filter and limit.</li>
+        <li><b>No tips, no calls</b>No buy / sell / hold advice, no target prices, no stock picks sent to anyone. Nobody here manages money.</li>
+        <li><b>Your decisions stay yours</b>Plans pay for software features, not for opinions. For advice, talk to a SEBI-registered adviser.</li>
+      </ul>
+      <a class="ibtn" href="legal#about">How it works and terms</a>
+    </div>
+  </section>
 </main>
 
 <footer class="foot go-anim">
