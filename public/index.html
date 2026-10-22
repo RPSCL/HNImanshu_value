@@ -151,6 +151,35 @@ body.day .prime-box .ibtn{border-color:#4c1d95;color:#4c1d95}
 html.hni-pro .prime-box .p-on{display:inline}
 html.hni-pro .prime-box .p-off{display:none}
 @media (max-width:700px){.info{gap:12px}.ibox{padding:16px}}
+/* About / Pricing / Terms / Privacy / Refunds / Contact: legal.html's text in an overlay, in this page's own colours */
+.lg{position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
+.lg.open{display:flex}
+html.lg-lock,html.lg-lock body{overflow:hidden}
+.lg-box{position:relative;width:min(860px,100%);height:min(88vh,900px);height:min(88dvh,900px);display:flex;flex-direction:column;background:var(--bg);color:var(--ink);
+  border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 70px var(--shade,rgba(0,0,0,.4));overflow:hidden}
+.lg-top{flex:none;display:flex;align-items:center;gap:8px;padding:12px 56px 0 18px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.lg-top::-webkit-scrollbar{display:none}
+.lg-top button{flex:none;border:0;background:none;color:var(--faint);font:600 12.5px var(--mono);padding:8px 6px 11px;cursor:pointer;border-bottom:2px solid transparent}
+.lg-top button:hover{color:var(--ink)}
+.lg-top button.on{color:var(--accent);border-bottom-color:var(--accent)}
+.lg-x{position:absolute;top:8px;right:10px;width:36px;height:36px;border:0;border-radius:50%;background:var(--panel);color:var(--ink);font-size:22px;line-height:1;cursor:pointer;z-index:2}
+.lg-x:hover{background:var(--panel2)}
+.lg-body{position:relative;flex:1;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:4px 24px 40px;font-size:14.5px;line-height:1.65}
+.lg-body h1{font:700 23px var(--sans);margin:22px 0 4px}
+.lg-body h2{font:700 18px var(--sans);margin:36px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
+.lg-body h3{font:700 14.5px var(--sans);margin:20px 0 6px}
+.lg-body p,.lg-body li{color:var(--mute)}
+.lg-body b,.lg-body strong{color:var(--ink)}
+.lg-body a{color:var(--accent)}
+.lg-body .upd{font:500 12px var(--mono);color:var(--faint)}
+.lg-body .note{border:1px solid var(--accent);border-radius:10px;padding:12px 15px;background:var(--panel);margin:16px 0}
+.lg-body .note p{margin:0}
+.lg-body table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13.5px}
+.lg-body th,.lg-body td{text-align:left;padding:8px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+.lg-body th{font:600 11.5px var(--mono);color:var(--faint)}
+.lg-body td.r,.lg-body th.r{text-align:right;white-space:nowrap}
+.lg-body .wait{padding:40px 0;text-align:center;color:var(--faint);font:500 13px var(--mono)}
+@media (max-width:600px){.lg{padding:0;align-items:stretch}.lg-box{height:100%;border-radius:0;border:0}.lg-body{padding:4px 16px 40px}.lg-body th,.lg-body td{padding:7px 5px}}
 .foot{padding:18px 16px 26px;text-align:center;font:500 12.5px var(--mono);color:var(--faint);display:flex;flex-direction:column;gap:6px;opacity:0}
 .foot a{color:var(--accent);text-decoration:none;border-bottom:1px dotted currentColor}
 .foot a:hover{border-bottom-style:solid}
@@ -414,6 +443,55 @@ document.getElementById('theme-toggle').addEventListener('click', function () {
     setTimeout(function () { if (window.hniPending === a.href) { window.hniPending = null; location.href = a.href; } }, 8000);
   }, true);
   addEventListener('pageshow', function (e) { if (e.persisted) window.hniDone(); });
+})();
+</script>
+<script>
+/* footer About / Pricing / Terms / Privacy / Refunds / Contact (and "How it works and terms"): open legal.html's text in an
+   overlay here instead of a new page. legal.html stays as its own page too (a direct link for payment reviewers). */
+(function () {
+  var TABS = [['about', 'About'], ['pricing', 'Pricing'], ['terms', 'Terms'], ['privacy', 'Privacy'], ['refund', 'Refunds'], ['contact', 'Contact']];
+  var box = null, body = null, html = null, busy = false;
+  function load() {
+    if (html) return Promise.resolve(html);
+    return fetch('legal.html').then(function (r) { if (!r.ok) throw r.status; return r.text(); }).then(function (t) {
+      var m = new DOMParser().parseFromString(t, 'text/html').querySelector('main');
+      if (!m) throw 'no main'; html = m.innerHTML; return html;
+    });
+  }
+  function mark(id) { box.querySelectorAll('.lg-top button').forEach(function (b) { b.classList.toggle('on', b.dataset.id === id); }); }
+  function go(id) {
+    var el = body.querySelector('#' + id);
+    busy = true; body.scrollTop = el && id !== 'about' ? el.offsetTop - 6 : 0; mark(id);
+    setTimeout(function () { busy = false; }, 80);
+  }
+  function close() { box.classList.remove('open'); document.documentElement.classList.remove('lg-lock'); }
+  function build() {
+    box = document.createElement('div'); box.className = 'lg';
+    box.innerHTML = '<div class="lg-box" role="dialog" aria-modal="true" aria-label="About, terms and policies"><button type="button" class="lg-x" aria-label="Close">×</button>'
+      + '<nav class="lg-top">' + TABS.map(function (t) { return '<button type="button" data-id="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</nav>'
+      + '<div class="lg-body"><p class="wait">Loading…</p></div></div>';
+    document.body.appendChild(box); body = box.querySelector('.lg-body');
+    box.querySelector('.lg-x').addEventListener('click', close);
+    box.addEventListener('click', function (e) { if (e.target === box) close(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && box.classList.contains('open')) close(); });
+    box.querySelector('.lg-top').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) go(b.dataset.id); });
+    body.addEventListener('scroll', function () {                        // the tab follows what is on screen
+      if (busy) return; var cur = 'about';
+      TABS.forEach(function (t) { var el = body.querySelector('#' + t[0]); if (el && el.offsetTop - 40 <= body.scrollTop) cur = t[0]; });
+      if (body.scrollTop + body.clientHeight >= body.scrollHeight - 4) cur = 'contact'; mark(cur);
+    }, { passive: true });
+  }
+  function open(id) {
+    if (!box) build();
+    box.classList.add('open'); document.documentElement.classList.add('lg-lock'); mark(id);
+    load().then(function (h) { if (!body.querySelector('h1')) body.innerHTML = h; requestAnimationFrame(function () { go(id); }); })
+      .catch(function () { location.href = 'legal#' + id; });                  // offline / not deployed yet: the page itself
+  }
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="legal"]');
+    if (!a || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    e.preventDefault(); open((a.getAttribute('href').split('#')[1]) || 'about');
+  });
 })();
 </script>
 </body>

@@ -1067,8 +1067,8 @@ async function cashLine() {
       else if (x.t === 'sell') cash += (+x.qty || 0) * (+x.px || 0) - (+x.ch || 0);
     });
     cash = Math.floor(cash);
-    el.innerHTML = cash > 0 ? `Cash in your Portfolio <b>${rs(cash)}</b><button type="button" id="useCash">Use as fund</button>`
-                            : 'No free cash in your Portfolio yet. Add to portfolio offers a Pay in for the amount.';
+    el.innerHTML = cash > 0 ? `Paper cash in your Portfolio <b>${rs(cash)}</b><button type="button" id="useCash">Use as fund</button>`
+                            : 'No free paper cash in your Portfolio yet. Add to portfolio offers a paper pay-in for the amount.';
     el.hidden = false;
     const u = $('#useCash');
     if (u) u.addEventListener('click', () => { $('#fund').value = cash.toLocaleString('en-IN'); paintSplit(); lsSet('pb_fund', String(cash)); paint(); });

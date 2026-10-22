@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- legal.html — About, Pricing, Terms, Privacy, Refunds, Contact. Open to everyone (no login), so payment reviewers
      (Razorpay) and visitors can read what HNImanshu is and is not.
-     BEFORE UPLOADING: replace every [FILL …] value below (search "FILL": name, city, email, phone, address). They must match your Razorpay KYC. -->
+     The landing page shows this same <main> in an overlay (index.html fetches this file), so edit it only here. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -71,7 +71,7 @@ features; they do not buy opinions, calls, targets or tips.</p>
     or a recommendation.</li>
   <li><b>Portfolio Builder (backtest):</b> lets the user apply rules they choose to past data and see how such rules would have performed historically.
     Past results do not predict future returns.</li>
-  <li><b>Telegram summary:</b> a weekly message with the user's own portfolio figures. It contains no stock tips or calls.</li>
+  <li><b>News on Telegram:</b> news headlines about the stocks in the user's own portfolio, found through Google's news search and sent on Telegram. Headlines only: no tips, calls or opinions of ours.</li>
 </ul>
 <p>Data comes from public sources and can be late, incomplete or wrong. Users make their own decisions and should consult a SEBI-registered
 adviser before investing.</p>
@@ -83,7 +83,7 @@ adviser before investing.</p>
   <tbody>
     <tr><td><b>Free</b></td><td>NIFTY 500 screens, Valuation, Portfolio tracking</td><td class="r">₹0</td></tr>
     <tr><td><b>Plus</b></td><td>All lists: Smallcap 500, Microcap 250 and other NSE companies</td><td class="r">₹499 / year</td></tr>
-    <tr><td><b>Prime</b> · 1 month</td><td rowspan="4">Everything in Plus, plus Portfolio Builder (backtest), Checklist and the weekly Telegram summary</td><td class="r">₹249</td></tr>
+    <tr><td><b>Prime</b> · 1 month</td><td rowspan="4">Everything in Plus, plus Portfolio Builder (backtest) and news on Telegram</td><td class="r">₹249</td></tr>
     <tr><td><b>Prime</b> · 3 months</td><td class="r">₹597 (₹199 / month)</td></tr>
     <tr><td><b>Prime</b> · 6 months</td><td class="r">₹894 (₹149 / month)</td></tr>
     <tr><td><b>Prime</b> · 12 months</td><td class="r">₹1,188 (₹99 / month)</td></tr>
@@ -93,7 +93,7 @@ adviser before investing.</p>
 Plans do not renew on their own.</p>
 
 <h2 id="terms">Terms of use</h2>
-<p>By using HNImanshu you agree to these terms. The service is operated by <span class="fill">[FILL legal name of owner / business]</span>.</p>
+<p>By using HNImanshu you agree to these terms. The service is operated by <b>Himanshu Shekhar</b>, E-9/3, Karol Bagh Main Colony, Delhi, India.</p>
 <h3>1. No advice</h3>
 <p>Everything on HNImanshu is general information produced by software from public data, for education and research. It is not investment, tax
 or legal advice, not a research report, and not an offer or solicitation to buy or sell any security. You alone are responsible for your
@@ -109,19 +109,73 @@ To the extent the law allows, our total liability is limited to the amount you p
 <h3>5. Acceptable use</h3>
 <p>Do not copy, resell or republish the site's data or screens, and do not use HNImanshu to give paid tips or advice to others.</p>
 <h3>6. Law</h3>
-<p>These terms are governed by the laws of India; courts at <span class="fill">[FILL city]</span> have jurisdiction.</p>
+<p>These terms are governed by the laws of India; courts at <b>Delhi</b> have jurisdiction.</p>
 
 <h2 id="privacy">Privacy policy</h2>
+<p>This policy explains what personal data HNImanshu collects, why, where it is kept and what you can ask us to do with it. It follows
+India's Digital Personal Data Protection Act, 2023 and the Information Technology Act, 2000. The data fiduciary is Himanshu Shekhar
+(contact details below).</p>
+
+<h3>1. What we collect</h3>
 <ul>
-  <li><b>What we collect:</b> your username, or your name and email when you sign in with Google; the portfolio entries you type in; when you last
-    signed in; and plan and payment status. Anonymous counts of visitors online.</li>
-  <li><b>Payments:</b> card, UPI and bank details are entered on Razorpay's checkout and handled by Razorpay. We receive only the payment ID, amount
-    and status; we never see or store card numbers.</li>
-  <li><b>Where it is stored:</b> Google Firebase (authentication and database). Your portfolio can be read only by you and by the site administrator
-    for support.</li>
-  <li><b>Use:</b> only to run the service, provide support and prevent misuse. We do not sell or rent your data and show no third-party ads.</li>
-  <li><b>Deletion:</b> ask us at the contact below and we will delete your account and portfolio data, except payment records we must keep by law.</li>
+  <li><b>Account:</b> the username you choose, or, if you sign in with Google, your name and email address as Google shares them.
+    We also keep when the account was made and when you last signed in. Passwords are handled by Google Firebase Authentication;
+    we never see or store them.</li>
+  <li><b>Paper portfolio:</b> the entries you type in (stock, quantity, price, date, paper pay-ins and pay-outs, the charge rates you set).
+    These are practice figures; no money or securities move through HNImanshu.</li>
+  <li><b>Plan and payments:</b> your plan (Free, Plus or Prime) and its end date. For a payment we keep the Razorpay order and payment IDs,
+    amount, date and status. Card, UPI and bank details are typed into Razorpay's own checkout and never reach us.</li>
+  <li><b>Free trial:</b> a one-way code (hash) made from your email address, only to stop the same email taking the free trial twice.
+    The email itself cannot be read back from it.</li>
+  <li><b>Visitor counts:</b> a count of people online and a one-way code (hash) of your IP address so each visitor is counted once.
+    The IP address itself is not stored.</li>
+  <li><b>On your device:</b> the browser keeps your settings (day / night look, chosen tabs and filters), a note that you are signed in, and
+    a copy of PF Builder results so pages open faster. This copy is deleted when you log out.</li>
 </ul>
+<p>We do not use advertising or tracking cookies, analytics trackers or third-party ads, and we do not collect Aadhaar, PAN, bank account
+or demat details.</p>
+
+<h3>2. Why we use it</h3>
+<ul>
+  <li>To sign you in and show your own paper portfolio and plan.</li>
+  <li>To take payments through Razorpay, issue invoices and meet tax and accounting rules.</li>
+  <li>To answer support requests, prevent misuse (for example shared or abused accounts) and keep the service secure.</li>
+</ul>
+<p>We do not sell, rent or trade your personal data, and we do not use it for marketing by others.</p>
+
+<h3>3. Who processes it for us</h3>
+<ul>
+  <li><b>Google Firebase</b> (Google LLC): sign-in, database and web hosting.</li>
+  <li><b>Cloudflare</b>: small server functions that check your login when you start a payment or a price update.</li>
+  <li><b>Razorpay</b> (Razorpay Software Pvt. Ltd.): payments, under its own privacy policy.</li>
+  <li><b>Google Fonts</b> and, only if you press "View demo", <b>YouTube</b>: these load from Google's servers and see your IP address.</li>
+</ul>
+<p>Some of these providers may store data outside India, under their own security and privacy terms. The site administrator can see the
+list of accounts and a user's paper portfolio, only for support and to keep the service running.</p>
+
+<h3>4. How long we keep it</h3>
+<ul>
+  <li>Account and paper portfolio: while your account exists. Delete it (see below) and they are removed within 30 days.</li>
+  <li>Payment records: as long as Indian tax law requires, even after an account is deleted.</li>
+  <li>Sign-in on a device ends by itself 7 days after you sign in.</li>
+</ul>
+
+<h3>5. Your rights</h3>
+<p>You can ask to see the personal data we hold about you, correct it, delete your account and data, or withdraw your consent
+(which closes the account). Email us from the address on your account, or with your username. We reply within 30 days.</p>
+
+<h3>6. Security</h3>
+<p>All traffic uses HTTPS. Database rules let each user read and change only their own portfolio and read only their own plan; plans are written only by
+our server after Razorpay's signature is checked. No system is perfectly secure; if a breach affects your data we will tell you and the
+authorities as the law requires.</p>
+
+<h3>7. Children</h3>
+<p>HNImanshu is meant for people aged 18 and over. We do not knowingly collect data from children.</p>
+
+<h3>8. Changes and grievances</h3>
+<p>If this policy changes, the date at the top of this page changes and important changes are shown on the site.
+Grievance officer: <b>Himanshu Shekhar</b>, <a href="mailto:himanshushekhar8@gmail.com">himanshushekhar8@gmail.com</a>,
++91 74991 42614, E-9/3, Karol Bagh Main Colony, Delhi. Complaints are acknowledged within 48 hours and resolved within 30 days.</p>
 
 <h2 id="refund">Refund and cancellation policy</h2>
 <ul>
@@ -133,10 +187,10 @@ To the extent the law allows, our total liability is limited to the amount you p
 </ul>
 
 <h2 id="contact">Contact</h2>
-<p><b>Operator:</b> <span class="fill">[FILL legal name of owner / business]</span><br>
-<b>Email:</b> <span class="fill">[FILL support email]</span><br>
-<b>Phone:</b> <span class="fill">[FILL phone]</span><br>
-<b>Address:</b> <span class="fill">[FILL postal address]</span><br>
+<p><b>Operator:</b> Himanshu Shekhar<br>
+<b>Email:</b> <a href="mailto:himanshushekhar8@gmail.com">himanshushekhar8@gmail.com</a><br>
+<b>Phone:</b> <a href="tel:+917499142614">+91 74991 42614</a><br>
+<b>Address:</b> E-9/3, Karol Bagh Main Colony, Delhi, India<br>
 <b>Telegram:</b> <a href="https://t.me/HNImanshu" target="_blank" rel="noopener">t.me/HNImanshu</a></p>
 <p>We reply within 2 working days.</p>
 </main>
