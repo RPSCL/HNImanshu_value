@@ -1469,7 +1469,9 @@ body.night{--pxline:#ece6da} body.day{--pxline:#36332e}           /* price line:
 .cmp-sug button{display:flex;gap:10px;align-items:baseline;width:100%;text-align:left;border:0;background:none;color:var(--mute);padding:8px 10px;border-radius:5px;cursor:pointer;font:13px var(--sans)}
 .cmp-sug button b{font:700 12.5px var(--mono);color:var(--ink);flex:none}
 .cmp-sug button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cmp-sug button:hover{background:var(--panel2)}
+.cmp-sug button.hi{background:var(--panel2);color:var(--ink)}
+.wip-box > p.cmp-ask{margin:6px 0 18px;color:var(--mute);font-size:14px}
+.cmp-ask-b{display:flex;gap:8px;justify-content:flex-end}
 .cmp-sug .na{margin:6px 10px;color:var(--faint);font-size:12.5px}
 .cmp-n{font:500 12px var(--mono);color:var(--faint);margin-left:auto}
 .cmp-empty{max-width:640px}
@@ -2728,12 +2730,18 @@ addEventListener('touchstart', e => {                      // finger held anywhe
 const fabRelease = () => { clearTimeout(fabHoldT); fabHoldT = 0; clearTimeout(fabScrollT); fabScrollT = setTimeout(() => fabDim(false), 600); };
 addEventListener('touchend', fabRelease, {passive:true});
 addEventListener('touchcancel', fabRelease, {passive:true});
-const pageSearch = () => view.querySelector('.tbar input[type=search]');
+const pageSearch = () => view.querySelector('.tbar input[type=search], #cmpQ:not(:disabled)');   // Compare's add-a-stock box counts too
 const typingIn = t => t && (t.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName));
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (document.querySelector('.fbox.dopen')) { closeDrops(); return; }
     if (document.querySelector('.fsel.open, .pop.open')) return;            // Esc closes those first
+    if ((location.hash || '') === '#/compare') {                            // Compare: 1st Esc clears the box, 2nd asks to clear all stocks
+      const cq = $('#cmpQ');
+      if (cq && cq.value) { cq.value = ''; cq.dispatchEvent(new Event('input')); return; }
+      if (cmpList().length) { if (cq) cq.blur(); cmpClearAsk(); }
+      return;
+    }
     const q = pageSearch();
     if (q && (document.activeElement === q || q.value)) {                   // Esc: clear the search, cursor off
       if (q.value) { q.value = ''; q.dispatchEvent(new Event('input')); }
@@ -2743,7 +2751,7 @@ document.addEventListener('keydown', e => {
     return;
   }
   // any letter / digit typed while not in a field goes straight into the page's search box
-  if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey || typingIn(e.target) || document.querySelector('.fbox.dopen')) return;
+  if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey || typingIn(e.target) || document.querySelector('.fbox.dopen, .wip-back, .au-back.open')) return;
   if (e.key === ' ' && !(pageSearch() && pageSearch().value)) return;       // space alone still scrolls the page
   const q = pageSearch(); if (!q) return;
   e.preventDefault();
@@ -4369,6 +4377,16 @@ function cmpAdd(sym) {
   a.push(sym); cmpSave(a);
   if ((location.hash || '') === '#/compare') compareView(); else location.hash = '#/compare';
 }
+/* "Clear all stocks?" (Clear all button, or Esc on an empty box). Esc again closes it (modal's own Esc). */
+function cmpClearAsk() {
+  if (document.querySelector('.wip-back')) return;
+  const n = cmpList().length; if (!n) return;
+  const w = modal('Clear all stocks?', `<p class="cmp-ask">Remove all ${n} stock${n > 1 ? 's' : ''} from Compare?</p>
+    <div class="cmp-ask-b"><button type="button" class="btn" data-no>Cancel</button><button type="button" class="btn primary" data-yes>Yes, clear all</button></div>`, {noFocus: true});
+  $('[data-no]', w).addEventListener('click', () => w._close());
+  $('[data-yes]', w).addEventListener('click', () => { w._close(); cmpSave([]); compareView(); });
+  setTimeout(() => { const b = $('[data-yes]', w); if (b) b.focus(); }, 30);
+}
 function compareView() {
   setNav('compare'); view.innerHTML = '';
   if (!THEN_BY.size) { ensureThen1(); if (ensureThen1.p && !compareView.wait) { compareView.wait = 1; ensureThen1.p.then(() => { compareView.wait = 0; if ((location.hash || '') === '#/compare') compareView(); }); } }
@@ -4385,14 +4403,24 @@ function compareView() {
     if (!t) { sug.hidden = true; return; }
     const hit = all.filter(x => !list.includes(x.sym) && (x.sym.includes(t) || String(x.name || '').toUpperCase().includes(t)))
       .sort((a, b) => (b.sym.startsWith(t)) - (a.sym.startsWith(t)) || (b.mcap || 0) - (a.mcap || 0)).slice(0, 8);
-    sug.innerHTML = hit.length ? hit.map(x => `<button type="button" data-add="${esc(x.sym)}"><b>${esc(x.sym)}</b><span>${esc(x.name || '')}</span></button>`).join('') : '<p class="na">No match</p>';
+    sug.innerHTML = hit.length ? hit.map((x, i) => `<button type="button" data-add="${esc(x.sym)}"${i ? '' : ' class="hi"'}><b>${esc(x.sym)}</b><span>${esc(x.name || '')}</span></button>`).join('') : '<p class="na">No match</p>';
     sug.hidden = false;
   };
   q.addEventListener('input', draw);
-  q.addEventListener('keydown', e => { if (e.key === 'Enter') { const b = $('[data-add]', sug); if (b) b.click(); } else if (e.key === 'Escape') { q.value = ''; sug.hidden = true; } });
+  q.addEventListener('keydown', e => {                                   // ↓ / ↑ move through the list, Enter adds the marked one (Esc: page handler)
+    const it = [...sug.querySelectorAll('[data-add]')];
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && it.length && !sug.hidden) {
+      e.preventDefault();
+      let i = it.findIndex(b => b.classList.contains('hi'));
+      i = (i + (e.key === 'ArrowDown' ? 1 : -1) + it.length) % it.length;
+      it.forEach((b, k) => b.classList.toggle('hi', k === i)); it[i].scrollIntoView({block: 'nearest'});
+    } else if (e.key === 'Enter') { const b = sug.hidden ? null : ($('[data-add].hi', sug) || it[0]); if (b) { e.preventDefault(); b.click(); } }
+  });
+  sug.addEventListener('mousemove', e => { const b = e.target.closest('[data-add]'); if (b && !b.classList.contains('hi')) sug.querySelectorAll('[data-add]').forEach(x => x.classList.toggle('hi', x === b)); });
   sug.addEventListener('click', e => { const b = e.target.closest('[data-add]'); if (b) cmpAdd(b.dataset.add); });
   if (!compareView.doc) { compareView.doc = 1; document.addEventListener('click', e => { const g = document.querySelector('.cmp-sug'); if (g && !e.target.closest('.cmp-find')) g.hidden = true; }); }
-  if ($('#cmpClr')) $('#cmpClr').addEventListener('click', () => { cmpSave([]); compareView(); });
+  if ($('#cmpClr')) $('#cmpClr').addEventListener('click', cmpClearAsk);
+  if (list.length < CMP_MAX && !isPhone()) q.focus();                  // ready to type (cursor back here after each add)
   if (!list.length) {
     view.insertAdjacentHTML('beforeend', `<p class="hint cmp-empty">Pick up to ${CMP_MAX} stocks to see them side by side: the checklist
       (the same checks as <b>Why? checklist</b> in each stock's popup) and the key numbers. Type above, or tap <b>+ Compare</b> in any stock popup.</p>`);
