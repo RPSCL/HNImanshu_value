@@ -702,7 +702,15 @@ function fadeAway(el, done, ms = 5000) {                                // an in
 window.hniFadeAway = fadeAway;
 
 // PF Builder keeps its finished lists in this browser (IndexedDB "hni-pb") until the user logs out
+// Everything kept in this browser for ONE account (Factor Screener filters / tabs / Compare list "hnif_*", PF Builder
+// settings "pb_*", the builder → portfolio basket, the demo flag) goes at logout, so the next account on this device
+// starts clean. Theme, the daily notice and per-account keys ("…_<uid>") stay.
+const USER_KEYS = /^(hnif_|pb_)|^hni_pf_basket$|^hni_demo$/;
+function clearUserKeys() {
+  try { const L = localStorage; for (let i = L.length - 1; i >= 0; i--) { const k = L.key(i); if (k && USER_KEYS.test(k)) L.removeItem(k); } } catch (e) {}
+}
 const clearUserCache = () => new Promise((done) => {
+  clearUserKeys();
   try { const r = indexedDB.deleteDatabase("hni-pb"); r.onsuccess = r.onerror = r.onblocked = () => done(); setTimeout(done, 800); }
   catch (e) { done(); }
 });
@@ -771,6 +779,11 @@ const ready = new Promise((resolve) => {
     if (u && expired(u)) { await clearUserCache(); await signOut(auth); u = null; }   // 7-day session limit
     current = u;
     try { localStorage.setItem(SIGNED_HINT, u ? "1" : "0"); } catch (e) {}   // lets the next visit open Fundamentals instantly
+    if (u) try {                                                // a different account on this browser than last time: its settings start clean
+      const was = localStorage.getItem("hni_uid");
+      if (was && was !== u.uid) { clearUserKeys(); try { indexedDB.deleteDatabase("hni-pb"); } catch (e) {} }
+      localStorage.setItem("hni_uid", u.uid);
+    } catch (e) {}
     if (u && (GATED || LOGIN_ONLY) && !trusted()) {             // more than an hour since the last check: ask the server, not the cache
       try { await u.getIdToken(true); }
       catch (e) { if (!/network|offline/i.test(String(e && e.code || e))) { await signOut(auth); u = null; current = null; } }
