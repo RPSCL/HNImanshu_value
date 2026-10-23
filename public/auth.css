@@ -231,3 +231,17 @@ html.hni-nav .hnav, html.hni-nav #pf-btn, html.hni-nav #fund-btn, html.hni-nav #
 body.day .hni-nv.lock,[data-theme=day] .hni-nv.lock{background:linear-gradient(90deg,rgba(76,29,149,.18),rgba(76,29,149,.05));border-color:#4c1d95}
 body.day .hni-nv.lock small,[data-theme=day] .hni-nv.lock small{color:#4c1d95}
 body.day .hni-nv .cr,[data-theme=day] .hni-nv .cr{color:#4c1d95}
+
+/* daily notice (auth.js dailyNotice): risk disclosure, once a day on whichever page opens first; above every other popup */
+.au-notice{z-index:9999}
+.au-nbox{width:min(520px,100%);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto;padding:24px 24px 20px}
+.au-nbox p{margin:0 0 12px;font:13.5px/1.65 var(--au-sans);color:var(--au-mute)}
+.au-nbox p b{color:var(--au-ink)}
+.au-risk{margin:4px 0 14px;padding:12px 14px;border-radius:10px;border:1px solid color-mix(in srgb,var(--au-bad) 55%,transparent);
+  background:color-mix(in srgb,var(--au-bad) 10%,transparent);font:13px/1.6 var(--au-sans);color:var(--au-ink)}
+.au-risk b{display:block;margin-bottom:4px;font:700 11px var(--au-mono);letter-spacing:.6px;text-transform:uppercase;color:var(--au-bad)}
+.au-ok{display:flex;align-items:flex-start;gap:9px;margin:2px 0 14px;font:600 13px/1.5 var(--au-sans);color:var(--au-ink);cursor:pointer}
+.au-ok input{margin-top:3px;width:16px;height:16px;accent-color:var(--au-acc);flex:none}
+.au-ngo{width:100%;height:46px;border:0;border-radius:9px;background:var(--au-acc);color:var(--au-field);font:700 14px var(--au-mono);cursor:pointer}
+.au-ngo:not(:disabled):hover{filter:brightness(1.08)}
+.au-ngo:disabled{opacity:.45;cursor:not-allowed}

@@ -708,6 +708,40 @@ const clearUserCache = () => new Promise((done) => {
 });
 window.hniClearCache = clearUserCache;
 
+// ---------- daily notice: every page, once a day (India date), until "I understand" ----------
+// Was the Valuation page's own welcome box; now shared so whichever page is opened first that day shows it.
+// Same key as before, so nobody sees it twice on the day this changes. Not inside PF Builder's hidden frame.
+const NOTICE_KEY = "hnimanshu_welcome_day";
+function dailyNotice() {
+  if (window.top !== window || /[?&]embed=1\b/.test(location.search)) return;
+  const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+  try { if (localStorage.getItem(NOTICE_KEY) === today) return; } catch (e) { return; }
+  const box = document.createElement("div");
+  box.className = "au-back au-notice open";
+  box.innerHTML = `
+    <div class="au-box au-nbox" role="dialog" aria-modal="true" aria-labelledby="auNoticeT">
+      <h2 class="au-title" id="auNoticeT">Before you continue</h2>
+      <p>HNImanshu is <b>software for learning and research</b>. It works out ratios and model values from companies' published results
+        and public prices; you choose every filter. It gives <b>no tips, no buy / sell / hold calls and no target prices</b>, and it is not a
+        SEBI-registered investment adviser or research analyst.</p>
+      <div class="au-risk"><b>Risk disclosure (SEBI study)</b>
+        9 out of 10 individual traders in the equity Futures &amp; Options segment incurred net losses. Trading and investing carry real risk
+        of loss. Past results, rankings and model values do not guarantee future returns.</div>
+      <p>Please do your own research, or speak to a SEBI-registered adviser, before you invest.</p>
+      <label class="au-ok"><input type="checkbox"> <span>I understand this is educational software, not investment advice.</span></label>
+      <button type="button" class="au-ngo" disabled>I understand</button>
+    </div>`;
+  document.body.appendChild(box); syncLock();
+  const chk = $("input", box), go = $(".au-ngo", box);
+  chk.addEventListener("change", () => { go.disabled = !chk.checked; });
+  go.addEventListener("click", () => {
+    try { localStorage.setItem(NOTICE_KEY, today); } catch (e) {}
+    box.classList.remove("open"); syncLock(); setTimeout(() => box.remove(), 300);
+  });
+  setTimeout(() => chk.focus(), 50);
+}
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", dailyNotice); else dailyNotice();
+
 // ---------- page wiring ----------
 const SIGNED_HINT = "hni_signed";                          // "1" = signed in last time (only a hint: Fundamentals checks for real)
 const hinted = () => { try { return localStorage.getItem(SIGNED_HINT) === "1"; } catch (e) { return false; } };
