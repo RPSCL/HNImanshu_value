@@ -1317,7 +1317,7 @@ body.pf-mode #saveHtml,body.pf-mode #nav,body.pf-mode #meta{display:none!importa
 @media (max-width:700px){.btn.hweek{padding:0 9px}}
 /* icon-only buttons (charges, refresh); refresh spins while live prices are being fetched */
 .pf-acts .btn.ico{width:38px;padding:0;justify-content:center}
-.pf-acts .btn.ico.ltp{width:auto;padding:0 10px;gap:6px}                 /* ⟳ + the time of the latest prices */
+.pf-upd{align-self:center;margin-left:6px;font:500 12px var(--mono);color:var(--faint);white-space:nowrap}   /* live prices arrive by themselves (Oracle): just their time */
 .pf-asof{font:600 11px var(--mono);color:var(--mute)}
 /* NIFTY 50 / BANK NIFTY on the Portfolio page (from the same live-price job) */
 .pf-idx{display:flex;gap:6px 20px;flex-wrap:wrap;align-items:baseline;font:600 13px var(--mono);color:var(--ink)}
@@ -1460,6 +1460,43 @@ body.night{--pxline:#ece6da} body.day{--pxline:#36332e}           /* price line:
 .vd-c i{font-style:normal;font-weight:700;width:14px;flex:none;text-align:center}
 .vd-c.ok i{color:var(--good)} .vd-c.no i{color:var(--bad)} .vd-c.na{color:var(--faint)} .vd-c.na i{color:var(--faint)}
 .vd-c small{display:block;font:500 11px var(--mono);color:var(--faint);margin-top:1px}
+/* Compare tab */
+.cmp-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0 12px}
+.cmp-find{position:relative;flex:0 1 360px;min-width:220px}
+.cmp-find input{width:100%;height:36px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font:13px var(--sans);outline:none}
+.cmp-find input:focus{border-color:var(--brass)}
+.cmp-sug{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:60;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px;box-shadow:var(--drop-shadow)}
+.cmp-sug button{display:flex;gap:10px;align-items:baseline;width:100%;text-align:left;border:0;background:none;color:var(--mute);padding:8px 10px;border-radius:5px;cursor:pointer;font:13px var(--sans)}
+.cmp-sug button b{font:700 12.5px var(--mono);color:var(--ink);flex:none}
+.cmp-sug button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmp-sug button:hover{background:var(--panel2)}
+.cmp-sug .na{margin:6px 10px;color:var(--faint);font-size:12.5px}
+.cmp-n{font:500 12px var(--mono);color:var(--faint);margin-left:auto}
+.cmp-empty{max-width:640px}
+.cmp-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+table.cmp{width:100%;border-collapse:collapse;font-size:13px;min-width:560px}
+table.cmp th,table.cmp td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.cmp th{text-transform:none;letter-spacing:0;font:500 12.5px/1.4 var(--sans)}
+table.cmp th,table.cmp td{white-space:normal;overflow-wrap:anywhere}
+table.cmp tbody th{color:var(--mute);width:34%;min-width:200px;position:sticky;left:0;background:var(--panel);z-index:1}
+table.cmp thead th{position:sticky;top:0;background:var(--panel2);z-index:2}
+table.cmp thead th:first-child{left:0;z-index:3}
+.cmp-h{min-width:150px}
+.cmp-sym{display:block;font:700 14px var(--mono);color:var(--brass);text-decoration:none;padding-right:20px}
+.cmp-nm{display:block;font-size:12.5px;color:var(--ink);margin-top:2px}
+.cmp-ind{display:block;font-size:11.5px;color:var(--faint)}
+.cmp-x{float:right;border:0;background:none;color:var(--faint);font-size:18px;line-height:1;cursor:pointer;padding:0 2px}
+.cmp-x:hover{color:var(--bad)}
+.cmp-num td{font:600 13px var(--mono);color:var(--ink)}
+.cmp-num td small{color:var(--faint);font-weight:500}
+.cmp-flag{font:500 12px var(--sans);color:var(--bad)}
+.cmp-g th{font:600 10px var(--mono)!important;color:var(--brass)!important;text-transform:uppercase;letter-spacing:.7px;background:var(--panel2)!important;padding:7px 12px}
+.cmp-c td i{font-style:normal;font-weight:700;font-size:15px}
+.cmp-c td.ok i{color:var(--good)} .cmp-c td.no i{color:var(--bad)} .cmp-c td.na{color:var(--faint)}
+.cmp-c td small{display:block;font:500 11px var(--mono);color:var(--faint);margin-top:2px}
+.cmp-note{margin-top:12px}
+@media (max-width:700px){table.cmp{min-width:0}table.cmp th,table.cmp td{padding:7px 8px}table.cmp tbody th{min-width:112px;width:112px;font-size:11.5px}
+  .cmp-h{min-width:128px}.cmp-sym{font-size:13px}.cmp-n{margin-left:0}.cmp-light .tlw small{display:block;margin-top:3px}}
 .vd-w{font:700 9px var(--mono);font-style:normal;color:var(--brass);border:1px solid var(--brass);border-radius:4px;padding:0 4px;margin-left:4px;vertical-align:2px}
 .vd-w.gate{color:var(--bad);border-color:var(--bad)}
 .vd-gate{margin:8px 0 0!important;font-size:12px!important;color:var(--bad)!important}
@@ -1485,7 +1522,8 @@ body.night{--pxline:#ece6da} body.day{--pxline:#36332e}           /* price line:
 @media (max-width:1100px){.pf-grid{grid-template-columns:1fr}.pf-right .wrap{max-height:340px}}
 @media (max-width:700px){
   .pf-top{gap:6px}
-  .pf-acts{width:100%;display:grid;grid-template-columns:1.25fr 1fr auto auto;gap:6px}   /* one row: Buy / Sell, Pay in / out, ₹, ⟳ */
+  .pf-acts{width:100%;display:grid;grid-template-columns:1.25fr 1fr auto;gap:6px}   /* one row: Buy / Sell, Paper money, ₹; the time under it */
+  .pf-upd{grid-column:1/-1;margin:0;font-size:11px;text-align:right}
   .pf-idx{order:-1;width:100%;justify-content:space-between;gap:4px 8px;font-size:11px;padding:2px 2px 4px}   /* phone: indices on top, one line */
   .pf-ix b{font-size:10px;margin-right:4px}
   .pf-ix em{font-size:11px;margin-left:4px}
@@ -1835,6 +1873,7 @@ __AUTH_BODY__<script>
   <a href="#/value" data-t="value">Value screen</a>
   <a href="#/momentum" data-t="momentum">Momentum</a>
   <a href="#/all" data-t="all">All Stocks</a>
+  <a href="#/compare" data-t="compare">Compare</a>
   <a href="#/method" data-t="method">Methodology</a>
 </nav>
 <div id="mnav" aria-label="Pages and screens">
@@ -2358,7 +2397,8 @@ const assetCols = () => [C.pta].concat(has('pfa') ? [C.pfa] : [], has('invp') ? 
 const view = $('#view');
 /* phone: two menu buttons replace the tab row and the row of screens */
 const TABS = [['#/value', 'Value screen', 'Cheap, good-quality stocks by screen'], ['#/momentum', 'Momentum', 'Strongest price trends'],
-              ['#/', 'Industries', 'Industry PE, PB, ROE'], ['#/all', 'All Stocks', 'Every stock with every column'], ['#/method', 'Methodology', 'How every number is worked out']];
+              ['#/', 'Industries', 'Industry PE, PB, ROE'], ['#/all', 'All Stocks', 'Every stock with every column'],
+              ['#/compare', 'Compare', 'Stocks side by side, check by check'], ['#/method', 'Methodology', 'How every number is worked out']];
 function syncMnav() {
   const h = location.hash || '#/', t = TABS.find(x => x[0] === h) || (h.startsWith('#/industry/') ? TABS[2] : null);
   $('#mnavTab span').textContent = t ? t[1] : 'Menu';
@@ -3658,7 +3698,7 @@ const pfActsHtml = () => `<div class="pf-top"><div class="pf-acts">
     <button type="button" class="btn primary" data-open="trade">+ Buy / Sell</button>
     <button type="button" class="btn" data-open="cash">Paper money in / out</button>
     <button type="button" class="btn ghost ico" data-open="rates" title="Charges &amp; taxes on each trade" aria-label="Charges and taxes">${IC_TAX}</button>
-    ${pfCanRefresh() ? `<button type="button" class="btn ghost ico ltp${PF_POLL ? ' spin' : ''}" data-open="ltp" title="Refresh live prices${pfAsOf().full ? ' (now as of ' + esc(pfAsOf().full) + ' IST)' : ''}" aria-label="Refresh live prices"${PF_POLL ? ' disabled' : ''}>${IC_REF}${pfAsOf().short ? `<span class="pf-asof">${esc(pfAsOf().short)}</span>` : ''}</button>` : ''}
+    ${pfAsOf().short ? `<span class="pf-upd" title="Live prices are pushed in by themselves during market hours">*Last updated at ${esc(pfAsOf().today ? pfAsOf().short : pfAsOf().full)}</span>` : ''}
   </div>${pfIdxHtml()}</div>`;
 /* when the live prices were last fetched (same for every account): "12:20" today, else "13 Oct" */
 function pfAsOf() {
@@ -3667,7 +3707,7 @@ function pfAsOf() {
   const todayIst = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
   const d = new Date(a.slice(0, 10) + 'T00:00:00Z');
   const dm = d.getUTCDate() + ' ' + d.toLocaleString('en-IN', {month: 'short', timeZone: 'UTC'});
-  return {short: a.slice(0, 10) === todayIst ? a.slice(11, 16) : dm, full: dm + ', ' + a.slice(11, 16)};
+  return {short: a.slice(0, 10) === todayIst ? a.slice(11, 16) : dm, full: dm + ', ' + a.slice(11, 16), today: a.slice(0, 10) === todayIst};
 }
 /* NIFTY 50 and BANK NIFTY: last price and the day's move (from hni_market/ltp "idx") */
 function pfIdxHtml() {
@@ -4020,9 +4060,10 @@ function newsOverlay(sym) {
     ${grp('Momentum', `${k('Momentum', s.momS != null ? fmt(s.momS, 0) + '<small>/100</small>' : null)}${k('3M', ret(0))}${k('6M', ret(1))}${k('12-1M', ret(2))}
       ${k('Trend', s.tr ? s.tr.pass + '/' + s.tr.of : null)}`)}
     ${s.score != null || tr.length ? `<p class="no-flags">${tr.length ? '⚠ ' + esc(tr.join(' · ')) : 'No value-trap flags'}</p>` : ''}
-    <div class="no-acts"><button type="button" class="btn primary" data-nb>Buy / Sell</button>${s.url ? `<a class="btn" href="${esc(s.url)}" target="_blank" rel="noopener">Open on Screener.in ↗</a>` : ''}</div>
+    <div class="no-acts"><button type="button" class="btn primary" data-nb>Buy / Sell</button><button type="button" class="btn" data-cmp>${cmpList().includes(sym) ? 'In Compare ✓' : '+ Compare'}</button>${s.url ? `<a class="btn" href="${esc(s.url)}" target="_blank" rel="noopener">Open on Screener.in ↗</a>` : ''}</div>
     <div class="no-h">News · last 7 days</div><div class="no-list"><p class="na">Loading…</p></div>`, {noFocus: true, cls: 'no-box', sheet: true});
   $('[data-nb]', w).addEventListener('click', async () => { w._close(); await pfLoad(); pfTradeForm({sym}); });
+  $('[data-cmp]', w).addEventListener('click', () => { w._close(); cmpAdd(sym); });
   const vbox = $('.vd-box', w);
   const paintVd = () => { const v = verdict(sym, PS), open = vbox.classList.contains('open');
     vbox.innerHTML = v ? `<button type="button" class="vd-btn" aria-expanded="${open}">${vdChip(v, true)}<span class="vd-why">${open ? 'Hide' : 'Why?'} checklist</span></button><div class="vd-list">${vdList(v)}</div>` : ''; };
@@ -4315,6 +4356,93 @@ function toast(msg) {
   setTimeout(() => { t.classList.remove('on'); setTimeout(() => t.remove(), 300); }, 2600);
 }
 
+/* ---------- COMPARE: up to 4 stocks side by side, the checklist ("Why? checklist") row by row ----------
+   Same checks and numbers as the stock popup (verdict()), today's data. Stocks are picked with the search box here or
+   "+ Compare" in any stock popup, and remembered in this browser (lsGet 'cmp'). Portfolio-only checks are left out. */
+const CMP_MAX = 4;
+const cmpList = () => { try { const a = JSON.parse(lsGet('cmp') || '[]'); return Array.isArray(a) ? a.filter(x => TODAY.get(x)).slice(0, CMP_MAX) : []; } catch (e) { return []; } };
+const cmpSave = a => lsSet('cmp', JSON.stringify(a.slice(0, CMP_MAX)));
+function cmpAdd(sym) {
+  const a = cmpList();
+  if (a.includes(sym)) { location.hash = '#/compare'; return; }
+  if (a.length >= CMP_MAX) { toast(`Compare holds ${CMP_MAX} stocks: remove one first`); location.hash = '#/compare'; return; }
+  a.push(sym); cmpSave(a);
+  if ((location.hash || '') === '#/compare') compareView(); else location.hash = '#/compare';
+}
+function compareView() {
+  setNav('compare'); view.innerHTML = '';
+  if (!THEN_BY.size) { ensureThen1(); if (ensureThen1.p && !compareView.wait) { compareView.wait = 1; ensureThen1.p.then(() => { compareView.wait = 0; if ((location.hash || '') === '#/compare') compareView(); }); } }
+  const list = cmpList();
+  view.insertAdjacentHTML('beforeend', `<div class="cmp-top">
+      <div class="cmp-find"><input type="search" id="cmpQ" placeholder="${list.length >= CMP_MAX ? `Compare holds ${CMP_MAX} stocks` : 'Add a stock: symbol or name…'}" autocomplete="off" spellcheck="false"${list.length >= CMP_MAX ? ' disabled' : ''}>
+        <div class="cmp-sug" hidden></div></div>
+      ${list.length ? '<button type="button" class="btn ghost" id="cmpClr">Clear all</button>' : ''}
+      <span class="cmp-n">${list.length} of ${CMP_MAX}</span></div>`);
+  const q = $('#cmpQ'), sug = $('.cmp-sug');
+  const all = [...TODAY.values()];
+  const draw = () => {
+    const t = q.value.trim().toUpperCase();
+    if (!t) { sug.hidden = true; return; }
+    const hit = all.filter(x => !list.includes(x.sym) && (x.sym.includes(t) || String(x.name || '').toUpperCase().includes(t)))
+      .sort((a, b) => (b.sym.startsWith(t)) - (a.sym.startsWith(t)) || (b.mcap || 0) - (a.mcap || 0)).slice(0, 8);
+    sug.innerHTML = hit.length ? hit.map(x => `<button type="button" data-add="${esc(x.sym)}"><b>${esc(x.sym)}</b><span>${esc(x.name || '')}</span></button>`).join('') : '<p class="na">No match</p>';
+    sug.hidden = false;
+  };
+  q.addEventListener('input', draw);
+  q.addEventListener('keydown', e => { if (e.key === 'Enter') { const b = $('[data-add]', sug); if (b) b.click(); } else if (e.key === 'Escape') { q.value = ''; sug.hidden = true; } });
+  sug.addEventListener('click', e => { const b = e.target.closest('[data-add]'); if (b) cmpAdd(b.dataset.add); });
+  if (!compareView.doc) { compareView.doc = 1; document.addEventListener('click', e => { const g = document.querySelector('.cmp-sug'); if (g && !e.target.closest('.cmp-find')) g.hidden = true; }); }
+  if ($('#cmpClr')) $('#cmpClr').addEventListener('click', () => { cmpSave([]); compareView(); });
+  if (!list.length) {
+    view.insertAdjacentHTML('beforeend', `<p class="hint cmp-empty">Pick up to ${CMP_MAX} stocks to see them side by side: the checklist
+      (the same checks as <b>Why? checklist</b> in each stock's popup) and the key numbers. Type above, or tap <b>+ Compare</b> in any stock popup.</p>`);
+    return;
+  }
+  const V0 = list.map(sym => ({sym, s: TODAY.get(sym), v: verdict(sym, null)}));
+  // checks lined up by group + wording; numbers and the stock's own industry name are left out of the match, so
+  // "PE under 1.5× its industry" or "No clearly better stock in <industry>" share one row; each group stays together
+  const keyOf = (c, s) => c.g + '|' + c.label.replace(/<[^>]*>/g, '').split(esc(s.ind || '\u0000')).join('IND').replace(/[\d.]+/g, '#');
+  const groups = new Map();
+  V0.forEach(o => { if (!o.v) return; o.map = new Map();
+    o.v.checks.filter(c => c.g !== 'Portfolio' || /better stock/.test(c.label)).forEach(c => {
+      const k = keyOf(c, o.s); o.map.set(k, c);
+      if (!groups.has(c.g)) groups.set(c.g, new Map());
+      const g = groups.get(c.g);
+      if (!g.has(k)) g.set(k, {k, g: c.g, label: /better stock/.test(c.label) ? 'No clearly better stock in its industry' : c.label, w: c.w}); }); });
+  const rows = [...groups.values()].flatMap(g => [...g.values()]);
+  const num = (l, f) => `<tr class="cmp-num"><th>${l}</th>${V0.map(o => `<td>${f(o.s) ?? '–'}</td>`).join('')}</tr>`;
+  const ret = (s, i) => s.mom && ok(s.mom[i]) ? pctTxt(s.mom[i], 1) : null;
+  let g0 = '', body = '';
+  rows.forEach(r => {
+    if (r.g !== g0) { g0 = r.g; body += `<tr class="cmp-g"><th colspan="${V0.length + 1}">${esc(r.g)}</th></tr>`; }
+    body += `<tr class="cmp-c"><th>${r.label} ${vdTag(r)}</th>${V0.map(o => { const c = o.map && o.map.get(r.k);
+      if (!c) return '<td class="na">–</td>';
+      return `<td class="${c.pass == null ? 'na' : c.pass ? 'ok' : 'no'}"><i>${c.pass == null ? '–' : c.pass ? '✓' : '✗'}</i>${c.why ? `<small>${esc(c.why)}</small>` : ''}</td>`; }).join('')}</tr>`;
+  });
+  view.insertAdjacentHTML('beforeend', `<div class="cmp-wrap"><table class="cmp">
+    <thead><tr><th></th>${V0.map(o => `<th class="cmp-h"><button type="button" class="cmp-x" data-rm="${esc(o.sym)}" aria-label="Remove ${esc(o.sym)}">×</button>
+      <a href="https://www.screener.in/company/${esc(o.sym)}/" data-news="${esc(o.sym)}" class="cmp-sym">${esc(o.sym)}</a>
+      <span class="cmp-nm">${esc(o.s.name || '')}</span><span class="cmp-ind">${esc(o.s.ind || '')}</span></th>`).join('')}</tr></thead>
+    <tbody>
+      <tr class="cmp-light"><th>Checklist light</th>${V0.map(o => `<td>${o.v ? vdChip(o.v, true) : '–'}</td>`).join('')}</tr>
+      ${num('Price ₹', s => pfLtp(s.sym) != null ? fmt(pfLtp(s.sym), 2) : null)}
+      ${num('Value score', s => s.score != null ? fmt(s.score, 0) : null)}
+      ${num('PE', s => s.pe != null ? fmt(s.pe) : null)}
+      ${num('PB', s => s.pb != null ? fmt(s.pb, 2) : null)}
+      ${num('ROE %', s => s.roe != null ? fmt(s.roe) : null)}
+      ${num('Div yield %', s => s.dy != null ? fmt(s.dy, 2) : null)}
+      ${num('Mcap ₹ Cr', s => s.mcap != null ? fmt(s.mcap, 0) : null)}
+      ${num('Momentum', s => s.momS != null ? fmt(s.momS, 0) + '<small>/100</small>' : null)}
+      ${num('6M return', s => ret(s, 1))}
+      ${num('Trend', s => s.tr ? s.tr.pass + '/' + s.tr.of : null)}
+      ${num('Value-trap flags', s => { const t = trapReasons(s); return t.length ? '<span class="cmp-flag">⚠ ' + esc(t.join(' · ')) + '</span>' : 'none'; })}
+      ${body}
+    </tbody></table></div>
+    <p class="vd-note cmp-note"><b>must</b>: a loss in any of the latest 4 quarters → red · <b>cap</b>: latest quarters all below the weakest before → amber at most ·
+      <b>×2</b> checks count double · “–” = no data, not counted. Portfolio-only checks are left out here.</p>${VD_DISCLAIMER}`);
+  view.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => { cmpSave(cmpList().filter(x => x !== b.dataset.rm)); compareView(); }));
+}
+
 function methodView() {
   setNav('method'); view.innerHTML = '';
   const W = lsJson('vw', W_DEF);
@@ -4509,6 +4637,7 @@ function route() {
   else if (h === '#/value') valueView();
   else if (h === '#/method') methodView();
   else if (h === '#/all') allView();
+  else if (h === '#/compare') compareView();
   else if (h === '#/momentum') momentumView();
   else if (h === '#/portfolio') portfolioView();
   else homeView();
@@ -4810,8 +4939,8 @@ AUTH_WEB = {
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
                      # signed in and checked within the last hour → page shows at once; auth.js confirms quietly behind it
                      '<script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>\n'
-                     '<link rel="stylesheet" href="auth.css?v=30">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=30"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=31">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=31"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
