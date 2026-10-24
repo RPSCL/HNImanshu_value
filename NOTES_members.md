@@ -20,17 +20,16 @@ Past `until`, the Firestore rule refuses the member's read of their own `hni_pri
 ## 1. Firestore rules (once)
 Firebase console → Firestore Database → Rules → paste `firebase_rules/firestore.rules` → Publish.
 
-## 2. Payments (when you connect Razorpay)
-1. Cloudflare → Workers & Pages → Create → Worker, name `hni-pay` → Edit code → paste `pay_worker.js` → Deploy.
-2. Worker → Settings → Variables and Secrets → add 4 **Secrets**:
-   - `RZP_KEY_ID`, `RZP_KEY_SECRET`: Razorpay Dashboard → Account & Settings → API Keys (live keys).
-   - `FIREBASE_SA`: Firebase console → Project settings → Service accounts → Generate new private key → paste the whole JSON.
-   - `RZP_WEBHOOK_SECRET`: any long random text; use the same text in step 3.
-3. Razorpay Dashboard → Webhooks → Add: URL `https://hni-pay.<your-subdomain>.workers.dev/webhook`, secret = `RZP_WEBHOOK_SECRET`,
-   event **payment.captured**. (Covers people who close the tab right after paying.)
-4. public/auth.js: set `const PAY_HOOK = "https://hni-pay.<your-subdomain>.workers.dev";` → deploy hosting.
-   Until then "Proceed to pay" says payments open soon.
-5. Payment flow: plan → Worker makes the Razorpay order (price from its own table) → Razorpay checkout → Worker checks the signature
-   and that the payment is captured at the plan's full amount → `hni_prime/{uid}.until` += months (after the current end date if still
-   Prime) and `hni_payments/{payment_id}` is written in the same transaction, so one payment never counts twice → page reloads purple.
-   Razorpay needs auto-capture on (Razorpay → Account & Settings → Payment capture → Automatic), which is the default.
+## 2. Payments (Cashfree) — full step-by-step in CASHFREE_SETUP_SOP.md
+1. Cloudflare → Workers & Pages → `hni-pay` → Edit code → paste `pay_worker.js` → Deploy.
+2. Worker → Settings → Variables and Secrets:
+   - Secrets: `CF_APP_ID`, `CF_SECRET_KEY` (Cashfree → Developers → API Keys, production keys), `FIREBASE_SA` (whole service-account JSON).
+   - Text variable: `CF_ENV` = `PROD` (live) or `TEST` (sandbox). Nothing else is accepted.
+   - Delete the old `RZP_KEY_ID`, `RZP_KEY_SECRET`, `RZP_WEBHOOK_SECRET`.
+3. Cashfree → Developers → Webhooks → Add Webhook Endpoint: `https://hni-pay.<your-subdomain>.workers.dev/webhook`, event **Payment Success**.
+   (Cashfree signs webhooks with the same Secret Key as the API, so there is no separate webhook secret.)
+4. public/auth.js: `PAY_HOOK = "https://hni-pay.<your-subdomain>.workers.dev"` → deploy hosting.
+5. Payment flow: plan → Worker makes the Cashfree order (price from its own table, `hni_p3_<uid>_<time>` as order id) → page opens
+   Cashfree checkout with `payment_session_id` → Worker (`/verify`, or the webhook if the tab was closed) reads the order and its
+   payments back from Cashfree: must be PAID, made by this Worker, SUCCESS payment at the plan's full amount → `hni_prime/{uid}.until`
+   (or `hni_plus`) += months and `hni_payments/{order_id}` is written in the same transaction, so one order never counts twice.
