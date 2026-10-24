@@ -73,7 +73,7 @@ const MARKET = ["hni_market", "ltp"];             // latest prices for held stoc
 // token lives in the Worker, which also checks the login and allows one run every few minutes.
 const LTP_HOOK = "https://hni-ltp.himanshushekhar8.workers.dev/run";
 // Two levels (₹ before GST). The pay Worker (pay_worker.js) has the SAME tables and is the one that counts: it makes the
-// Razorpay order and, once paid, moves hni_plus/{uid} or hni_prime/{uid}.until forward by the months bought.
+// Cashfree order and, once paid, moves hni_plus/{uid} or hni_prime/{uid}.until forward by the months bought.
 //   Plus  ₹499 a year: all lists (Smallcap 500, Microcap 250, Others)
 //   Prime ₹249 / 199 / 149 / 99 a month for 1 / 3 / 6 / 12 months: Plus + Portfolio Builder, Checklist, Telegram alerts
 const PRIME_PLANS = [{ m: 1, pm: 249 }, { m: 3, pm: 199 }, { m: 6, pm: 149 }, { m: 12, pm: 99 }];
@@ -82,7 +82,7 @@ const TIERS = { plus: PLUS_PLANS, prime: PRIME_PLANS };
 const PLUS_HINT = "hni_plus";                      // "1" = Plus, Prime or admin last time: all lists show at once
 const GST = 0.18;
 // Address of the pay Worker (Cloudflare, pay_worker.js). Empty = payments not switched on yet ("Proceed to pay" says payments
-// open soon). Nothing here is secret: the Razorpay secret, the prices that are charged and the right to switch Prime on all
+// open soon). Nothing here is secret: the Cashfree secret, the prices that are charged and the right to switch Prime on all
 // live in the Worker; changing anything in this file (or in the browser) can't change what is charged or what is given.
 const PAY_HOOK = "https://hni-pay.himanshushekhar8.workers.dev";
 const HOME = "./";                                // the screener
@@ -342,7 +342,7 @@ const CROWN = '<svg class="au-crown" viewBox="0 0 24 24" fill="none" stroke="cur
 const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
 const dateTxt = (ms) => new Date(ms).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 const total = (p) => p.total != null ? p.total : p.pm * p.m;          // ₹ for the whole period, before GST
-const payable = (p) => Math.round(total(p) * (1 + GST));            // what Razorpay charges, GST included (the Worker works it out the same way)
+const payable = (p) => Math.round(total(p) * (1 + GST));            // what Cashfree charges, GST included (the Worker works it out the same way)
 function markPro(admin, p, plus) {
   PRIME = p;
   if (plus !== undefined) PLUS = plus;
@@ -469,15 +469,16 @@ async function payCall(path, body) {
   } catch (e) { return { error: `${say} (Network: offline)` }; }
   return r.json().catch(() => ({ error: `${say} (Server: ${r.status >= 500 ? "unavailable" : "error"})` }));
 }
-// Razorpay's own failure reasons → one word people understand
-const RZP_WHY = { payment_cancelled: "cancelled", payment_failed: "declined", payment_timed_out: "timeout", authentication_failed: "authentication",
-  insufficient_funds: "funds", card_declined: "declined", incorrect_otp: "OTP", payment_risk_check_failed: "risk" };
-const rzpWord = (e) => { const k = String((e && (e.reason || e.code)) || "").toLowerCase(); return RZP_WHY[k] || k.split("_").pop() || "error"; };
-let RZP = null;
-const loadRazorpay = () => RZP = RZP || new Promise((ok, bad) => {
+// Cashfree's own failure messages → one word people understand
+const cfWord = (m) => { const t = String(m || "").toLowerCase();
+  return /cancel|drop|clos/.test(t) ? "cancelled" : /insufficient|fund/.test(t) ? "funds" : /otp/.test(t) ? "OTP" : /time|expire/.test(t) ? "timeout"
+    : /declin|reject|fail/.test(t) ? "declined" : "error"; };
+let CFJS = null;
+const loadCashfree = () => CFJS = CFJS || new Promise((ok, bad) => {
+  if (window.Cashfree) return ok();
   const s = document.createElement("script");
-  s.src = "https://checkout.razorpay.com/v1/checkout.js";
-  s.onload = () => ok(); s.onerror = () => { RZP = null; bad(new Error("Couldn't open Razorpay. Check your connection and try again.")); };
+  s.src = "https://sdk.cashfree.com/js/v3/cashfree.js";
+  s.onload = () => ok(); s.onerror = () => { CFJS = null; bad(new Error("Couldn't open Cashfree. Check your connection and try again.")); };
   document.head.appendChild(s);
 });
 async function pay() {
@@ -487,37 +488,25 @@ async function pay() {
   planBusy = true; paintPlans(); $(".au-pay", planBox).textContent = "Opening payment…"; planMsg("");
   try {
     const o = await payCall("/order", { tier, months: p.m });          // the Worker prices it from its own table, not from this page
-    if (!o || o.error || !o.order_id) throw new Error((o && o.error) || "Couldn't start the payment.");
-    await loadRazorpay().catch(() => { throw new Error("Unable to complete payment (Razorpay: unreachable)"); });
-    const v = await new Promise((resolve, reject) => {
-      const rz = new window.Razorpay({
-        key: o.key, order_id: o.order_id, amount: o.amount, currency: o.currency || "INR",
-        name: "HNImanshu", description: `${name} · ${p.m} month${p.m > 1 ? "s" : ""}`,
-        prefill: { name: nameOf(u), email: u.email && !u.email.endsWith("@" + USER_DOMAIN) ? u.email : "" },
-        theme: { color: "#5b2d9c" },
-        handler: async (res) => {                                      // paid: the Worker checks Razorpay's signature, then extends Prime
-          planMsg(`Payment received. Switching ${name} on…`);
-          try {
-            const r = await payCall("/verify", res);
-            if (r && r.ok) resolve(r);
-            else reject(Object.assign(new Error(r && r.error || "not confirmed"), { paid: true }));
-          } catch (e) { reject(Object.assign(e, { paid: true })); }
-        },
-        modal: { ondismiss: () => reject(new Error("")) },              // closed without paying
-      });
-      rz.on("payment.failed", (r) => {                                  // the Razorpay window stays open so they can try again
-        console.warn("Razorpay payment failed:", r && r.error);
-        planMsg(`Unable to complete payment (Razorpay: ${rzpWord(r && r.error)})`, "bad");
-      });
-      rz.open();
-    });
+    if (!o || o.error || !o.payment_session_id) throw new Error((o && o.error) || "Couldn't start the payment.");
+    await loadCashfree().catch(() => { throw new Error("Unable to complete payment (Cashfree: unreachable)"); });
+    const cf = window.Cashfree({ mode: o.mode === "sandbox" ? "sandbox" : "production" });
+    const res = await cf.checkout({ paymentSessionId: o.payment_session_id, redirectTarget: "_modal" }) || {};   // resolves when the window closes
+    planMsg("Checking your payment…");
+    const r = await payCall("/verify", { order_id: o.order_id });       // the Worker reads the order back from Cashfree, then extends the plan
+    if (!(r && r.ok)) {
+      const why = (res.error && (res.error.message || res.error.code)) || (res.paymentDetails && res.paymentDetails.paymentMessage) || "";
+      if (res.error && !res.paymentDetails && (!why || cfWord(why) === "cancelled")) throw new Error("");      // window closed without paying
+      throw new Error(`Payment not confirmed (${cfWord(why)}). If money was debited, ${name} switches on by itself within a few minutes; reload this page then.`);
+    }
+    const v = r;
     planMsg((v.note ? v.note + " " : "") + `${name} is on, valid till ${dateTxt(v.until)}. ${PLAN_NEXT && tier === "prime" ? "Opening Portfolio Builder…" : "Reloading…"}`, "ok");
     try { localStorage.setItem(PRO_HINT, "1"); } catch (e) {}
     try { localStorage.setItem(PLUS_HINT, "1"); } catch (e) {}
     setTimeout(() => { if (PLAN_NEXT && tier === "prime") location.href = PLAN_NEXT; else location.reload(); }, 1600);
   } catch (e) {
-    if (e.paid) planMsg(`Payment received, ${name} not confirmed yet (${e.message}). It switches on by itself within a few minutes; reload this page then.`, "bad");
-    else if (e.message) planMsg(e.message, "bad");
+    if (e.message) planMsg(e.message, "bad");
+    else planMsg("");
   } finally { planBusy = false; paintPlans(); }
 }
 
