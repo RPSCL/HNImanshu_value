@@ -926,6 +926,9 @@ def build_all(df, asof, prices=None, bench=None):
         g = lambda k: px.get(k) if ok(px.get(k)) else None
         rec0 = build_record(r, F, inputs_now(r, F, asof, fin), fin)
         rec0["mom"] = momentum(px, "NOW") if history_ok(px, asof, 1, win0) else None      # < 1 year of prices (recent IPO): no momentum score
+        m1 = momentum_1m(px) if rec0["mom"] else None                                     # 1-month return (today only); the page adds it to the score
+        if m1 is not None:
+            rec0["mom1"] = m1
         lf_t = pd.to_datetime(px.get("LISTED_FROM"), errors="coerce")
         lf0 = lf_t.strftime("%Y-%m-%d") if pd.notna(lf_t) else ""     # first price day we have (the PF Builder leaves out recent IPOs with it)
         if lf0:
@@ -940,6 +943,8 @@ def build_all(df, asof, prices=None, bench=None):
         rec_n = build_record(r, F, inputs_sm(r, F, asof, fin, ltp, g("HIGH_52W_NOW") or r["HIGH_52W"]), fin)
         rec_n["pxSrc"] = ltp_src
         rec_n["mom"] = rec0["mom"]
+        if m1 is not None:
+            rec_n["mom1"] = m1
         if lf0:
             rec_n["lf"] = lf0
         rec_n.update(qx)
@@ -973,6 +978,19 @@ def momentum(px, key):
     v = [px.get("MOM_%s_%s" % (key, k)) for k in ("R3", "R6", "R12")]
     v = [round(float(x), 2) if ok(x) else None for x in v]
     return v if any(x is not None for x in v) else None
+
+
+def momentum_1m(px):
+    """1-month % return as of today (latest close vs the close 30 days before the data date, split-adjusted), or None.
+    prices.csv has no 1M column, but it is exact from three columns it does have:
+        close 30 days ago = PRICE_1Y_ADJ x (1 + MOM_NOW_R12 / 100)      (MOM_NOW_R12 = close 30 days ago / close 1 year ago - 1)
+        1M return         = LTP / that close - 1                         (LTP = latest close, already on today's share basis)
+    Only for today's snapshot: the back dates (Historical) have no 1M and keep the 3-return score."""
+    ltp, p1y, r12 = px.get("LTP"), px.get("PRICE_1Y_ADJ"), px.get("MOM_NOW_R12")
+    if not (ok(ltp) and ok(p1y) and ok(r12)):
+        return None
+    p30 = float(p1y) * (1 + float(r12) / 100)
+    return round((float(ltp) / p30 - 1) * 100, 2) if p30 > 0 else None
 
 
 def build_back(df, F, asof, key, prices, bench, ltps):
@@ -2046,16 +2064,35 @@ function computeScores() {
   });
   computeMomentum();
 }
-/* Price momentum (0–100): average percentile, across every stock on screen, of the 3-month, 6-month and
-   12-minus-1-month returns (the last month is skipped: short-term moves tend to reverse). Needs 2 of 3. */
+/* Price momentum (0–100), two parts:
+   1. BASE: average percentile, across every stock on screen, of the 1-month, 3-month, 6-month and 12-minus-1-month returns.
+      Needs 2 of the 4. A historical date has no 1-month return, so it keeps the old 3-return average.
+   2. ORDER BONUS (the "staircase"): up to MOM_STAIR points on top (capped at 100) for a price that is speeding up:
+      1M return > 3M return > 6M return > 12M return. Each of the 3 steps is worth MOM_STAIR / 3 and only counts while the shorter
+      return is positive (a stock that is merely falling more slowly earns nothing). The 12M here is the full 12-month return
+      (12-minus-1-month compounded with the last month), so all four are measured up to today.
+   Change MOM_STAIR to make the bias stronger (e.g. 15) or weaker; 0 switches it off. */
+const MOM_STAIR = 10;
+const MOM_LBL = ['1M', '3M', '6M', '12-1M'];
+const momAt = (s, i) => i === 0 ? (s.mom1 == null ? null : s.mom1) : (s.mom ? s.mom[i - 1] : null);   // 0 = 1M, 1 = 3M, 2 = 6M, 3 = 12-1M
+function momSteps(s) {                                  // how many of the 3 steps hold (0–3); 0 when there is no 1-month return
+  if (!s.mom || !ok(s.mom1) || !ok(s.mom[0]) || !ok(s.mom[1]) || !ok(s.mom[2])) return 0;
+  const r12 = ((1 + s.mom1 / 100) * (1 + s.mom[2] / 100) - 1) * 100;
+  const c = [s.mom1, s.mom[0], s.mom[1], r12];         // 1M, 3M, 6M, 12M
+  let n = 0;
+  for (let i = 0; i < 3; i++) if (c[i] > 0 && c[i] > c[i + 1]) n++;
+  return n;
+}
 let HAS_MOM = false;                                     // false until prices.csv carries momentum: the filter is then skipped
 function computeMomentum() {
-  const cols = [0, 1, 2].map(i => S.map(s => s.mom ? s.mom[i] : null).filter(ok).sort((a, b) => a - b));
+  const cols = [0, 1, 2, 3].map(i => S.map(s => momAt(s, i)).filter(ok).sort((a, b) => a - b));
   S.forEach(s => {
-    s.momS = null;
+    s.momS = null; s.momStair = 0;
     if (!s.mom) return;
-    const p = [0, 1, 2].filter(i => ok(s.mom[i])).map(i => pctl(cols[i], s.mom[i], true));
-    if (p.length >= 2) s.momS = p.reduce((a, x) => a + x, 0) / p.length * 100;
+    const p = [0, 1, 2, 3].filter(i => ok(momAt(s, i))).map(i => pctl(cols[i], momAt(s, i), true));
+    if (p.length < 2) return;
+    s.momStair = momSteps(s);
+    s.momS = Math.min(100, p.reduce((a, x) => a + x, 0) / p.length * 100 + MOM_STAIR * s.momStair / 3);
   });
   HAS_MOM = S.some(s => s.momS != null);
 }
@@ -2341,9 +2378,9 @@ const C = {
   q: {k:'q', label:'ROCE %', tip:'ROE used for financials', v:qual, f:s=>fmt(qual(s))+(s.fin?' <span class="na">ROE</span>':'')},
   from52: {k:'from52', label:'vs 52W high', v:s=>pctFrom(s.cmp,s.hi52), f:s=>{const p=pctFrom(s.cmp,s.hi52); return p==null?NA:fmt(p)+'%';}},
   score: {k:'score', label:'Value score', v:s=>s.score, f:scoreCell},
-  mom: {k:'mom', label:'Momentum', tip:'Price momentum 0–100: percentile of the 3M, 6M and 12-minus-1-month returns vs every stock on screen, averaged. Hover a value for the returns.',
+  mom: {k:'mom', label:'Momentum', tip:'Price momentum 0–100: percentile of the 1M, 3M, 6M and 12-minus-1-month returns vs every stock on screen, averaged, plus up to +10 when the returns step up (1M > 3M > 6M > 12M). Hover a value for the returns.',
         v:s=>s.momS, x:s=>s.momS==null ? '' : Math.round(s.momS),
-        f:s=>s.momS==null ? NA : `<span class="meter" title="${esc(['3M', '6M', '12-1M'].map((l, i) => l + ': ' + (ok(s.mom[i]) ? (s.mom[i] > 0 ? '+' : '') + fmt(s.mom[i]) + '%' : '–')).join('\n'))}"><span>${fmt(s.momS, 0)}</span><i><b style="width:${Math.max(3, s.momS).toFixed(0)}%"></b></i></span>`},
+        f:s=>s.momS==null ? NA : `<span class="meter" title="${esc(MOM_LBL.map((l, i) => l + ': ' + (ok(momAt(s, i)) ? (momAt(s, i) > 0 ? '+' : '') + fmt(momAt(s, i)) + '%' : '–')).concat(s.momStair ? ['Order bonus: +' + fmt(MOM_STAIR * s.momStair / 3, 1)] : []).join('\n'))}"><span>${fmt(s.momS, 0)}</span><i><b style="width:${Math.max(3, s.momS).toFixed(0)}%"></b></i></span>`},
   pb: {k:'pb', label:'PB', v:s=>s.pb, f:s=>s.pb==null?'<span class="na">N/A</span>':fmt(s.pb,2)+(s.pbSrc==='derived'?'<span class="na">*</span>':'')},
   cfop: {k:'cfop', label:'CFO+ yrs', tip:'Years with positive operating cash flow, out of the last 10 financial years (fewer if the history is shorter, minimum 5). Not used for financials: their operating cash flow swings with deposits and loans.',
          v:s=>s.cfop ? s.cfop[0] / s.cfop[1] * 10 : null, x:s=>s.cfop ? `${s.cfop[0]}/${s.cfop[1]}` : '',
@@ -4056,7 +4093,7 @@ function newsOverlay(sym) {
   const PS = PF.txns ? pfSummary(PF.txns) : null;
   const h = PS && PF_HELD.has(sym) ? PS.open.find(r => r.sym === sym) : null;   // your holding, if any
   if (!THEN_BY.size) ensureThen1();                       // "PE a year ago" test needs the 1Y snapshot
-  const ret = i => s.mom && ok(s.mom[i]) ? pctTxt(s.mom[i], 1) : null, tr = trapReasons(s);
+  const ret = i => ok(momAt(s, i)) ? pctTxt(momAt(s, i), 1) : null, tr = trapReasons(s);
   const grp = (t, body) => body.replace(/\s/g, '') ? `<div class="no-g">${t}</div><div class="no-kv">${body}</div>` : '';
   const w = modal(esc(sym), `<div class="vh"></div><p class="no-name">${esc(s.name || '')}${s.ind ? ` · <span>${esc(s.ind)}</span>` : ''}</p>
     <div class="vd-box"></div>
@@ -4065,7 +4102,7 @@ function newsOverlay(sym) {
       : grp('Price', k('LTP ₹', pfLtp(sym) != null ? fmt(pfLtp(sym), 2) : null))}
     ${grp('Value', `${k('Score', s.score != null ? fmt(s.score, 0) : null)}${k('PE', s.pe != null ? fmt(s.pe) : null)}${k('PB', s.pb != null ? fmt(s.pb, 2) : null)}
       ${k('ROE %', s.roe != null ? fmt(s.roe) : null)}${k('Div yield %', s.dy != null ? fmt(s.dy, 2) : null)}${k('Mcap ₹ Cr', s.mcap != null ? fmt(s.mcap, 0) : null)}`)}
-    ${grp('Momentum', `${k('Momentum', s.momS != null ? fmt(s.momS, 0) + '<small>/100</small>' : null)}${k('3M', ret(0))}${k('6M', ret(1))}${k('12-1M', ret(2))}
+    ${grp('Momentum', `${k('Momentum', s.momS != null ? fmt(s.momS, 0) + '<small>/100</small>' : null)}${k('1M', ret(0))}${k('3M', ret(1))}${k('6M', ret(2))}${k('12-1M', ret(3))}${k('Order bonus', s.momS != null && ok(s.mom1) ? '+' + fmt(MOM_STAIR * s.momStair / 3, 1) : null)}
       ${k('Trend', s.tr ? s.tr.pass + '/' + s.tr.of : null)}`)}
     ${s.score != null || tr.length ? `<p class="no-flags">${tr.length ? '⚠ ' + esc(tr.join(' · ')) : 'No value-trap flags'}</p>` : ''}
     <div class="no-acts"><button type="button" class="btn primary" data-nb>Buy / Sell</button><button type="button" class="btn" data-cmp>${cmpList().includes(sym) ? 'In Compare ✓' : '+ Compare'}</button>${s.url ? `<a class="btn" href="${esc(s.url)}" target="_blank" rel="noopener">Open on Screener.in ↗</a>` : ''}</div>
@@ -4439,7 +4476,7 @@ function compareView() {
       if (!g.has(k)) g.set(k, {k, g: c.g, label: /better stock/.test(c.label) ? 'No clearly better stock in its industry' : c.label, w: c.w}); }); });
   const rows = [...groups.values()].flatMap(g => [...g.values()]);
   const num = (l, f) => `<tr class="cmp-num"><th>${l}</th>${V0.map(o => `<td>${f(o.s) ?? '–'}</td>`).join('')}</tr>`;
-  const ret = (s, i) => s.mom && ok(s.mom[i]) ? pctTxt(s.mom[i], 1) : null;
+  const ret = (s, i) => ok(momAt(s, i)) ? pctTxt(momAt(s, i), 1) : null;
   let g0 = '', body = '';
   rows.forEach(r => {
     if (r.g !== g0) { g0 = r.g; body += `<tr class="cmp-g"><th colspan="${V0.length + 1}">${esc(r.g)}</th></tr>`; }
@@ -4461,7 +4498,8 @@ function compareView() {
       ${num('Div yield %', s => s.dy != null ? fmt(s.dy, 2) : null)}
       ${num('Mcap ₹ Cr', s => s.mcap != null ? fmt(s.mcap, 0) : null)}
       ${num('Momentum', s => s.momS != null ? fmt(s.momS, 0) + '<small>/100</small>' : null)}
-      ${num('6M return', s => ret(s, 1))}
+      ${num('1M return', s => ret(s, 0))}
+      ${num('6M return', s => ret(s, 2))}
       ${num('Trend', s => s.tr ? s.tr.pass + '/' + s.tr.of : null)}
       ${num('Value-trap flags', s => { const t = trapReasons(s); return t.length ? '<span class="cmp-flag">⚠ ' + esc(t.join(' · ')) + '</span>' : 'none'; })}
       ${body}
@@ -4546,7 +4584,7 @@ function methodView() {
   <h2>Scores</h2>
   ${tbl(
     g('Value score (0–100)', 'How cheap and healthy a stock is <b>versus its own industry</b>. Each metric below is ranked within the sector, then weighted.', '80 = better than ~80% of its sector on the mix below.')
-  + g('Momentum (0–100)', 'How strongly the price has been rising: 3-month, 6-month and 12-month (minus the last month) returns, ranked against every stock.', '75 = price trend stronger than 75% of stocks.')
+  + g('Momentum (0–100)', 'How strongly the price has been rising: 1-month, 3-month, 6-month and 12-month (minus the last month) returns, ranked against every stock, with a small bonus when the recent returns are speeding up.', '75 = price trend stronger than 75% of stocks.')
   + g('Trend', 'Business-improvement checks passed: profit, revenue, margin, promoter holding, ROE, ROCE, cash conversion vs a year earlier.', '6/7 = six of seven things got better.')
   + g('Promoter Δ', 'Change in promoter holding over the quarters available, in percentage points.', '+1.5 pp = promoters bought more.')
   )}
@@ -4558,10 +4596,12 @@ function methodView() {
   <h2>Momentum (Momentum tab, Momentum column)</h2>
   <p>How strongly a stock's price has been rising, as a score from 0 to 100. Worked out every week from Angel One daily closes (split and bonus adjusted):</p>
   ${tbl(
-    g('3-month return', 'Price change over the last 3 months.', '₹100 → ₹112 = +12%.')
+    g('1-month return', 'Price change over the last month (about 30 days).', '₹100 → ₹108 = +8%.')
+  + g('3-month return', 'Price change over the last 3 months.', '₹100 → ₹112 = +12%.')
   + g('6-month return', 'Price change over the last 6 months.', '₹100 → ₹125 = +25%.')
   + g('12-minus-1 return', 'From 12 months ago to 1 month ago. The latest month is left out because very short moves often reverse.', '₹100 a year ago → ₹140 a month ago = +40%.')
-  + g('Score', 'Each return is ranked against every stock on screen (0 = worst, 100 = best) and the ranks are averaged. Needs at least 2 of the 3.', 'Ranks 80, 70, 90 → momentum 80.')
+  + g('Score', 'Each return is ranked against every stock on screen (0 = worst, 100 = best) and the ranks are averaged. Needs at least 2 of the 4. Historical dates have no 1-month return, so they use the other three.', 'Ranks 90, 80, 70, 80 → base score 80.')
+  + g('Order bonus', 'Extra points (up to +10, score stays at most 100) when the price is speeding up: 1-month return above the 3-month, above the 6-month, above the 12-month. Each of the 3 steps that holds adds about 3.3 points, and only while the shorter return is positive.', '1M +9%, 3M +7%, 6M +5%, 12M +4% → all 3 steps hold → +10. Base 80 → 90.')
   )}
   <p><b>Momentum tab:</b> strongest first, showing <b>70 and above</b> by default (the strong trends). Filters has every Value-screen filter plus <b>Max momentum</b>, e.g. 90 to skip stocks that have already run very far.
   <b>Value screen</b> uses Min momentum 40 by default, to skip cheap stocks that are still falling. With <b>Historical</b> on, momentum uses only prices up to that date, so it can be backtested.</p>
