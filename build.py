@@ -43,6 +43,7 @@ Fundamentals:
 
 import pandas as pd
 import numpy as np
+import paid                                  # Plus / Prime files published encrypted (paid.py)
 import json
 import sys
 import re
@@ -1044,7 +1045,7 @@ def build(deploy=False):
             return None
         return o
     for key, rows in (("sc250", data_sc250), ("mc250", data_mc250), ("oth", data_oth)):
-        (OUTPUT.parent / f"screener_{key}.json").write_text(json.dumps(_nan_free(rows), separators=(",", ":"), allow_nan=False), encoding="utf-8")
+        paid.write(OUTPUT.parent, f"screener_{key}.json", json.dumps(_nan_free(rows), separators=(",", ":"), allow_nan=False))   # Others: encrypted (paid.py)
     datasets_js = (
         "const DATASETS = {\n"
         f"n500:{js_safe(json.dumps(data_n500, separators=(',', ':')))},\n"

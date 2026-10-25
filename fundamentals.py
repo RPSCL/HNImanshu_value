@@ -5318,10 +5318,10 @@ AUTH_WEB = {
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
                      # signed in and checked within the last hour → page shows at once; auth.js confirms quietly behind it
                      '<script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>\n'
-                     '<link rel="stylesheet" href="auth.css?v=39">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=39"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=40">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=40"></script>\n',
     # straight after the header, not deferred: Navigate + avatar are there from the first paint (no blink)
-    "__AUTH_HDR__": '<script src="hdr.js?v=39"></script>\n',
+    "__AUTH_HDR__": '<script src="hdr.js?v=40"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
@@ -5452,8 +5452,12 @@ def build_site(paths, out_path, minify=None, prices_path=None):
     today = {r["sym"]: r for r in rows_all}                # the page's TODAY (with Others once they are added)
     def put(name, obj):
         t = json.dumps(clean(obj), allow_nan=False, separators=(",", ":"))
-        (out_path.parent / name).write_text(t, encoding="utf-8")
-        return len(t.encode("utf-8"))
+        try:
+            import paid                                   # Others files: encrypted for Plus / Prime only (paid.py)
+            return paid.write(out_path.parent, name, t)
+        except ImportError:
+            (out_path.parent / name).write_text(t, encoding="utf-8")
+            return len(t.encode("utf-8"))
     for k in backs:                                       # every back period (1Y too): its own JSON, loaded only for Historical
         extra += put("fundamentals_back_%s.json" % k, slim_back(backs[k], today))
     hist_mb = put("fundamentals_hist.json", hist_payload(backs)) / 1e6   # sparkline + 1Y columns
