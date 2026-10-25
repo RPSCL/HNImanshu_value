@@ -80,7 +80,7 @@ BACK_DAYS   = 365                         # must match fundamentals.BACK_DAYS
 KEEP_ASKED_DAYS = 60                      # PF Builder stocks nobody asked for in this many days leave the saved prices (ETFs + NIFTY 500 never do)
 MAX_STOCKS      = 300                     # at most this many PF Builder stocks are kept (the least recently asked go first)
 MONTH_DAYS  = [round(k * 365 / 12) for k in range(13)]   # k = 0 (now) … 12 (= 365 days, the 1Y back date): month points for the Portfolio Builder
-PERIODS     = {"3M": 91, "6M": 182, "9M": 273, "1Y": 365, "1_25Y": 456, "1_5Y": 548}   # must match fundamentals.PERIODS
+PERIODS     = {"1M": 30, "3M": 91, "6M": 182, "9M": 273, "1Y": 365, "1_25Y": 456, "1_5Y": 548}   # must match fundamentals.PERIODS
 RATE        = 2.5                         # max candle requests per second, shared by all workers (Angel throttles ~3/s)
 WORKERS     = 3                           # parallel fetches; network delay overlaps, the rate limit stays global
 CHUNK_DAYS  = 380                         # ~2.5 years in 3 calls (~255 rows each, under the 500-row cap some users hit)

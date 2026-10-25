@@ -60,7 +60,7 @@ MAX_STALE_DAYS = 400      # latest annual figure must be newer than this vs the 
 JUMP_PP = 10              # a single-quarter holding move bigger than this = likely merger / OFS / listing
 BACK_DAYS = 365           # the "1Y back" snapshot date = download date minus this
 # every back period on the site's "Back" dropdown: key (prices.csv column suffix) -> (label, days)
-PERIODS = {"3M": ("3M", 91), "6M": ("6M", 182), "9M": ("9M", 273), "1Y": ("1Y", 365),
+PERIODS = {"1M": ("1M", 30), "3M": ("3M", 91), "6M": ("6M", 182), "9M": ("9M", 273), "1Y": ("1Y", 365),
            "1_25Y": ("1.25Y", 456), "1_5Y": ("1.5Y", 548)}
 TODAY_SAME = True         # True: today is rebuilt with the SAME formulas as every Historical date (3M … 1.5Y back), priced
                           #   with Angel's close, so today vs back is like for like everywhere (tables, checklist, history line).
@@ -611,6 +611,27 @@ def inputs_sm(r, F, cut, fin, price, hi52):
             "oi": oi, "icov": icov, "opmT": opm_t, "hi52": hi52}
 
 
+def _fill_1m(r):
+    """The 1M back date (PERIODS "1M") until fetch_prices.py writes its own PRICE_1M_* / MOM_1M_* columns (next weekly price run):
+    the close 30 days back is exact from columns prices.csv already has (same identity as momentum_1m below):
+        PRICE_1M_ADJ = PRICE_1Y_ADJ x (1 + MOM_NOW_R12 / 100)    and its date = BACK_DATE + 335 days (= data date - 30)
+        MOM_1M_R3 / R6 / R12 = MOM_M1_R3 / R6 / R12              (the month-1 momentum: the same three returns as of 30 days back)
+    HIGH_52W_1M stays empty (only the 'vs 52-week high' figure is missing then)."""
+    if ok(r.get("PRICE_1M_ADJ")):
+        return
+    for k in ("R3", "R6", "R12"):
+        if not ok(r.get("MOM_1M_" + k)) and ok(r.get("MOM_M1_" + k)):
+            r["MOM_1M_" + k] = r.get("MOM_M1_" + k)
+    p1y, r12 = r.get("PRICE_1Y_ADJ"), r.get("MOM_NOW_R12")
+    bd = pd.to_datetime(r.get("BACK_DATE"), errors="coerce")
+    if not (ok(p1y) and ok(r12)) or pd.isna(bd):
+        return
+    p30 = float(p1y) * (1 + float(r12) / 100)
+    if p30 > 0:
+        r["PRICE_1M_ADJ"] = round(p30, 4)
+        r["PRICE_1M_DATE"] = (bd + pd.Timedelta(days=335)).strftime("%Y-%m-%d")
+
+
 def load_prices(path):
     """prices.csv from fetch_prices.py → ({SYMBOL: row}, benchmark row or None). Missing file → ({}, None)."""
     p = pathlib.Path(path)
@@ -619,6 +640,8 @@ def load_prices(path):
     d = pd.read_csv(p)
     d["SYMBOL"] = d["SYMBOL"].astype(str).str.strip().str.upper()
     rows = {r["SYMBOL"]: r for r in d.to_dict("records")}
+    for r in rows.values():
+        _fill_1m(r)
     print("Prices: %s, %d symbols, %d with a 1Y-back price" % (p.name, len(rows), int(d["PRICE_1Y_ADJ"].notna().sum())))
     return rows, rows.pop("^NIFTY500", None)
 
@@ -1335,6 +1358,22 @@ body.pf-mode #saveHtml,body.pf-mode #nav,body.pf-mode #meta{display:none!importa
 @media (max-width:700px){.btn.hweek{padding:0 9px}}
 /* icon-only buttons (charges, refresh); refresh spins while live prices are being fetched */
 .pf-acts .btn.ico{width:38px;padding:0;justify-content:center}
+.pf-acts .btn.pf-chk{position:relative;color:var(--mute)}
+.pf-acts .btn.pf-chk.alert{color:#fff;background:#d23b3b;border-color:#d23b3b}
+.pf-acts .btn.pf-chk b{position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#fff;color:#c42e2e;border:1px solid #d23b3b;font:700 10.5px/16px var(--mono)}
+.wip-box.chk-box{width:min(560px,100%)}
+.chk-sub{margin:0 0 10px;color:var(--mute);font-size:13px;line-height:1.55}
+.chk-h{margin:14px 0 6px;font:700 12px var(--mono);letter-spacing:.4px;text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.chk-h span{font-weight:600;color:var(--faint);border:1px solid var(--line);border-radius:99px;padding:0 7px;font-size:11px}
+.chk-h.out{color:var(--bad)} .chk-h.in{color:var(--good)}
+.chk-tw{border:1px solid var(--line);border-radius:8px;overflow:auto;max-height:240px}
+table.chk-t{width:100%;border-collapse:collapse;font-size:13px}
+table.chk-t th,table.chk-t td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left}
+table.chk-t th{font:600 10.5px var(--mono);color:var(--faint);text-transform:uppercase;background:var(--panel2);position:sticky;top:0}
+table.chk-t td small{display:block;color:var(--faint);font-size:11.5px}
+table.chk-t td:last-child,table.chk-t th:last-child{white-space:nowrap;width:1%}
+table.chk-t .pf-sym{cursor:pointer;color:var(--ink)}
+.chk-note{margin:12px 0 0;font-size:11.5px;color:var(--faint)}
 .pf-upd{align-self:center;margin-left:6px;font:500 12px var(--mono);color:var(--faint);white-space:nowrap}   /* live prices arrive by themselves (Oracle): just their time */
 .pf-asof{font:600 11px var(--mono);color:var(--mute)}
 /* NIFTY 50 / BANK NIFTY on the Portfolio page (from the same live-price job) */
@@ -1542,7 +1581,7 @@ table.cmp thead th:first-child{left:0;z-index:3}
 @media (max-width:1100px){.pf-grid{grid-template-columns:1fr}.pf-right .wrap{max-height:340px}}
 @media (max-width:700px){
   .pf-top{gap:6px}
-  .pf-acts{width:100%;display:grid;grid-template-columns:1.25fr 1fr auto;gap:6px}   /* one row: Buy / Sell, Paper money, ₹; the time under it */
+  .pf-acts{width:100%;display:grid;grid-template-columns:1.25fr 1fr auto auto;gap:6px}   /* one row: Buy / Sell, Paper money, ₹; the time under it */
   .pf-upd{grid-column:1/-1;margin:0;font-size:11px;text-align:right}
   .pf-idx{order:-1;width:100%;justify-content:space-between;gap:4px 8px;font-size:11px;padding:2px 2px 4px}   /* phone: indices on top, one line */
   .pf-ix b{font-size:10px;margin-right:4px}
@@ -3730,8 +3769,9 @@ function portfolioView() {
 /* the action buttons and "Delete all" (desktop and phone) */
 function pfWireTop() {
   view.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => {
-    const k = b.dataset.open; k === 'trade' ? pfTradeForm({}) : k === 'rates' ? pfRatesForm() : k === 'ltp' ? pfRefresh(b) : pfCashForm({t: 'in'});   // cash: Paper money in / out picked inside
+    const k = b.dataset.open; k === 'trade' ? pfTradeForm({}) : k === 'rates' ? pfRatesForm() : k === 'ltp' ? pfRefresh(b) : k === 'chk' ? pfChkOpen() : pfCashForm({t: 'in'});   // cash: Paper money in / out picked inside
   }));
+  pfChkRun();
   const wipe = $('#pfWipe');
   if (wipe) wipe.addEventListener('click', () => typeConfirm('Delete all', `Every holding, closed position, pay in / out and trade (${PF.txns.length} entries) is deleted. Your charge rates stay.`,
     async () => { PF.txns = []; await pfSave(); route(); }));
@@ -3743,8 +3783,127 @@ const pfActsHtml = () => `<div class="pf-top"><div class="pf-acts">
     <button type="button" class="btn primary" data-open="trade">+ Buy / Sell</button>
     <button type="button" class="btn" data-open="cash">Paper money in / out</button>
     <button type="button" class="btn ghost ico" data-open="rates" title="Charges &amp; taxes on each trade" aria-label="Charges and taxes">${IC_TAX}</button>
+    ${pfChkBtn()}
     ${pfAsOf().short ? `<span class="pf-upd" title="Live prices are pushed in by themselves during market hours">*Last updated at ${esc(pfAsOf().today ? pfAsOf().short : pfAsOf().full)}</span>` : ''}
   </div>${pfIdxHtml()}</div>`;
+/* ---------- (i) PF Builder check: your PF Builder holdings vs the PF Builder lists as they stand today ----------
+   Holdings bought from PF Builder carry a Remark ("PF Builder → Value", "→ Momentum", "→ ETF", "→ ETF pair"). The same lists
+   are worked out here with the SAME rules and YOUR PF Builder settings (list, sort, top n: this browser's pb_sel), from
+   today's data: Deep value screen / Momentum screen (PSU left out, no recent listings) and the ETF pairs (composite
+   0.5 × 6M + 0.5 × 12M momentum, builder_etf.json). Anything held that is no longer on its list = "no longer on the list";
+   anything on the list of a part you hold that you don't hold = "new on the list"; an ETF pair whose slot now picks the
+   other ETF shows both. The button turns red with the count. Information only: what to do with it is yours to decide. */
+const PB_PAIRS = [['ITBEES', 'GOLDBEES'], ['ALPHA', 'GOLDBEES']], PB_ALWAYS = ['JUNIORBEES', 'MON100', 'HNGSNGBEES', 'FMCGIETF', 'ALPHA'];
+const PB_SEL_DEF = {value: {uni: 'all', key: 'score', dir: 'desc', n: 0}, mom: {uni: 'all', key: 'mom', dir: 'desc', n: 15}};
+const PB_KEYS = {score: 'Value score', mom: 'Momentum score', pe: 'PE', pb: 'PB', mcap: 'Market cap', cagr: 'EPS CAGR', vs52: 'Vs 52-week high'};
+let PF_CHK = null, PF_CHK_SIG = '', PF_CHK_P = null, PB_ETF = null;
+const IC_INFO = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r=".6" fill="currentColor"/></svg>';
+function pfChkBtn() {
+  const c = PF_CHK, n = c ? c.out.length + c.inn.length : 0;
+  const t = !c ? 'PF Builder check: compares your PF Builder holdings with the PF Builder lists of today'
+    : !c.parts.length ? 'No holdings from PF Builder to compare' : n ? `${n} difference${n > 1 ? 's' : ''} with today's PF Builder lists` : "Your PF Builder holdings match today's lists";
+  return `<button type="button" class="btn ghost ico pf-chk${n ? ' alert' : ''}" data-open="chk" title="${esc(t)}" aria-label="${esc(t)}">${IC_INFO}${n ? `<b>${n}</b>` : ''}</button>`;
+}
+const pbSel = () => { let v = null; try { v = JSON.parse(localStorage.getItem('pb_sel') || 'null'); } catch (e) {}
+  const o = JSON.parse(JSON.stringify(PB_SEL_DEF));
+  if (v) ['value', 'mom'].forEach(k => { if (v[k]) Object.assign(o[k], {uni: String(v[k].uni || 'all'), key: PB_KEYS[v[k].key] ? v[k].key : o[k].key,
+    dir: v[k].dir === 'asc' ? 'asc' : 'desc', n: Math.max(0, parseInt(v[k].n, 10) || 0)}); });
+  return o; };
+function pbChoose(pool, c, k) {                               // = PF Builder's choose(): sort by the key, missing last, top n
+  const vs = x => ok(x.cmp) && ok(x.hi52) && x.hi52 > 0 ? (x.cmp / x.hi52 - 1) * 100 : null;
+  const val = x => c.key === 'vs52' ? vs(x) : c.key === 'mom' ? (ok(x.momS) ? Math.round(x.momS) : null) : (ok(x[c.key]) ? x[c.key] : null), sg = c.dir === 'asc' ? 1 : -1;
+  const pv = x => ok(x) ? x : -1e9;
+  const a = pool.slice().sort((p, q) => {
+    const vp = val(p), vq = val(q);
+    if ((vp == null) !== (vq == null)) return vp == null ? 1 : -1;
+    if (vp !== vq && vp != null) return sg * (vp - vq);
+    return k === 'mom' ? pv(q.pe) - pv(p.pe) || pv(q.momS) - pv(p.momS) : pv(q.score) - pv(p.score) || String(p.sym).localeCompare(q.sym);
+  });
+  return c.n > 0 ? a.slice(0, c.n) : a;
+}
+function pbEtfPick(sc) {                                      // = PF Builder's etfPick(): which ETFs the index part holds today
+  const notes = PB_PAIRS.map(([c, d]) => { const mc = sc[c], md = sc[d]; return {c, d, mc, md, win: ok(mc) && mc > 0 && (!ok(md) || mc > md) ? c : d}; });
+  return {notes, list: [...new Set([...notes.map(n => n.win), ...PB_ALWAYS])]};
+}
+function pbLists() {                                          // today's PF Builder lists, worked out in this page (view restored after)
+  const C = pbSel(), keep = {uni: GF.uni, psu: GF.psu, semi: GF.semi};
+  const vf = Object.assign({}, VF_DEF, (VF_PRESETS.find(p => p.name === 'Deep value') || {}).st);
+  const day = 864e5, cut = new Date(Date.parse(D.asOf) - 365 * day).toISOString().slice(0, 10);
+  let first = '9999'; D.stocks.forEach(s => { if (s.lf && s.lf < first) first = s.lf; });
+  const start = new Date(Date.parse(first) + 7 * day).toISOString().slice(0, 10);
+  const young = s => !!(s.lf && s.lf > cut && s.lf > start);
+  const out = {};
+  try {
+    GF.psu = true; GF.semi = false;
+    for (const k of ['value', 'mom']) {
+      GF.uni = C[k].uni === 'all' || D.lists.includes(C[k].uni) ? C[k].uni : 'all'; setMode(); computeScores.S = null; computeScores();
+      const pool = k === 'value' ? V().filter(s => !young(s) && s.score != null && s.cmp != null && passVF(s, vf))
+                                 : V().filter(s => !young(s) && ok(s.momS) && s.cmp != null && passVF(s, MOM_DEF));
+      out[k] = pbChoose(pool, C[k], k).map(s => s.sym);
+    }
+  } finally { Object.assign(GF, keep); setMode(); computeScores.S = null; computeScores(); }
+  return {C, value: out.value, mom: out.mom};
+}
+async function pfChkCalc() {
+  if (BACK || !PF.txns) return null;
+  const P = pfSummary(PF.txns), part = (r, t) => (r.srcs || String(r.remark || '').split(' · ')).some(x => /^PF Builder/.test(x) && x.split(/→|\+/).map(y => y.trim()).includes(t));
+  const rows = P.open.map(r => ({sym: r.sym, remark: r.remark || ''}));
+  const has = t => rows.filter(r => part(r, t)), parts = ['Value', 'Momentum', 'ETF', 'ETF pair'].filter(t => has(t).length);
+  const res = {parts, out: [], inn: [], pairs: [], C: null};
+  if (!parts.length) return res;
+  const L = pbLists(); res.C = L.C;
+  const held = new Set(rows.map(r => r.sym));
+  const diff = (t, list, why) => {
+    const on = new Set(list);
+    has(t).forEach(r => { if (!on.has(r.sym)) res.out.push({sym: r.sym, part: t, why}); });
+    list.forEach(x => { if (!held.has(x)) res.inn.push({sym: x, part: t, why}); });
+  };
+  if (parts.includes('Value')) diff('Value', L.value, 'Deep value · ' + pbSelTxt(L.C.value));
+  if (parts.includes('Momentum')) diff('Momentum', L.mom, 'Momentum · ' + pbSelTxt(L.C.mom));
+  if (parts.includes('ETF') || parts.includes('ETF pair')) {
+    try { PB_ETF = PB_ETF || await fetch('builder_etf.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null); } catch (e) { PB_ETF = null; }
+    const E = (PB_ETF && PB_ETF.etf) || {}, sc = {};
+    Object.keys(E).forEach(k => { const m = E[k].mom || []; sc[k] = ok(m[1]) && ok(m[2]) ? 0.5 * m[1] + 0.5 * m[2] : null; });
+    if (Object.keys(E).length) {
+      const pk = pbEtfPick(sc); res.pairs = pk.notes;
+      if (parts.includes('ETF pair')) diff('ETF pair', [...new Set(pk.notes.map(n => n.win))], 'ETF pairs: composite 6M/12M momentum');
+      if (parts.includes('ETF')) {                                         // ETFs held all the time: out only if no longer anywhere in the index part
+        const all = new Set(pk.list);
+        has('ETF').forEach(r => { if (!all.has(r.sym)) res.out.push({sym: r.sym, part: 'ETF'}); });
+        PB_ALWAYS.forEach(x => { if (!held.has(x)) res.inn.push({sym: x, part: 'ETF'}); });
+      }
+    }
+  }
+  const byName = new Map(); res.inn.forEach(x => byName.set(x.part + x.sym, x)); res.inn = [...byName.values()];
+  return res;
+}
+const pbSelTxt = c => `${c.uni === 'all' ? 'All lists' : c.uni} · by ${PB_KEYS[c.key] || c.key}, ${c.dir === 'asc' ? 'low → high' : 'high → low'} · ${c.n > 0 ? 'top ' + c.n : 'all that pass'}`;
+function pfChkRun() {                                         // worked out once per change (holdings, settings, data), quietly
+  const sig = [PF.txns ? PF.txns.length : 0, PF.txns && PF.txns.length ? PF.txns[PF.txns.length - 1].id : '', (() => { try { return localStorage.getItem('pb_sel') || ''; } catch (e) { return ''; } })(), D.asOf, MORE.join()].join('|');
+  if (sig === PF_CHK_SIG || PF_CHK_P) return;
+  PF_CHK_P = new Promise(r => (window.requestIdleCallback ? requestIdleCallback(r, {timeout: 1500}) : setTimeout(r, 200)))
+    .then(() => pfChkCalc()).then(c => {
+      PF_CHK_P = null; PF_CHK_SIG = sig; PF_CHK = c;
+      document.querySelectorAll('.pf-chk').forEach(b => { b.outerHTML = pfChkBtn(); });
+      document.querySelectorAll('[data-open="chk"]').forEach(b => b.addEventListener('click', pfChkOpen));
+    }).catch(() => { PF_CHK_P = null; });
+}
+async function pfChkOpen() {
+  if (!PF_CHK) { PF_CHK = await pfChkCalc().catch(() => null); }
+  const c = PF_CHK;
+  const row = x => `<tr><td><b data-news="${esc(x.sym)}" class="pf-sym" role="button">${esc(x.sym)}</b><small>${esc((TODAY.get(x.sym) || {}).name || '')}</small></td><td>${esc(x.part)}</td></tr>`;
+  const tbl = (t, a, cls) => `<h4 class="chk-h ${cls}">${t} <span>${a.length}</span></h4>` + (a.length
+    ? `<div class="chk-tw"><table class="chk-t"><thead><tr><th>Stock</th><th>Part</th></tr></thead><tbody>${a.map(row).join('')}</tbody></table></div>`
+    : '<p class="na">None.</p>');
+  const body = !c ? '<p class="na">Could not work out the PF Builder lists right now.</p>'
+    : !c.parts.length ? '<p class="na">No holdings came from PF Builder (their Remark starts with “PF Builder”), so there is nothing to compare. Add stocks from PF Builder to see this check.</p>'
+    : `<p class="chk-sub">Your holdings bought from PF Builder, compared with the PF Builder lists worked out from today's data with your PF Builder settings
+        (${c.C ? esc(pbSelTxt(c.C.value)) + ' for Value; ' + esc(pbSelTxt(c.C.mom)) + ' for Momentum' : ''}).</p>
+       ${c.pairs.length ? `<p class="chk-sub">${c.pairs.map(n => `${esc(n.c)} vs ${esc(n.d)}: ${esc(n.c)} ${ok(n.mc) ? fmt(n.mc, 1) : '–'} · ${esc(n.d)} ${ok(n.md) ? fmt(n.md, 1) : '–'} → slot holds <b>${esc(n.win)}</b>`).join('<br>')}</p>` : ''}
+       ${tbl('No longer on the list', c.out, 'out')}${tbl('New on the list (not held)', c.inn, 'in')}
+       <p class="chk-note">Lists change with the weekly data update. This is information only, not a recommendation to buy or sell.</p>`;
+  modal('PF Builder check', body, {noFocus: true, cls: 'chk-box'});
+}
 /* when the live prices were last fetched (same for every account): "12:20" today, else "13 Oct" */
 function pfAsOf() {
   const a = String((PF.mkt && PF.mkt.asOf) || '');
@@ -5024,8 +5183,8 @@ AUTH_WEB = {
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
                      # signed in and checked within the last hour → page shows at once; auth.js confirms quietly behind it
                      '<script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>\n'
-                     '<link rel="stylesheet" href="auth.css?v=32">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=32"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=33">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=33"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
