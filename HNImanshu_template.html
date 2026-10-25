@@ -228,6 +228,13 @@ body.day .toggle-thumb { transform: translateX(16px); }
 .grade-pill[data-g="C"]  { color: var(--C);  border-color: rgba(224,184,64,0.35); }
 .grade-pill[data-g="D"]  { color: var(--D);  border-color: rgba(224,152,120,0.35); }
 .grade-pill[data-g="E"]  { color: var(--E);  border-color: rgba(192,120,136,0.35); }
+/* day mode: the faint borders vanish on the light background, so each box takes a darker shade of its own grade colour */
+body.day .grade-pill[data-g="A"],  body.day .sheet-grade-btn[data-g="A"]  { border-color: color-mix(in srgb, var(--A) 75%, #000); }
+body.day .grade-pill[data-g="B+"], body.day .sheet-grade-btn[data-g="B+"] { border-color: color-mix(in srgb, var(--Bp) 75%, #000); }
+body.day .grade-pill[data-g="B"],  body.day .sheet-grade-btn[data-g="B"]  { border-color: color-mix(in srgb, var(--B) 75%, #000); }
+body.day .grade-pill[data-g="C"],  body.day .sheet-grade-btn[data-g="C"]  { border-color: color-mix(in srgb, var(--C) 75%, #000); }
+body.day .grade-pill[data-g="D"],  body.day .sheet-grade-btn[data-g="D"]  { border-color: color-mix(in srgb, var(--D) 75%, #000); }
+body.day .grade-pill[data-g="E"],  body.day .sheet-grade-btn[data-g="E"]  { border-color: color-mix(in srgb, var(--E) 75%, #000); }
 .grade-pill[data-g="A"].active  { background: var(--A);  color: var(--bg); border-color: var(--A); }
 .grade-pill[data-g="B+"].active { background: var(--Bp); color: var(--bg); border-color: var(--Bp); }
 .grade-pill[data-g="B"].active  { background: var(--B);  color: var(--bg); border-color: var(--B); }
