@@ -41,6 +41,7 @@ Fundamentals:
   from the same three CSVs. A failure there never blocks the screener.
 """
 
+import fcf                                   # owner earnings / free cash flow value + its backtest data
 import pandas as pd
 import numpy as np
 import json
@@ -723,6 +724,12 @@ def load_csv(path: Path, name_col: str, label: str, optional=False):
     df["QUALITY_SCORE"]   = calc_quality_score(df)       # 0–13.4
     df["COMBINED_SCORE"]  = (df["PIOTROSKI_SCORE"] + df["QUALITY_SCORE"]).round(2)
     df = calc_final_score(df)
+    try:                                                # owner earnings / FCF value (fcf.py): the Valuation page's "Owner earnings" tab
+        df = fcf.add_columns(df)
+        print(f"    Owner earnings value: {int(df['OE_VALUE'].notna().sum())} of {len(df)} stocks")
+    except Exception:
+        traceback.print_exc()
+        print("    [WARN] owner earnings skipped")
 
     # ── Debug stats ──────────────────────────────────────────────────────
     print(f"\n    {'Column':<22} {'Min':>6} {'Max':>6} {'Avg':>6}")
@@ -743,7 +750,7 @@ def load_csv(path: Path, name_col: str, label: str, optional=False):
     print(f"\n    Top 5:\n{top5.to_string(index=False)}\n")
 
     # ── Trim to output columns ───────────────────────────────────────────
-    needed = ["COMPANY_NAME"] + KEY_COLS
+    needed = ["COMPANY_NAME"] + KEY_COLS + fcf.OE_COLS
     df = df[[c for c in needed if c in df.columns]]
 
     df = df.replace([np.inf, -np.inf], None)
@@ -943,6 +950,28 @@ def write_builder_daily(out: Path) -> int:
         return 0
 
 
+PRICES_YEARLY = BASE / "prices_yearly.csv"           # fetch_prices.py --yearly: split-adjusted close on 1 July of every year since 2019
+
+
+def write_oe_backtest(out: Path) -> int:
+    """public/oe_backtest.json: every stock's owner-earnings value at each 1 July (only data known then) + its price that day.
+    The Valuation page's Backtest tab runs the strategy on it in the browser (top N, minimum gap, lists)."""
+    if not PRICES_YEARLY.exists():
+        print("  [oe backtest] prices_yearly.csv not there yet (run fetch_prices.py --yearly once): backtest tab waits for it")
+        if out.exists():
+            out.unlink()
+        return 0
+    prices = pd.read_csv(PRICES_YEARLY, low_memory=False)
+    frames = []
+    for key, f in (("n500", N500_CSV), ("sc250", SC250_CSV), ("mc250", MC250_CSV)):
+        if f.exists():
+            frames.append((key, pd.read_csv(f, low_memory=False)))
+    data = fcf.backtest_rows(frames, prices)
+    out.write_text(json.dumps(data, separators=(",", ":"), allow_nan=False), encoding="utf-8")
+    print(f"  [oe backtest] {len(data['stocks'])} stocks × {len(data['years'])} years → {out.name} ({out.stat().st_size // 1024} KB)")
+    return len(data["stocks"])
+
+
 def build_fundamentals():
     """Build public/factor.html (Factor Screener) from the same 3 CSVs (explicit paths, so test_*.csv is never read)."""
     print("\nBuilding Fundamentals page...\n")
@@ -985,11 +1014,29 @@ def build(deploy=False):
     n_nse = write_nse_list(OUTPUT.parent / "nse_all.json")
     write_builder_etf(OUTPUT.parent / "builder_etf.json")   # Portfolio Builder: ETF prices / 3-month returns
     write_builder_daily(OUTPUT.parent / "builder_daily.json")   # Portfolio Builder: saved daily ETF closes (backtest charts)
+    try:
+        write_oe_backtest(OUTPUT.parent / "oe_backtest.json")   # Valuation → Backtest tab
+    except Exception:
+        traceback.print_exc()
+        print("  [WARN] oe_backtest.json skipped")
 
     if data_sc250 is None:
         data_sc250 = []
     if data_mc250 is None:
         data_mc250 = []
+
+    # owner earnings year by year (popup table): its own file, fetched the first time a popup needs it (keeps the page light)
+    oe_hist = {}
+    for rows in (data_n500 or [], data_sc250, data_mc250, data_oth):
+        for r in rows:
+            for k in [k for k, v in r.items() if v is None and (k.startswith("OE_") or k.startswith("FCF_"))]:
+                del r[k]                                # empty owner-earnings fields: left out (the page reads missing as empty)
+            h = r.pop("OE_HIST", None)
+            if h and r.get("SYMBOL"):
+                oe_hist.setdefault(str(r["SYMBOL"]), h)
+    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    (OUTPUT.parent / "oe_hist.json").write_text(json.dumps(oe_hist, separators=(",", ":"), allow_nan=False), encoding="utf-8")
+    print(f"  [owner earnings] year-by-year table for {len(oe_hist)} stocks → oe_hist.json")
 
     print("\nLoading News...\n")
     # News is not baked into the page (it was ~70% of index.html): ONE compact public/news.json, shared by the

@@ -37,6 +37,8 @@ Credentials come from creds.py (repo secrets on GitHub, .env locally). Nothing s
     python fetch_prices.py --is-due      # exit 0 if a fetch is due (prices.csv ≥ MIN_AGE_DAYS old), else 1
     python fetch_prices.py --force       # fetch even if prices.csv is recent
     python fetch_prices.py --history --symbols A,B,C   # wipe etf_prices/, then ETFs + NIFTY 500 + these stocks, day by day (PF Builder chart)
+    python fetch_prices.py --yearly      # prices_yearly.csv: split-adjusted close on 1 July of every year since 2019, for the
+                                         # 3 lists + NIFTY 500 (Valuation → Owner earnings backtest; fcf_prices.yml, monthly, ~70 min)
     python fetch_prices.py --etf-only    # ONLY the Portfolio Builder ETFs + NIFTY 500 benchmark (cron.yml mode 4);
                                          # every other row of prices.csv stays as it is
 """
@@ -516,6 +518,99 @@ def run_history(symbols_arg):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# --yearly: one price a year (1 July) since 2019 → prices_yearly.csv (owner-earnings backtest on the Valuation page)
+# ─────────────────────────────────────────────────────────────────────────────
+YEARLY_CSV   = BASE / "prices_yearly.csv"
+YEARLY_FROM  = 2019                       # first buy date: 1 July 2019 (needs owner earnings for FY2018 + FY2019)
+YEARLY_M, YEARLY_D = 7, 1                 # 1 July: the year's annual results (to March) are all out by the end of May
+
+
+def run_yearly(limit=0, symbols_arg=""):
+	"""Daily candles from June 2019 to today for the 3 lists + NIFTY 500 (~8 requests a symbol), split / bonus adjusted to
+	TODAY's share basis exactly like summarise(), then ONE close per year: the last trading day on / before 1 July.
+	Columns: SYMBOL, PX_2019 … PX_<this year> (adjusted), LTP_ADJ, LTP_DATE, LISTED_FROM, CORP_ACTIONS, STATUS, FETCHED_AT.
+	A symbol that fails keeps its last good row."""
+	syms = []
+	for f in CSV_FILES[:3]:                                              # the 3 lists (Others are not in the backtest)
+		pth = BASE / f
+		if pth.exists():
+			syms += [str(x).strip().upper() for x in pd.read_csv(pth, usecols=["SYMBOL"])["SYMBOL"].dropna()]
+	syms = list(dict.fromkeys(syms))
+	if symbols_arg:
+		want = [x for x in symbols_arg.upper().split(",") if x]
+		syms = [x for x in syms if x in want]
+	if limit:
+		syms = syms[:limit]
+	todo = [BENCH_SYM] + syms
+	today = datetime.now(IST).date()
+	years = [y for y in range(YEARLY_FROM, today.year + 1) if date(y, YEARLY_M, YEARLY_D) <= today]
+	start = date(YEARLY_FROM, YEARLY_M, YEARLY_D) - timedelta(days=20)
+	tmap = build_token_map(scrip_master())
+	log(f"Yearly prices: {len(todo)} symbols  |  1 July of {years[0]} … {years[-1]}  |  candles {start} … {today}")
+	old = {}
+	if YEARLY_CSV.exists():
+		try:
+			old = {r["SYMBOL"]: r for r in pd.read_csv(YEARLY_CSV).to_dict("records")}
+		except Exception:
+			pass
+	api = Angel()
+	now_s = datetime.now(IST).strftime("%Y-%m-%d %H:%M")
+	n_all = len(todo)
+
+	def one(i, s):
+		base = {"SYMBOL": s, "FETCHED_AT": now_s}
+		if s not in tmap:
+			return {**base, "STATUS": "NO ANGEL TOKEN"}, f"  [{i:>4}/{n_all}] {s:<14} no Angel token", None
+		try:
+			c = api.candles(tmap[s][1], start, today)
+			if not c:
+				raise RuntimeError("no candles")
+			adj = adjusted_closes(c)
+			row = {**base, "LTP_ADJ": round(adj[-1][1], 4), "LTP_DATE": f"{adj[-1][0]:%Y-%m-%d}", "LISTED_FROM": f"{c[0][0]:%Y-%m-%d}",
+			       "CORP_ACTIONS": "; ".join(f"{d:%Y-%m-%d} ×{f:.4g} ({lab})" for d, f, lab in corporate_actions(c)), "STATUS": "OK"}
+			for y in years:
+				t = date(y, YEARLY_M, YEARLY_D)
+				b = [x for x in adj if x[0] <= t]
+				if b and (t - b[-1][0]).days <= 10:                            # not listed yet (or no trade for 10 days): left empty
+					row[f"PX_{y}"] = round(b[-1][1], 4)
+			got = sum(1 for y in years if f"PX_{y}" in row)
+			return row, f"  [{i:>4}/{n_all}] {s:<14} {got}/{len(years)} years  now {row['LTP_ADJ']:,.2f}  {len(c)} candles", True
+		except Exception as ex:
+			return {**base, "STATUS": f"FAILED: {str(ex)[:80]}"}, f"  [{i:>4}/{n_all}] {s:<14} FAILED  {str(ex)[:100]}", False
+
+	t0, res = time.monotonic(), {}
+	with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+		futs = {pool.submit(one, i, s): i for i, s in enumerate(todo, 1)}
+		for k, f in enumerate(as_completed(futs), 1):
+			row, line, ok = f.result()
+			res[futs[f]] = (row, ok)
+			log(line)
+			if k % 100 == 0:
+				el = time.monotonic() - t0
+				log(f"  ── {k}/{n_all} in {el / 60:.1f} min  |  ~{el / k * (n_all - k) / 60:.1f} min left  |  rate-limit replies {api.n_rate}")
+	for i in sorted(i for i, (r, o) in res.items() if o is False):       # one slow retry
+		time.sleep(1)
+		row, line, ok = one(i, todo[i - 1])
+		res[i] = (row, ok)
+		log("  retry" + line[1:])
+	rows = []
+	for i in range(1, n_all + 1):
+		row, ok = res[i]
+		prev = old.get(row["SYMBOL"])
+		if not ok and prev is not None and str(prev.get("STATUS", "")).startswith("OK"):
+			row = {**prev, "STATUS": f"OK (kept: fetch failed {now_s[:10]})"}
+		rows.append(row)
+	if symbols_arg or limit:                                             # partial run: keep every other saved row
+		fresh = {r["SYMBOL"]: r for r in rows}
+		rows = list(fresh.values()) + [r for k, r in old.items() if k not in fresh]
+	cols = ["SYMBOL"] + [f"PX_{y}" for y in years] + ["LTP_ADJ", "LTP_DATE", "LISTED_FROM", "CORP_ACTIONS", "STATUS", "FETCHED_AT"]
+	pd.DataFrame(rows).reindex(columns=cols).to_csv(YEARLY_CSV, index=False)
+	n_ok = sum(1 for r in rows if str(r.get("STATUS", "")).startswith("OK"))
+	log(f"prices_yearly.csv: {n_ok} / {len(rows)} OK  |  {(time.monotonic() - t0) / 60:.1f} min")
+	return 0 if n_ok else 1
+
+
 def prices_age_days():
 	"""Age of prices.csv in days from its newest FETCHED_AT (file times are reset by every git checkout),
 	falling back to the last git commit of the file. None = no usable prices.csv yet."""
@@ -575,7 +670,12 @@ def main():
 	ap.add_argument("--part", type=int, choices=(1, 2, 3), default=None,
 	                help="fetch only this third of the symbols (cron.yml: Saturday 02:00 / 04:00 / 06:00 IST); "
 	                     "the other thirds' rows in prices.csv stay as they are")
+	ap.add_argument("--yearly", action="store_true",
+	                help="prices_yearly.csv: split-adjusted close on 1 July of each year since 2019 (3 lists + NIFTY 500), "
+	                     "for the Valuation page's owner-earnings backtest. --limit / --symbols for a partial run")
 	a = ap.parse_args()
+	if a.yearly:
+		return run_yearly(a.limit, a.symbols)
 	if a.history:
 		return run_history(a.symbols)
 	if a.part or a.etf_only:
