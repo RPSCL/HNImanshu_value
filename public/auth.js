@@ -85,6 +85,22 @@ const GST = 0.18;
 // open soon). Nothing here is secret: the Cashfree secret, the prices that are charged and the right to switch Prime on all
 // live in the Worker; changing anything in this file (or in the browser) can't change what is charged or what is given.
 const PAY_HOOK = "https://hni-pay.himanshushekhar8.workers.dev";
+// Plus / Prime data files ("Others": every NSE stock outside the 3 lists) are published encrypted (paid.py). Any request
+// this page makes for one of them goes to the data Worker (data_worker.js) with the login token; it checks the plan and
+// sends the file back. Every other request is left alone.
+const DATA_HOOK = "https://hni-data.himanshushekhar8.workers.dev";
+const PAID_RE = /(^|\/)(fundamentals_(?:back_[A-Za-z0-9_]+_|hist_(?:then_)?)?oth|screener_oth)\.json$/;
+{
+  const plainFetch = window.fetch.bind(window);
+  window.fetch = async (input, init) => {
+    let u = null;
+    try { u = new URL(typeof input === "string" ? input : (input && input.url) || "", location.href); } catch (e) {}
+    if (!DATA_HOOK || !u || u.origin !== location.origin || !PAID_RE.test(u.pathname)) return plainFetch(input, init);
+    if (!current) return new Response('{"error":"Please log in."}', { status: 401, headers: { "Content-Type": "application/json" } });
+    const tok = await current.getIdToken();
+    return plainFetch(DATA_HOOK + "/f/" + u.pathname.split("/").pop(), { headers: { Authorization: "Bearer " + tok } });
+  };
+}
 const HOME = "./";                                // the screener
 const GATED = document.documentElement.dataset.auth === "required";
 // Valuation: its own header and Login slot, but only for signed-in visitors (data-auth="login"). Signed out → the landing page.
