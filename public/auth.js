@@ -296,7 +296,8 @@ function showUser(u, slot) {
   $(".au-out", el).addEventListener("click", async () => {
     try { localStorage.removeItem(PRO_HINT); } catch (e) {}
     await clearUserCache();
-    await signOut(auth); if (GATED) location.href = HOME; else location.reload();   // screener: reloads signed out
+    LOGGING_OUT = true;                                                  // logged out on purpose: plain landing page, no login box
+    await signOut(auth); if (GATED || LOGIN_ONLY) location.href = HOME; else location.reload();
   });
   EXTRA.forEach((it) => $(".au-menu", el).insertBefore(itemBtn(it, el), $(".au-out", el)));
   if (!el.parentNode) host.insertBefore(el, host.querySelector("#theme-toggle"));   // (no toggle in the slot: it simply goes at the end)
@@ -372,7 +373,7 @@ if (!EMBED) {
 }
 
 // ---------- Prime: purple theme, "Prime · till …" in the menu, the plans popup and payment ----------
-let PRIME = null, PLUS = null, planBox = null, planSel = 0, planBusy = false, planTier = "prime";
+let PRIME = null, PLUS = null, IS_ADMIN = false, LOGGING_OUT = false, planBox = null, planSel = 0, planBusy = false, planTier = "prime";
 let TRIAL_P = null, TRIAL_USED = null;                                 // free trial already used by this account? (hni_trials/{uid})
 let PLAN_NEXT = null;                                                  // page to open once paid (PF Builder), else stay here
 const isGoogle = (u) => !!(u && (u.providerData || []).some((x) => x.providerId === "google.com"));
@@ -388,7 +389,7 @@ const dateTxt = (ms) => new Date(ms).toLocaleDateString("en-IN", { day: "numeric
 const total = (p) => p.total != null ? p.total : p.pm * p.m;          // ₹ for the whole period, before GST
 const payable = (p) => Math.round(total(p) * (1 + GST));            // what Cashfree charges, GST included (the Worker works it out the same way)
 function markPro(admin, p, plus) {
-  PRIME = p;
+  PRIME = p; IS_ADMIN = !!admin;
   if (plus !== undefined) PLUS = plus;
   const on = !!(admin || p);
   PRO_NOW = on;
@@ -409,14 +410,14 @@ function markPro(admin, p, plus) {
 }
 function markUser() {                                                  // avatar ring + "Prime · till 18 Jan 2027" under the name
   document.querySelectorAll(".au-user").forEach((el) => {
-    el.classList.toggle("au-prime", !!PRIME);
-    el.classList.toggle("au-plusm", !PRIME && !!PLUS);
+    el.classList.toggle("au-prime", !!PRIME || IS_ADMIN);               // admins have everything Prime has: same crown
+    el.classList.toggle("au-plusm", !PRIME && !IS_ADMIN && !!PLUS);
     const who = $(".au-who", el);
     let t = who && $(".au-ptag", who);
     if (!who) return;
-    if (!PRIME && !PLUS) { if (t) t.remove(); return; }
+    if (!PRIME && !PLUS && !IS_ADMIN) { if (t) t.remove(); return; }
     if (!t) { t = document.createElement("span"); t.className = "au-ptag"; who.appendChild(t); }
-    t.textContent = !PRIME ? "Plus · " + (PLUS.until ? "valid till " + dateTxt(PLUS.until) : "no end date")
+    t.textContent = IS_ADMIN && !PRIME ? "Admin · everything in Prime" : !PRIME ? "Plus · " + (PLUS.until ? "valid till " + dateTxt(PLUS.until) : "no end date")
       : PRIME.trial ? "Free trial · till " + new Date(PRIME.until).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })
       : "Prime · " + (PRIME.until ? "valid till " + dateTxt(PRIME.until) : "no end date");
   });
@@ -851,7 +852,7 @@ const ready = new Promise((resolve) => {
     }
     stampAuth(!!u);
     resolve();
-    if ((GATED || LOGIN_ONLY) && !u) { toLanding(); return; }    // no login: the landing page, login box open, then back here
+    if ((GATED || LOGIN_ONLY) && !u) { if (!LOGGING_OUT) toLanding(); return; }    // no login: the landing page, login box open, then back here
     if (GATED || LOGIN_ONLY) document.documentElement.classList.add("auth-ok");   // show the page at once
     if (!GATED) paintSlot(u);                                  // Valuation (login-only) too: the user menu in its #au-slot
     markDemo(u);
