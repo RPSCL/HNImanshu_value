@@ -1363,6 +1363,10 @@ body.pf-mode #saveHtml,body.pf-mode #nav,body.pf-mode #meta{display:none!importa
 .pf-acts .btn.pf-chk b{position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#fff;color:#c42e2e;border:1px solid #d23b3b;font:700 10.5px/16px var(--mono)}
 .wip-box.chk-box{width:min(560px,100%)}
 .chk-sub{margin:0 0 10px;color:var(--mute);font-size:13px;line-height:1.55}
+.chk-set{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0 0 12px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);font-size:12.5px}
+.chk-set div{display:contents}
+.chk-set span{color:var(--faint);font:600 11px var(--mono);text-transform:uppercase;letter-spacing:.4px;padding-top:2px}
+.chk-set b{color:var(--ink);font-weight:600}
 .chk-h{margin:14px 0 6px;font:700 12px var(--mono);letter-spacing:.4px;text-transform:uppercase;display:flex;align-items:center;gap:8px}
 .chk-h span{font-weight:600;color:var(--faint);border:1px solid var(--line);border-radius:99px;padding:0 7px;font-size:11px}
 .chk-h.out{color:var(--bad)} .chk-h.in{color:var(--good)}
@@ -1554,6 +1558,13 @@ table.cmp thead th:first-child{left:0;z-index:3}
 .cmp-c td.ok i{color:var(--good)} .cmp-c td.no i{color:var(--bad)} .cmp-c td.na{color:var(--faint)}
 .cmp-c td small{display:block;font:500 11px var(--mono);color:var(--faint);margin-top:2px}
 .cmp-note{margin-top:12px}
+.cmp-g th span{position:sticky;left:12px}                 /* group name stays in view while the stocks scroll sideways */
+.cmp-more{display:none;margin:12px 0 0;width:100%;justify-content:center}
+.wip-box.cmp-box{width:min(760px,100%)}
+@media (max-width:700px){
+  .cmp-wrap:not(.cmp-full) .cmp-ex{display:none}            /* phone: the key rows only, the rest in the sheet */
+  .cmp-more{display:inline-flex}
+}
 @media (max-width:700px){table.cmp{min-width:0}table.cmp th,table.cmp td{padding:7px 8px}table.cmp tbody th{min-width:112px;width:112px;font-size:11.5px}
   .cmp-h{min-width:128px}.cmp-sym{font-size:13px}.cmp-n{margin-left:0}.cmp-light .tlw small{display:block;margin-top:3px}}
 .vd-w{font:700 9px var(--mono);font-style:normal;color:var(--brass);border:1px solid var(--brass);border-radius:4px;padding:0 4px;margin-left:4px;vertical-align:2px}
@@ -1581,7 +1592,7 @@ table.cmp thead th:first-child{left:0;z-index:3}
 @media (max-width:1100px){.pf-grid{grid-template-columns:1fr}.pf-right .wrap{max-height:340px}}
 @media (max-width:700px){
   .pf-top{gap:6px}
-  .pf-acts{width:100%;display:grid;grid-template-columns:1.25fr 1fr auto auto;gap:6px}   /* one row: Buy / Sell, Paper money, ₹; the time under it */
+  .pf-acts{width:100%;display:grid;grid-template-columns:1.25fr 1fr auto auto;gap:6px}   /* one row: Buy / Sell, Money, ₹; the time under it */
   .pf-upd{grid-column:1/-1;margin:0;font-size:11px;text-align:right}
   .pf-idx{order:-1;width:100%;justify-content:space-between;gap:4px 8px;font-size:11px;padding:2px 2px 4px}   /* phone: indices on top, one line */
   .pf-ix b{font-size:10px;margin-right:4px}
@@ -1809,7 +1820,7 @@ input:focus,select:focus{border-color:var(--brass);outline:none}
 .stat b small{font:600 11px var(--mono);margin-left:7px}
 .stat > span{color:var(--faint);font-size:10.5px;line-height:1.3}
 
-.wrap{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:78vh}
+.wrap{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:78vh;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
 table{border-collapse:separate;border-spacing:0;width:100%}
 th,td{padding:8px 12px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
 td{font:12.5px var(--mono)}
@@ -2124,7 +2135,9 @@ function momSteps(s) {                                  // how many of the 3 ste
 }
 let HAS_MOM = false;                                     // false until prices.csv carries momentum: the filter is then skipped
 function computeMomentum() {
-  const cols = [0, 1, 2, 3].map(i => S.map(s => momAt(s, i)).filter(ok).sort((a, b) => a - b));
+  // peers = the 3 lists only (like the Value score): whether "Others" has loaded yet must never move anyone's momentum,
+  // or PF Builder (its own hidden copy of this page) and the Portfolio page could rank the same stock differently
+  const cols = [0, 1, 2, 3].map(i => S.filter(s => !othOnly(s)).map(s => momAt(s, i)).filter(ok).sort((a, b) => a - b));
   S.forEach(s => {
     s.momS = null; s.momStair = 0;
     if (!s.mom) return;
@@ -2320,7 +2333,12 @@ function makeTable(id, cols, rows, opt={}) {
       tb.insertAdjacentHTML('beforeend', h); drawn = end;
     };
     more();
-    wrap._more = () => { if (wrap.scrollTop + wrap.clientHeight > wrap.scrollHeight - 400) more(); };
+    wrap._more = () => { if (wrap.scrollTop + wrap.clientHeight > wrap.scrollHeight - 1200) more(); };
+    /* smooth scrolling: the remaining rows are added a batch at a time while the phone is idle, so a scroll never has to wait
+       for new rows (that pause is what made long tables feel jerky) */
+    const tok = wrap._tok = (wrap._tok || 0) + 1, idle = window.requestIdleCallback || (f => setTimeout(f, 60));
+    const fill = () => { if (wrap._tok !== tok || !tb.isConnected || drawn >= data.length) return; more(); idle(fill, {timeout: 800}); };
+    idle(fill, {timeout: 800});
     if (opt.onRow) tb.addEventListener('click', e => { const tr = e.target.closest('tr[data-i]'); if (tr) opt.onRow(data[+tr.dataset.i]); });
     if (!data.length) tb.innerHTML = `<tr><td class="l na" colspan="${cols.length+1}">No stocks match these filters. Loosen a filter or press Reset.</td></tr>`;
     tbl.appendChild(tb);
@@ -2793,9 +2811,10 @@ function syncFab() {                                       // shown only on tabs
   FAB.querySelector('.cnt').textContent = c ? c.textContent : '';
 }
 FAB.addEventListener('click', () => { const b = view.querySelector('.fbox .fbtn'); if (b) b.click(); });
-new MutationObserver(syncFab).observe(view, {childList:true, subtree:true});
+let FAB_RAF = 0;
+new MutationObserver(() => { if (!FAB_RAF) FAB_RAF = requestAnimationFrame(() => { FAB_RAF = 0; syncFab(); }); }).observe(view, {childList:true, subtree:true});   // once a frame at most
 let fabScrollT = 0, fabHoldT = 0;
-const fabDim = on => FAB.classList.toggle('dim', on);
+const fabDim = on => { if (FAB.classList.contains('dim') !== on) FAB.classList.toggle('dim', on); };   // touch the DOM only on a change
 addEventListener('scroll', () => {                         // fades while the page (or a table) scrolls, back 0.6 s after it stops
   fabDim(true); clearTimeout(fabScrollT); fabScrollT = setTimeout(() => { if (!fabHoldT) fabDim(false); }, 600);
 }, {passive:true, capture:true});
@@ -3434,12 +3453,12 @@ function pfBasketOpen() {
     <p class="pf-calc">${items.length} picks${b.scope ? ' (' + esc(b.scope) + ')' : ''} · fund ${rs(b.fund)}${b.date ? ' · data as of ' + esc(b.date) : ''}. Quantities are at the LTP and stay within your cash, charges included.</p>
     <div class="pfb-tw"><table class="pfb-tbl"><thead><tr><th>Stock</th><th class="r">Qty</th><th class="r">LTP ₹</th><th class="r">Amount ₹</th></tr></thead>
       <tbody>${fit.rows.map(row).join('')}</tbody></table></div>
-    <div class="pfb-sum"><span>Paper cash available <b>${rs(cash)}</b></span><span>To invest <b>${rs(fit.tot)}</b> <i>incl. charges ${rs(fit.rows.reduce((s, r) => s + r.ch, 0))}</i></span><span>Paper cash after <b>${rs(cash - fit.tot)}</b></span></div>
+    <div class="pfb-sum"><span>Cash available <b>${rs(cash)}</b></span><span>To invest <b>${rs(fit.tot)}</b> <i>incl. charges ${rs(fit.rows.reduce((s, r) => s + r.ch, 0))}</i></span><span>Cash after <b>${rs(cash - fit.tot)}</b></span></div>
     ${fit.rows.some(r => !r.qty) ? '<p class="pf-calc">Greyed rows: one unit costs more than that pick\'s share of the cash, so they are skipped.</p>' : ''}
-    ${short > 0 ? `<p class="pf-calc">Your paper cash is ${rs(short)} short of the builder's ${rs(b.fund)}${cash > 0 ? ', so every pick is scaled down alike' : ''}.</p>` : ''}
+    ${short > 0 ? `<p class="pf-calc">Your cash is ${rs(short)} short of the builder's ${rs(b.fund)}${cash > 0 ? ', so every pick is scaled down alike' : ''}.</p>` : ''}
     <p class="pf-err"></p>
-    <button type="submit" class="btn primary"${fit.rows.some(r => r.qty) ? '' : ' disabled'}>Buy within paper cash · ${fit.rows.filter(r => r.qty).length} stocks</button>
-    ${short > 0 ? `<button type="button" class="btn ghost" data-payin>Paper pay-in ${rs(short)} and buy the full list</button>` : ''}
+    <button type="submit" class="btn primary"${fit.rows.some(r => r.qty) ? '' : ' disabled'}>Buy within cash · ${fit.rows.filter(r => r.qty).length} stocks</button>
+    ${short > 0 ? `<button type="button" class="btn ghost" data-payin>Pay in ${rs(short)} and buy the full list</button>` : ''}
   </form>`, {sheet: true});
   const f = $('form', w);
   const save = async (plan, payIn) => {
@@ -3620,7 +3639,7 @@ const PFC = {
   closed: {k:'closed', label:'Closed', v:r => r.last || '', f:r => r.last ? esc(r.last) : NA},
   rm: {k:'rm', label:'', noCsv:1, v:r => null, f:r => `<button type="button" class="pf-rm" data-rm="${r.ci}" title="Remove this closed position and all its trades">Remove</button>`},
 };
-const TX_LABEL = {buy:'Buy', sell:'Sell', in:'Paper pay-in', out:'Paper pay-out'};
+const TX_LABEL = {buy:'Buy', sell:'Sell', in:'Pay in', out:'Pay out'};
 const TXC = {
   src: {k:'src', label:'Remark', l:1, tip:'Where the trade came from', v:r => r.x.src || '', f:r => r.x.src ? `<span class="pf-src">${esc(r.x.src)}</span>` : NA},
   date: {k:'date', label:'Date', l:1, v:r => r.x.date || '', f:r => r.x.date ? esc(r.x.date) : NA},
@@ -3629,8 +3648,8 @@ const TXC = {
   what: {k:'what', label:'Detail', l:1, v:r => r.sym, x:r => r.x.sym ? `${r.x.sym} ${r.x.qty} @ ${r.x.px}` : '',
          f:r => r.x.sym ? `<b>${esc(r.x.sym)}</b> <span class="na">${fmt(r.x.qty, 0)} @ ${fmt(r.x.px, 2)}</span>` : NA},
   mwhat: {k:'what', label:'Detail', l:1, v:r => r.sym, f:r => (r.x.sym ? `<b>${esc(r.x.sym)}</b> <span class="na">${fmt(r.x.qty, 0)} @ ${fmt(r.x.px, 2)}</span>` : NA) + (r.x.src ? `<div class="pf-src">${esc(r.x.src)}</div>` : '')},   // phone: remark under the detail
-  amt: {k:'tamt', label:'Paper cash ₹', tip:'Effect on paper cash, charges included', v:r => r.amt,
-        f:r => `<span title="${r.x.ch ? 'Charges ₹' + fmt(r.x.ch, 2) + ' · ' : ''}Paper cash after ₹${fmt(r.cash, 0)}">${signed(r.amt)}</span>`},
+  amt: {k:'tamt', label:'Cash ₹', tip:'Effect on cash, charges included', v:r => r.amt,
+        f:r => `<span title="${r.x.ch ? 'Charges ₹' + fmt(r.x.ch, 2) + ' · ' : ''}Cash after ₹${fmt(r.cash, 0)}">${signed(r.amt)}</span>`},
   act: {k:'tact', label:'', noCsv:1, v:r => null, f:r => PF_LAST && PF_LAST.lock.has(r.x.id)
          ? `<span class="pf-lock" title="Part of a closed position: remove it from the Closed list instead">🔒</span>` : `<span class="pf-acts2"><button type="button" class="pf-ico" data-edit="${esc(r.x.id)}" title="Edit" aria-label="Edit">✎</button><button type="button" class="pf-ico del" data-del="${esc(r.x.id)}" title="Delete" aria-label="Delete">×</button></span>`},
 };
@@ -3737,14 +3756,14 @@ function portfolioView() {
     ${pfNotListed(open)}
     ${R.bad ? `<p class="pf-err">A sale of ${esc(R.bad.sym)} on ${esc(R.bad.date || 'an undated day')} is larger than the shares held then. Check the dates in Transactions.</p>` : ''}
     <div class="pf-sum">
-      ${tile('Net gain', arr(gain) + rs(gain, true), gainPct == null ? '' : pctTxt(gainPct, 1) + ' on paper money put in', 'gain')}
+      ${tile('Net gain', arr(gain) + rs(gain, true), gainPct == null ? '' : pctTxt(gainPct, 1) + ' on money put in', 'gain')}
       ${tile('Day gain', plain(P.day), P.day == null ? 'live prices not on yet' : pctTxt(P.dayPct))}
-      ${tile('Net worth', rs(worth), 'holdings + paper cash')}
-      ${tile('Paper cash', `<span class="${R.cash < 0 ? 'dn' : ''}">${rs(R.cash)}</span>`, R.cash < 0 && !R.payIn ? 'add a paper pay-in' : 'free to invest')}
+      ${tile('Net worth', rs(worth), 'holdings + cash')}
+      ${tile('Cash', `<span class="${R.cash < 0 ? 'dn' : ''}">${rs(R.cash)}</span>`, R.cash < 0 && !R.payIn ? 'add a pay-in' : 'free to invest')}
       ${tile('Holdings', rs(hold), `${open.length} open · cost ${rs(cost)}`)}
       ${tile('Unrealised', plain(unreal), cost ? `${pctTxt(unreal / cost * 100, 1)} on cost` : 'open positions')}
       ${tile('Realised', plain(R.realized - R.charges), `after ₹${fmt(R.charges, 0)} charges`)}
-      ${tile('Paper money in', rs(deposits), `in ${rs(R.payIn)} · out ${rs(R.payOut)}`)}
+      ${tile('Money in', rs(deposits), `in ${rs(R.payIn)} · out ${rs(R.payOut)}`)}
     </div>
     <div class="pf-grid"><div class="pf-left"></div><div class="pf-right"></div></div>`);
   const L = $('.pf-left'), RT = $('.pf-right'), phone = isPhone();
@@ -3752,24 +3771,24 @@ function portfolioView() {
                       : [PFC.edit, PFC.sym, PFC.rem, PFC.vd, PFC.qty, PFC.avg, PFC.cmp, ...(P.day != null ? [PFC.day] : []), PFC.val, PFC.pnl, PFC.wt, PFC.score, PFC.mom, PFC.trend, PFC.flags];
   open.forEach(r => { r.vd = verdict(r.sym, P); });
   pfPanel(L, 'Holdings', open.length, makeTable('pf', hCols, open, {sortKey:'val', sortDir:-1, search:!phone || open.length > 6, noIndex:true, csv:() => 'Portfolio_holdings'}));
-  if (!open.length) L.querySelector('tbody').innerHTML = `<tr><td class="l na" colspan="13">No open holdings. Start with <b>Paper pay-in</b> (your opening paper cash), then <b>+ Buy / Sell</b> — or tap the bag next to any industry name on the other tabs.</td></tr>`;
+  if (!open.length) L.querySelector('tbody').innerHTML = `<tr><td class="l na" colspan="13">No open holdings. Start with <b>Pay in</b> (your opening cash), then <b>+ Buy / Sell</b> — or tap the bag next to any industry name on the other tabs.</td></tr>`;
   pfNewsPanel(RT, open.map(r => r.sym));
   pfPanel(RT, 'Closed', closed.length, makeTable('pfc', phone ? [PFC.csym, PFC.net, PFC.rm] : [PFC.csym, PFC.cqty, PFC.cpx, PFC.net, PFC.closed, PFC.rm],
     closed, {sortKey:'closed', sortDir:-1, noIndex:true, csv:() => 'Portfolio_closed'}));
-  if (!closed.length) RT.querySelector('tbody').innerHTML = '<tr><td class="l na" colspan="5">Stocks you sell fully move here; the paper money goes back to Paper cash.</td></tr>';
+  if (!closed.length) RT.querySelector('tbody').innerHTML = '<tr><td class="l na" colspan="5">Stocks you sell fully move here; the money goes back to Cash.</td></tr>';
   const ledRows = R.led.map(l => ({x: l.x, cash: l.cash, sym: l.x.sym || '', name: '', ind: '',
     amt: l.x.t === 'in' ? l.x.amt : l.x.t === 'out' ? -l.x.amt : l.x.t === 'buy' ? -(l.x.qty * l.x.px + (l.x.ch || 0)) : l.x.qty * l.x.px - (l.x.ch || 0)})).reverse();
   pfPanel(RT, 'Transactions', ledRows.length, makeTable('pft', phone ? [TXC.mtype, TXC.mwhat, TXC.amt, TXC.act] : [TXC.date, TXC.type, TXC.what, TXC.src, TXC.amt, TXC.act],
     ledRows, {noIndex:true, csv:() => 'Portfolio_transactions'}));
   const tb = RT.querySelectorAll('.tbar')[1];
   if (tb && ledRows.length) tb.querySelector('.pf-h').insertAdjacentHTML('afterend', '<button type="button" class="pf-rm all" id="pfWipe" title="Delete every entry in your portfolio">Delete all</button>');
-  if (!ledRows.length) RT.querySelectorAll('tbody')[1].innerHTML = '<tr><td class="l na" colspan="5">Every Paper pay-in, Paper pay-out, Buy and Sell shows here, newest first. ✎ edits, × deletes.</td></tr>';
+  if (!ledRows.length) RT.querySelectorAll('tbody')[1].innerHTML = '<tr><td class="l na" colspan="5">Every Pay in, Pay out, Buy and Sell shows here, newest first. ✎ edits, × deletes.</td></tr>';
   pfWireTop();
 }
 /* the action buttons and "Delete all" (desktop and phone) */
 function pfWireTop() {
   view.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => {
-    const k = b.dataset.open; k === 'trade' ? pfTradeForm({}) : k === 'rates' ? pfRatesForm() : k === 'ltp' ? pfRefresh(b) : k === 'chk' ? pfChkOpen() : pfCashForm({t: 'in'});   // cash: Paper money in / out picked inside
+    const k = b.dataset.open; k === 'trade' ? pfTradeForm({}) : k === 'rates' ? pfRatesForm() : k === 'ltp' ? pfRefresh(b) : k === 'chk' ? pfChkOpen() : pfCashForm({t: 'in'});   // cash: Pay in / out picked inside
   }));
   pfChkRun();
   const wipe = $('#pfWipe');
@@ -3781,7 +3800,7 @@ const IC_TAX = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stro
 const IC_REF = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.35-5.65"/><path d="M20 4v4.6h-4.6"/></svg>';
 const pfActsHtml = () => `<div class="pf-top"><div class="pf-acts">
     <button type="button" class="btn primary" data-open="trade">+ Buy / Sell</button>
-    <button type="button" class="btn" data-open="cash">Paper money in / out</button>
+    <button type="button" class="btn" data-open="cash">Pay in / out</button>
     <button type="button" class="btn ghost ico" data-open="rates" title="Charges &amp; taxes on each trade" aria-label="Charges and taxes">${IC_TAX}</button>
     ${pfChkBtn()}
     ${pfAsOf().short ? `<span class="pf-upd" title="Live prices are pushed in by themselves during market hours">*Last updated at ${esc(pfAsOf().today ? pfAsOf().short : pfAsOf().full)}</span>` : ''}
@@ -3825,8 +3844,8 @@ function pbEtfPick(sc) {                                      // = PF Builder's 
   const notes = PB_PAIRS.map(([c, d]) => { const mc = sc[c], md = sc[d]; return {c, d, mc, md, win: ok(mc) && mc > 0 && (!ok(md) || mc > md) ? c : d}; });
   return {notes, list: [...new Set([...notes.map(n => n.win), ...PB_ALWAYS])]};
 }
-function pbLists() {                                          // today's PF Builder lists, worked out in this page (view restored after)
-  const C = pbSel(), keep = {uni: GF.uni, psu: GF.psu, semi: GF.semi};
+function pbLists(C0) {                                        // today's PF Builder lists, worked out in this page (view restored after)
+  const C = C0 || pbSel(), keep = {uni: GF.uni, psu: GF.psu, semi: GF.semi};
   const vf = Object.assign({}, VF_DEF, (VF_PRESETS.find(p => p.name === 'Deep value') || {}).st);
   const day = 864e5, cut = new Date(Date.parse(D.asOf) - 365 * day).toISOString().slice(0, 10);
   let first = '9999'; D.stocks.forEach(s => { if (s.lf && s.lf < first) first = s.lf; });
@@ -3849,9 +3868,15 @@ async function pfChkCalc() {
   const P = pfSummary(PF.txns), part = (r, t) => (r.srcs || String(r.remark || '').split(' · ')).some(x => /^PF Builder/.test(x) && x.split(/→|\+/).map(y => y.trim()).includes(t));
   const rows = P.open.map(r => ({sym: r.sym, remark: r.remark || ''}));
   const has = t => rows.filter(r => part(r, t)), parts = ['Value', 'Momentum', 'ETF', 'ETF pair'].filter(t => has(t).length);
-  const res = {parts, out: [], inn: [], pairs: [], C: null};
+  const res = {parts, out: [], inn: [], pairs: [], C: null, saved: null};
   if (!parts.length) return res;
-  const L = pbLists(); res.C = L.C;
+  /* the settings kept with the last "Add all stocks to portfolio" (each buy carries them, pbs) win over this browser's PF Builder settings */
+  const held0 = new Set(rows.map(r => r.sym));
+  const last = PF.txns.filter(x => x.t === 'buy' && x.pbs && held0.has(x.sym)).sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))).pop();
+  const sv = last && last.pbs;
+  const norm = (c, d) => c ? {uni: String(c.uni || 'all'), key: PB_KEYS[c.key] ? c.key : d.key, dir: c.dir === 'asc' ? 'asc' : 'desc', n: Math.max(0, parseInt(c.n, 10) || 0)} : d;
+  if (sv) res.saved = {s: sv.s, d: sv.d || last.date, C: {value: norm(sv.v, PB_SEL_DEF.value), mom: norm(sv.m, PB_SEL_DEF.mom)}};
+  const L = pbLists(res.saved ? res.saved.C : null); res.C = L.C;
   const held = new Set(rows.map(r => r.sym));
   const diff = (t, list, why) => {
     const on = new Set(list);
@@ -3897,8 +3922,11 @@ async function pfChkOpen() {
     : '<p class="na">None.</p>');
   const body = !c ? '<p class="na">Could not work out the PF Builder lists right now.</p>'
     : !c.parts.length ? '<p class="na">No holdings came from PF Builder (their Remark starts with “PF Builder”), so there is nothing to compare. Add stocks from PF Builder to see this check.</p>'
-    : `<p class="chk-sub">Your holdings bought from PF Builder, compared with the PF Builder lists worked out from today's data with your PF Builder settings
-        (${c.C ? esc(pbSelTxt(c.C.value)) + ' for Value; ' + esc(pbSelTxt(c.C.mom)) + ' for Momentum' : ''}).</p>
+    : `<p class="chk-sub">Your holdings bought from PF Builder, compared with the PF Builder lists worked out from today's data with
+        ${c.saved ? 'the settings you used for <b>Add all stocks to portfolio</b>' : 'your PF Builder settings'}.</p>
+       <div class="chk-set">${c.saved && Array.isArray(c.saved.s) ? `<div><span>Split</span><b>Index ETFs ${c.saved.s[0]}% · Value ${c.saved.s[1]}% · Momentum ${c.saved.s[2]}%</b></div>` : ''}
+         ${c.C ? `<div><span>Value</span><b>${esc(pbSelTxt(c.C.value))}</b></div><div><span>Momentum</span><b>${esc(pbSelTxt(c.C.mom))}</b></div>` : ''}
+         ${c.saved && c.saved.d ? `<div><span>Lists of</span><b>${esc(c.saved.d)}</b></div>` : ''}</div>
        ${c.pairs.length ? `<p class="chk-sub">${c.pairs.map(n => `${esc(n.c)} vs ${esc(n.d)}: ${esc(n.c)} ${ok(n.mc) ? fmt(n.mc, 1) : '–'} · ${esc(n.d)} ${ok(n.md) ? fmt(n.md, 1) : '–'} → slot holds <b>${esc(n.win)}</b>`).join('<br>')}</p>` : ''}
        ${tbl('No longer on the list', c.out, 'out')}${tbl('New on the list (not held)', c.inn, 'in')}
        <p class="chk-note">Lists change with the weekly data update. This is information only, not a recommendation to buy or sell.</p>`;
@@ -3944,13 +3972,13 @@ function pfPhone(P) {
       <div class="pf-zl"><span>P&amp;L</span><b>${plain(pnl, 2)}<small>${inv ? pctTxt(pnl / inv * 100) : ''}</small></b></div>
       <div class="pf-zl"><span>Day's P&amp;L</span><b>${P.day == null ? '<small>live prices not on yet</small>' : `${plain(P.day, 2)}<small>${pctTxt(P.dayPct)}</small>`}</b></div>
       <details class="pf-cash"${cashOpen ? ' open' : ''}>
-        <summary><span>Paper cash <b>${rs(R.cash)}</b></span><span>Net gain <b>${arr(P.gain)}${rs(P.gain, true)}</b></span></summary>
+        <summary><span>Cash <b>${rs(R.cash)}</b></span><span>Net gain <b>${arr(P.gain)}${rs(P.gain, true)}</b></span></summary>
         <div class="pf-cg">
-          ${kv('Net worth', rs(P.worth), 'holdings + paper cash')}
-          ${kv('Net gain', arr(P.gain) + rs(P.gain, true), P.gainPct == null ? '' : pctTxt(P.gainPct, 1) + ' on paper money put in')}
-          ${kv('Paper cash', rs(R.cash), R.cash < 0 && !R.payIn ? 'add a paper pay-in' : 'free to invest')}
+          ${kv('Net worth', rs(P.worth), 'holdings + cash')}
+          ${kv('Net gain', arr(P.gain) + rs(P.gain, true), P.gainPct == null ? '' : pctTxt(P.gainPct, 1) + ' on money put in')}
+          ${kv('Cash', rs(R.cash), R.cash < 0 && !R.payIn ? 'add a pay-in' : 'free to invest')}
           ${kv('Realised', plain(R.realized - R.charges), `after ₹${fmt(R.charges, 0)} charges`)}
-          ${kv('Paper money in', rs(P.deposits), `in ${rs(R.payIn)} · out ${rs(R.payOut)}`)}
+          ${kv('Money in', rs(P.deposits), `in ${rs(R.payIn)} · out ${rs(R.payOut)}`)}
         </div>
       </details>
     </section>
@@ -3970,14 +3998,14 @@ function pfPhone(P) {
       <div class="a"><span>Invested ${f2(r.qty * r.avg)}</span><span>LTP ${r.ltp == null ? '–' : f2(r.ltp)}${r.dayPct != null ? ` <em class="${r.day >= 0 ? 'up' : 'dn'}">(${pctTxt(r.dayPct)})</em>` : ''}</span></div>
       ${r.remark ? `<div class="a pf-zsrc"><span class="pf-src">${esc(r.remark)}</span></div>` : ''}
     </div>`; }).join('')
-    : '<p class="na pf-zempty">No open holdings. Start with <b>Paper pay-in</b>, then <b>+ Buy / Sell</b>, or tap the bag next to any industry name on the other tabs.</p>';
+    : '<p class="na pf-zempty">No open holdings. Start with <b>Pay in</b>, then <b>+ Buy / Sell</b>, or tap the bag next to any industry name on the other tabs.</p>';
   pfNewsPanel(host, open.map(r => r.sym));
   // closed: SYMBOL / net ; bought · sold · date / Remove
   sec('Closed', closed.length).innerHTML = closed.length ? closed.slice().sort((a, b) => String(b.last || '').localeCompare(String(a.last || ''))).map(r => `<div class="pf-zt">
       <div class="b"><b>${esc(r.sym)}</b><b>${signed(r.realized - r.charges)}</b></div>
       <div class="a"><span>${fmt(r.sQty, 0)} sold · ${f2(r.bQty ? r.bAmt / r.bQty : null)} → ${f2(r.sQty ? r.sAmt / r.sQty : null)}${r.last ? ' · ' + esc(r.last) : ''}</span>
         <button type="button" class="pf-rm" data-rm="${r.ci}">Remove</button></div></div>`).join('')
-    : '<p class="na pf-zempty">Stocks you sell fully move here; the paper money goes back to Paper cash.</p>';
+    : '<p class="na pf-zempty">Stocks you sell fully move here; the money goes back to Cash.</p>';
   // transactions: Type · date / cash effect ; detail / ✎ ×
   const led = R.led.slice().reverse();
   sec('Transactions', led.length, led.length ? '<button type="button" class="pf-rm all" id="pfWipe" title="Delete every entry in your portfolio">Delete all</button>' : '').innerHTML = led.length ? led.map(l => {
@@ -3985,8 +4013,8 @@ function pfPhone(P) {
     const act = R.lock.has(x.id) ? '<span class="pf-lock" title="Part of a closed position: remove it from the Closed list instead">🔒</span>'
       : `<span class="pf-acts2"><button type="button" class="pf-ico" data-edit="${esc(x.id)}" aria-label="Edit">✎</button><button type="button" class="pf-ico del" data-del="${esc(x.id)}" aria-label="Delete">×</button></span>`;
     return `<div class="pf-zt"><div class="a"><span><span class="pf-t ${x.t}">${TX_LABEL[x.t]}</span> ${esc(x.date || '')}</span><span>${signed(amt)}</span></div>
-      <div class="b"><span>${x.sym ? `<b>${esc(x.sym)}</b> ${fmt(x.qty, 0)} @ ${f2(x.px)}` : 'Paper cash'}${x.ch ? ` <small>· ch ₹${f2(x.ch)}</small>` : ''}</span>${act}</div></div>`; }).join('')
-    : '<p class="na pf-zempty">Every Paper pay-in, Paper pay-out, Buy and Sell shows here, newest first.</p>';
+      <div class="b"><span>${x.sym ? `<b>${esc(x.sym)}</b> ${fmt(x.qty, 0)} @ ${f2(x.px)}` : 'Cash'}${x.ch ? ` <small>· ch ₹${f2(x.ch)}</small>` : ''}</span>${act}</div></div>`; }).join('')
+    : '<p class="na pf-zempty">Every Pay in, Pay out, Buy and Sell shows here, newest first.</p>';
   const zs = $('#pfZSort'), zd = $('#pfZDir');
   if (zs) zs.addEventListener('change', () => { lsSet('pfzsort', zs.value); lsSet('pfzdir', PF_ZSORT[zs.value].up ? 'up' : 'dn'); pfRedraw(); });
   if (zd) zd.addEventListener('click', () => { lsSet('pfzdir', SD > 0 ? 'dn' : 'up'); pfRedraw(); });
@@ -4032,7 +4060,7 @@ document.addEventListener('click', e => {
     const x = PF.txns.find(t => t.id === b.dataset.del); if (!x) return;
     const rest = PF.txns.filter(t => t !== x), bad = pfReplay(rest).bad;
     if (bad) return modal('Can\'t delete', `<p>Without this ${TX_LABEL[x.t].toLowerCase()}, the sale of ${esc(bad.sym)}${bad.date ? ' on ' + esc(bad.date) : ''} would be more than the shares held. Delete or edit that sale first.</p>`);
-    return typeConfirm(`Delete ${TX_LABEL[x.t].toLowerCase()}`, `${x.sym ? `<b>${esc(x.sym)}</b> ${fmt(x.qty, 0)} @ ₹${fmt(x.px, 2)}` : `₹${fmt(x.amt, 0)}`}${x.date ? ' on ' + esc(x.date) : ''}. Holdings and paper cash are recalculated.`,
+    return typeConfirm(`Delete ${TX_LABEL[x.t].toLowerCase()}`, `${x.sym ? `<b>${esc(x.sym)}</b> ${fmt(x.qty, 0)} @ ₹${fmt(x.px, 2)}` : `₹${fmt(x.amt, 0)}`}${x.date ? ' on ' + esc(x.date) : ''}. Holdings and cash are recalculated.`,
       async () => { PF.txns = rest; await pfSave(); route(); });
   }
   if (b.dataset.rm != null) {
@@ -4418,7 +4446,7 @@ function pfTradeForm(x) {
     <p class="pf-calc"></p><p class="pf-err"></p>
     <div class="pf-fix" hidden><span>No price for this symbol. Renamed or wrong?</span><button type="button" class="btn ghost" data-fix>Update symbol / name</button></div>
     <button type="submit" class="btn primary">Save</button></form>`, {noFocus: true, ov: true});   // no box chosen yet: typing is routed below
-  const f = $('form', w); let t = x.t || 'buy', chTyped = edit && x.ch != null, touched = false;
+  const f = $('form', w); let t = x.t || 'buy', chTyped = edit && x.ch != null, touched = false, autoQ = '';
   f.sym.value = x.sym || ''; f.qty.value = x.qty || ''; f.px.value = x.px || ''; f.date.value = x.date || today(); f.ch.value = edit ? (x.ch || 0) : '';
   f.nm.value = x.name || '';
   const seg = () => w.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
@@ -4430,16 +4458,20 @@ function pfTradeForm(x) {
     const h = sym ? held() : 0; $('.held', w).textContent = sym && h ? `(holding ${fmt(h, 0)})` : '';
     const sb = w.querySelector('.seg [data-t=sell]'); sb.disabled = !(h > 0); sb.title = h > 0 ? '' : 'Nothing to sell: you hold none';
     if (t === 'sell' && !(h > 0)) { t = 'buy'; seg(); }        // can't sell what you don't hold
+    if (!edit && t === 'sell' && h > 0 && (f.qty.value === '' || autoQ === f.qty.value) && f.qty.value !== String(+h.toFixed(4))) {
+      f.qty.value = String(+h.toFixed(4)); autoQ = f.qty.value;   // Sell: the whole holding is filled in (change it for a part sale)
+    } else if (t === 'buy' && autoQ && f.qty.value === autoQ) { f.qty.value = ''; autoQ = ''; }   // back to Buy: the filled-in qty goes
+    const q2 = +f.qty.value;
     $('.pf-name', w).hidden = !sym || TODAY.has(sym);
     $('.pf-fix', w).hidden = !(sym && h > 0 && L == null);     // a holding with no price at all: offer to fix its symbol
-    const over = t === 'sell' && q > h + 1e-9;                  // selling more than held: red right away
+    const over = t === 'sell' && q2 > h + 1e-9;                 // selling more than held: red right away
     f.qty.classList.toggle('bad', over);
     $('.held', w).classList.toggle('bad', over);
     f.querySelector('button[type=submit]').disabled = over;
-    $('.pf-err', w).textContent = over ? `You hold ${fmt(h, 0)}; you can't sell ${fmt(q, 0)}.` : ($('.pf-err', w).textContent.startsWith('You hold') ? '' : $('.pf-err', w).textContent);
-    if (!chTyped) f.ch.value = q > 0 && p > 0 ? pfCharges(t, q, p) : '';
+    $('.pf-err', w).textContent = over ? `You hold ${fmt(h, 0)}; you can't sell ${fmt(q2, 0)}.` : ($('.pf-err', w).textContent.startsWith('You hold') ? '' : $('.pf-err', w).textContent);
+    if (!chTyped) f.ch.value = q2 > 0 && p > 0 ? pfCharges(t, q2, p) : '';
     const ch = +f.ch.value || 0;
-    $('.pf-calc', w).textContent = q > 0 && p > 0 ? (t === 'buy' ? `Paper cash out ₹${fmt(q * p + ch, 2)} (₹${fmt(q * p, 2)} + charges)` : `Paper cash in ₹${fmt(q * p - ch, 2)} (₹${fmt(q * p, 2)} − charges)`) : '';
+    $('.pf-calc', w).textContent = q2 > 0 && p > 0 ? (t === 'buy' ? `Cash out ₹${fmt(q2 * p + ch, 2)} (₹${fmt(q2 * p, 2)} + charges)` : `Cash in ₹${fmt(q2 * p - ch, 2)} (₹${fmt(q2 * p, 2)} − charges)`) : '';
   };
   symPicker(f.sym, it => { if (it && it.nse && it.name) f.nm.value = it.name; calc(); f.qty.focus(); });   // NSE stock: its name filled in
   w.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => { t = b.dataset.t; seg(); calc(); }));
@@ -4455,7 +4487,7 @@ function pfTradeForm(x) {
     const into = /[0-9.]/.test(e.key) ? f.qty : /[A-Za-z&]/.test(e.key) ? f.sym : null;
     if (!into) return;
     e.preventDefault(); e.stopImmediatePropagation(); touched = true;   // the page's own "type to search" must not get it
-    into.focus(); into.value = into === f.sym && !x.sym ? e.key.toUpperCase() : (into.value && into === f.qty ? into.value : '') + e.key;
+    into.focus(); into.value = into === f.sym && !x.sym ? e.key.toUpperCase() : (into.value && into === f.qty && into.value !== autoQ ? into.value : '') + e.key;
     into.dispatchEvent(new Event('input'));
   };
   document.addEventListener('keydown', route1, true);
@@ -4510,11 +4542,11 @@ function pfRenameForm(old) {
 /* Pay in / Pay out (new, or edit) */
 function pfCashForm(x) {
   const edit = !!x.id;
-  const w = modal(edit ? 'Edit paper money entry' : 'Paper money in / out', `<form class="pf-form" autocomplete="off">
-    <div class="seg"><button type="button" data-t="in">Paper pay-in</button><button type="button" data-t="out">Paper pay-out</button></div>
+  const w = modal(edit ? 'Edit cash entry' : 'Pay in / out', `<form class="pf-form" autocomplete="off">
+    <div class="seg"><button type="button" data-t="in">Pay in</button><button type="button" data-t="out">Pay out</button></div>
     <label class="fld"><span>Amount ₹</span><input name="amt" type="number" min="0" step="any" required></label>
     <label class="fld"><span>Date</span><input name="date" type="date"></label>
-    <p class="pf-calc">Paper pay-in = paper money added (your opening paper cash too). Paper pay-out = paper money taken out.</p><p class="pf-err"></p>
+    <p class="pf-calc">Pay in = money added (your opening cash too). Pay out = money taken out.</p><p class="pf-err"></p>
     <button type="submit" class="btn primary">Save</button></form>`);
   const f = $('form', w); let t = x.t || 'in';
   f.amt.value = x.amt || ''; f.date.value = x.date || today();
@@ -4634,12 +4666,12 @@ function compareView() {
       const g = groups.get(c.g);
       if (!g.has(k)) g.set(k, {k, g: c.g, label: /better stock/.test(c.label) ? 'No clearly better stock in its industry' : c.label, w: c.w}); }); });
   const rows = [...groups.values()].flatMap(g => [...g.values()]);
-  const num = (l, f) => `<tr class="cmp-num"><th>${l}</th>${V0.map(o => `<td>${f(o.s) ?? '–'}</td>`).join('')}</tr>`;
+  const num = (l, f, ex) => `<tr class="cmp-num${ex ? ' cmp-ex' : ''}"><th>${l}</th>${V0.map(o => `<td>${f(o.s) ?? '–'}</td>`).join('')}</tr>`;   // ex: only in the full view on a phone
   const ret = (s, i) => ok(momAt(s, i)) ? pctTxt(momAt(s, i), 1) : null;
   let g0 = '', body = '';
   rows.forEach(r => {
-    if (r.g !== g0) { g0 = r.g; body += `<tr class="cmp-g"><th colspan="${V0.length + 1}">${esc(r.g)}</th></tr>`; }
-    body += `<tr class="cmp-c"><th>${r.label} ${vdTag(r)}</th>${V0.map(o => { const c = o.map && o.map.get(r.k);
+    if (r.g !== g0) { g0 = r.g; body += `<tr class="cmp-g cmp-ex"><th colspan="${V0.length + 1}"><span>${esc(r.g)}</span></th></tr>`; }
+    body += `<tr class="cmp-c cmp-ex"><th>${r.label} ${vdTag(r)}</th>${V0.map(o => { const c = o.map && o.map.get(r.k);
       if (!c) return '<td class="na">–</td>';
       return `<td class="${c.pass == null ? 'na' : c.pass ? 'ok' : 'no'}"><i>${c.pass == null ? '–' : c.pass ? '✓' : '✗'}</i>${c.why ? `<small>${esc(c.why)}</small>` : ''}</td>`; }).join('')}</tr>`;
   });
@@ -4651,20 +4683,28 @@ function compareView() {
       <tr class="cmp-light"><th>Checklist light</th>${V0.map(o => `<td>${o.v ? vdChip(o.v, true) : '–'}</td>`).join('')}</tr>
       ${num('Price ₹', s => pfLtp(s.sym) != null ? fmt(pfLtp(s.sym), 2) : null)}
       ${num('Value score', s => s.score != null ? fmt(s.score, 0) : null)}
+      ${num('Momentum', s => s.momS != null ? fmt(s.momS, 0) + '<small>/100</small>' : null)}
+      ${num('Trend', s => s.tr ? s.tr.pass + '/' + s.tr.of : null)}
       ${num('PE', s => s.pe != null ? fmt(s.pe) : null)}
       ${num('PB', s => s.pb != null ? fmt(s.pb, 2) : null)}
       ${num('ROE %', s => s.roe != null ? fmt(s.roe) : null)}
-      ${num('Div yield %', s => s.dy != null ? fmt(s.dy, 2) : null)}
-      ${num('Mcap ₹ Cr', s => s.mcap != null ? fmt(s.mcap, 0) : null)}
-      ${num('Momentum', s => s.momS != null ? fmt(s.momS, 0) + '<small>/100</small>' : null)}
-      ${num('1M return', s => ret(s, 0))}
-      ${num('6M return', s => ret(s, 2))}
-      ${num('Trend', s => s.tr ? s.tr.pass + '/' + s.tr.of : null)}
+      ${num('ROCE %', s => s.roce != null ? fmt(s.roce) : null)}
+      ${num('Div yield %', s => s.dy != null ? fmt(s.dy, 2) : null, 1)}
+      ${num('Mcap ₹ Cr', s => s.mcap != null ? fmt(s.mcap, 0) : null, 1)}
+      ${num('1M return', s => ret(s, 0), 1)}
+      ${num('6M return', s => ret(s, 2), 1)}
       ${num('Value-trap flags', s => { const t = trapReasons(s); return t.length ? '<span class="cmp-flag">⚠ ' + esc(t.join(' · ')) + '</span>' : 'none'; })}
       ${body}
     </tbody></table></div>
     <p class="vd-note cmp-note"><b>must</b>: a loss in any of the latest 4 quarters → red · <b>cap</b>: latest quarters all below the weakest before → amber at most ·
       <b>×2</b> checks count double · “–” = no data, not counted. Portfolio-only checks are left out here.</p>${VD_DISCLAIMER}`);
+  /* phone: the key numbers only; every number and check side by side in a sheet */
+  const wrap = view.querySelector('.cmp-wrap');
+  wrap.insertAdjacentHTML('afterend', '<button type="button" class="btn cmp-more">All numbers &amp; checks ›</button>');
+  view.querySelector('.cmp-more').addEventListener('click', () => {
+    const w = modal('All numbers & checks', `<div class="cmp-wrap cmp-full">${wrap.innerHTML}</div>`, {noFocus: true, cls: 'cmp-box', sheet: true});
+    w.querySelectorAll('[data-rm]').forEach(b => b.remove());
+  });
   view.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => { cmpSave(cmpList().filter(x => x !== b.dataset.rm)); compareView(); }));
 }
 
@@ -4844,7 +4884,7 @@ function backInfo() {                                    // small popover behind
                  : 'No prices.csv yet, so price filters and columns are off at this date.'}`
     + (bt ? `<span class="bt">This tab: <b>${bt.lvl}</b>. ${bt.why} <a href="#/method">Details</a></span>` : '');
 }
-/* Demo (review) login: only All Stocks and the Paper portfolio. auth.js keeps the hint (hni_demo) so the right page shows at once. */
+/* Demo (review) login: only All Stocks and the Portfolio. auth.js keeps the hint (hni_demo) so the right page shows at once. */
 const DEMO_HINT = (() => { try { return localStorage.getItem('hni_demo') === '1'; } catch (e) { return false; } })();
 const isDemo = () => window.hniDemo != null ? !!window.hniDemo : DEMO_HINT;
 if (DEMO_HINT) document.documentElement.classList.add('hni-demo');
@@ -5122,8 +5162,8 @@ if (WEB) {                                                  // website: back but
   });
 }
 /* page name under the HNImanshu wordmark (and the tab title): Portfolio on #/portfolio, Factor Screener everywhere else.
-   Demo (review) login: "Paper portfolio" (auth.js window.hniDemo) */
-function pfName() { return window.hniDemo ? 'Paper portfolio' : 'Portfolio'; }
+   Demo (review) login: "Portfolio" (auth.js window.hniDemo) */
+function pfName() { return window.hniDemo ? 'Portfolio' : 'Portfolio'; }
 (function () {
   const t = $('header .brand .tagline');
   const set = () => { const pf = /^#\/portfolio/.test(location.hash); if (t) t.textContent = pf ? pfName() : 'Factor Screener'; document.title = 'HNImanshu — ' + (pf ? pfName() : 'Factor Screener'); };
@@ -5183,8 +5223,8 @@ AUTH_WEB = {
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
                      # signed in and checked within the last hour → page shows at once; auth.js confirms quietly behind it
                      '<script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>\n'
-                     '<link rel="stylesheet" href="auth.css?v=33">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=33"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=34">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=34"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
