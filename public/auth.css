@@ -69,6 +69,17 @@ html.auth-ok .au-wait{display:none}
 .au-av{width:32px;height:32px;border-radius:50%;border:1px solid var(--au-acc);background:var(--au-acc);color:var(--au-field);
   font:700 12px var(--au-mono);letter-spacing:.5px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
 .au-av:hover{filter:brightness(1.08)}
+.au-av{position:relative}
+/* Prime crown / Plus "+" on the avatar circle's top-right corner */
+.au-badge{position:absolute;top:-6px;right:-6px;width:17px;height:17px;border-radius:50%;display:none;place-items:center;
+  background:var(--au-field);border:1px solid currentColor;pointer-events:none;line-height:0}
+.au-badge svg{width:11px;height:11px;display:none}
+.au-user.au-prime .au-badge{display:grid;color:#9b6bdf}
+.au-user.au-prime .au-badge .b-cr{display:block}
+.au-user.au-plusm:not(.au-prime) .au-badge{display:grid;color:#2bb3a3}
+.au-user.au-plusm:not(.au-prime) .au-badge .b-pl{display:block}
+body.day .au-user.au-prime .au-badge,[data-theme=day] .au-user.au-prime .au-badge{color:#5b2d9c}
+body.day .au-user.au-plusm:not(.au-prime) .au-badge,[data-theme=day] .au-user.au-plusm:not(.au-prime) .au-badge{color:#14665e}
 .au-nm{display:none}                                                      /* full name: shown only where a page asks for it (landing) */
 .au-menu{display:none;position:absolute;right:0;top:calc(100% + 8px);z-index:320;min-width:190px;background:var(--au-bg);border:1px solid var(--au-line);
   border-radius:10px;padding:6px;box-shadow:0 12px 32px rgba(0,0,0,.35);font-family:var(--au-sans)}
@@ -142,13 +153,15 @@ html.hni-free body.day .au-menu .au-get,html.hni-free[data-theme=day] .au-menu .
 .au-opt-p{font:500 18px var(--au-sans);color:var(--au-faint);white-space:nowrap}
 .au-gst{margin:16px 0 18px;font-size:13.5px;color:var(--au-faint)}
 /* Plus / Prime switch at the top of the plans popup */
-.au-tier{display:flex;gap:4px;margin:0 auto 14px;padding:4px;border:1px solid var(--au-line);border-radius:10px;max-width:280px}
-.au-tier button{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;border:0;border-radius:7px;background:transparent;
-  color:var(--au-mute);font:600 14px var(--au-sans);cursor:pointer}
-.au-tier button .au-crown{width:15px;height:15px;margin:0;vertical-align:0;color:currentColor}
-.au-tier button.on{background:var(--au-go);color:var(--au-go-ink)}
+.au-plans .au-plan .au-tier{display:flex;gap:6px;box-sizing:border-box;width:100%;max-width:360px;margin:2px auto 18px;padding:5px;border:1px solid var(--au-line);border-radius:12px}
+.au-plan .au-tier button{flex:1 1 0;min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:50px;padding:0 18px;margin:0;
+  border:0;outline:0;box-shadow:none;border-radius:9px;background:transparent;color:var(--au-mute);font:600 17.5px var(--au-sans);letter-spacing:0;cursor:pointer}
+.au-plan .au-tier button:focus-visible{outline:2px solid var(--au-acc);outline-offset:2px}
+.au-tier button .au-plusi{width:18px;height:18px;flex:none}
+.au-tier button .au-crown{width:19px;height:19px;margin:0;vertical-align:0;color:currentColor}
+.au-plan .au-tier button.on{background:var(--au-go);color:var(--au-go-ink)}
 .au-tier button.on .au-crown,body.day .au-tier button.on .au-crown,[data-theme=day] .au-tier button.on .au-crown{color:var(--au-go-ink)}
-.au-tier button:not(.on):hover{color:var(--au-ink)}
+.au-plan .au-tier button:not(.on):hover{color:var(--au-ink)}
 /* free trial (1 hour, ₹0): a slim card above the plans, only for free accounts that never had it */
 .au-trial{display:flex;align-items:center;gap:14px;margin:0 0 14px;padding:12px 16px;border:1px dashed var(--au-go-hi);border-radius:10px;text-align:left;
   background:color-mix(in srgb,var(--au-go) 8%,transparent)}
@@ -171,6 +184,11 @@ html.hni-free body.day .au-menu .au-get,html.hni-free[data-theme=day] .au-menu .
 .au-plan-msg.ok{color:var(--au-go-txt)}
 .au-plan-msg.bad{color:var(--au-bad)}
 body.day .au-plans,[data-theme=day] .au-plans{--au-go:#4c1d95;--au-go-hi:#6d3fc0;--au-go-txt:#4c1d95}
+/* Plus tab: the Plus members' green (Deep Teal at night, Soft Mint by day) for the window, toggle, picked plan and pay */
+.au-plans.au-plus{--au-go:#14665e;--au-go-hi:#2bb3a3;--au-go-ink:#fff;--au-go-txt:#5fd4c4;--au-bg:#0a1f23;--au-field:#06171a;--au-line:#24494f}
+body.day .au-plans.au-plus,[data-theme=day] .au-plans.au-plus{--au-go:#0f5c55;--au-go-hi:#14665e;--au-go-txt:#0f5c55;--au-bg:#c1ded2;--au-field:#cfe7de;--au-line:#62897c}
+.au-plans .au-plan{transition:background-color .2s,border-color .2s}
+.au-pay.au-locked{opacity:.5;cursor:not-allowed;filter:none!important}   /* not logged in: shown, can't be used yet */
 body.day .au-crown,[data-theme=day] .au-crown{color:#3b1475}   /* white would vanish on the light card */
 @media (max-width:700px){
   .au-plan{padding:22px 16px 16px}

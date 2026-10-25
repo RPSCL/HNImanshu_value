@@ -271,7 +271,7 @@ function showUser(u, slot) {
   if (el) host.querySelectorAll(".au-user.au-ph").forEach((x) => { if (x !== el) x.remove(); });
   else { el = document.createElement("span"); el.className = "au-user"; }
   el.classList.remove("au-ph");
-  el.innerHTML = `<button type="button" class="au-av" aria-haspopup="menu" title="Signed in as ${esc(n)}"><span class="au-ini">${esc(initials(n))}</span><span class="au-nm">${esc(n)}</span></button>
+  el.innerHTML = `<button type="button" class="au-av" aria-haspopup="menu" title="Signed in as ${esc(n)}"><span class="au-ini">${esc(initials(n))}${BADGE}</span><span class="au-nm">${esc(n)}</span></button>
     <span class="au-menu" role="menu"><span class="au-who"><b>${esc(n)}</b>${u.email && !u.email.endsWith("@" + USER_DOMAIN) ? `<i>${esc(u.email)}</i>` : ""}</span>
     <button type="button" class="au-out" role="menuitem">Logout</button></span>`;
   $(".au-av", el).addEventListener("click", (e) => { e.stopPropagation(); el.classList.toggle("open"); });
@@ -362,6 +362,10 @@ let PLAN_NEXT = null;                                                  // page t
 const isGoogle = (u) => !!(u && (u.providerData || []).some((x) => x.providerId === "google.com"));
 let PRO_NOW = (() => { try { return localStorage.getItem(PRO_HINT) === "1"; } catch (e) { return false; } })();   // admin or Prime (hint until known)
 // crown: one outline stroke, white (dark purple in day mode, see auth.css .au-crown)
+/* Plus: a hollow "+" drawn with a double outline */
+const PLUSI = '<svg class="au-plusi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/></svg>';
+/* small badge on the avatar circle: crown for Prime, + for Plus (which one shows: CSS, from .au-prime / .au-plusm) */
+const BADGE = '<span class="au-badge" aria-hidden="true"><svg class="b-cr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg><svg class="b-pl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/></svg></span>';
 const CROWN = '<svg class="au-crown" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg>';
 const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
 const dateTxt = (ms) => new Date(ms).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
@@ -409,7 +413,7 @@ function buildPlans() {
     <div class="au-box au-plan" role="dialog" aria-modal="true" aria-labelledby="auPlanT">
       <button class="au-x" type="button" aria-label="Close">×</button>
       <h2 class="au-title" id="auPlanT">Choose a plan</h2>
-      <div class="au-tier" role="tablist"><button type="button" role="tab" data-tier="plus">Plus</button><button type="button" role="tab" data-tier="prime">${CROWN}Prime</button></div>
+      <div class="au-tier" role="tablist"><button type="button" role="tab" data-tier="plus">${PLUSI}Plus</button><button type="button" role="tab" data-tier="prime">${CROWN}Prime</button></div>
       <p class="au-plan-lead"><span></span></p>
       <div class="au-trial" hidden><div><b>Free trial</b><small></small></div><button type="button" class="au-trial-go">Start · ₹0</button></div>
       <div class="au-opts" role="radiogroup" aria-labelledby="auPlanT"></div>
@@ -418,7 +422,8 @@ function buildPlans() {
       <p class="au-plan-msg" aria-live="polite"></p>
     </div>`;
   document.body.appendChild(planBox);
-  const close = () => { if (planBusy) return; planBox.classList.remove("open"); syncLock(); };
+  const close = () => { if (planBusy) return; planBox.classList.remove("open"); syncLock();
+    if (!current) setTimeout(() => openPopup(PLAN_NEXT), 60); };          // not logged in: the login box next
   $(".au-x", planBox).addEventListener("click", close);
   planBox.addEventListener("click", (e) => { if (e.target === planBox) close(); });
   planBox.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") close(); });
@@ -466,8 +471,12 @@ function paintPlans() {
   $(".au-trial-go", tr).disabled = planBusy || !g;
   const b = $(".au-pay", planBox);
   const nope = plus && (PRIME || PRO_NOW);                              // already has it through Prime / admin
+  const guest = !current;                                               // not logged in: shown, but locked
   b.disabled = planBusy || nope;
+  b.classList.toggle("au-locked", guest); b.setAttribute("aria-disabled", guest ? "true" : "false");
+  b.title = guest ? "Log in first to purchase" : "";
   if (!planBusy) b.textContent = nope ? "Included in your Prime" : `Proceed to pay ${inr(payable(p))}`;
+  planBox.classList.toggle("au-plus", plus);                            // Plus tab: the whole window turns Plus green
 }
 function planMsg(t, kind) {
   const el = $(".au-plan-msg", planBox);
@@ -477,12 +486,13 @@ function planMsg(t, kind) {
 // tier: which tab the popup opens on ("plus" for the lists, else Prime)
 function openPlans(next, tier) {
   PLAN_NEXT = typeof next === "string" ? next : null;
-  if (!current) return openPopup(PLAN_NEXT);                           // signed out: log in first
+  // signed out: the plans show too (pay is locked: "Log in first to purchase"); closing them opens the login box
   buildPlans(); setTier(tier === "plus" && !PRIME && !PRO_NOW ? "plus" : "prime"); planMsg(""); paintPlans();
   if (TRIAL_P && TRIAL_USED === null) TRIAL_P.then((t) => { TRIAL_USED = t.used; if (planBox) { paintPlans(); fitPlans(); } });
   planBox.classList.add("open"); syncLock(); fitPlans();
   setTimeout(() => { const i = planBox.querySelector("input:checked"); if (i) i.focus(); }, 30);
 }
+window.hniPlans = openPlans;                                            // signed out too (landing page: Prime Benefits → plans)
 // the pay Worker, with the signed-in user's login token. Errors come back short: "Unable to … (Source: word)".
 async function payCall(path, body) {
   const say = path === "/trial" ? "Unable to start the free trial" : "Unable to complete payment";
@@ -507,7 +517,8 @@ const loadCashfree = () => CFJS = CFJS || new Promise((ok, bad) => {
 });
 async function pay() {
   const p = TIERS[planTier][planSel], u = current, tier = planTier, name = tier === "plus" ? "Plus" : "Prime";
-  if (planBusy || !u) return;
+  if (!u) return planMsg("Log in first to purchase. Close this window to log in.", "bad");
+  if (planBusy) return;
   if (!PAY_HOOK) return planMsg("Online payment opens soon. Please check back in a little while.");
   planBusy = true; paintPlans(); $(".au-pay", planBox).textContent = "Opening payment…"; planMsg("");
   try {

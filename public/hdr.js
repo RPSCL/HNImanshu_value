@@ -14,7 +14,7 @@
     var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]; }); };
     var u = document.createElement('span');
     u.className = 'au-user au-ph' + (d.classList.contains('hni-pro') ? ' au-prime' : '') + (d.classList.contains('hni-plus') ? ' au-plusm' : '');
-    u.innerHTML = '<button type="button" class="au-av" title="Signed in as ' + esc(n) + '"><span class="au-ini">' + esc(ini) + '</span><span class="au-nm">' + esc(n) + '</span></button>';
+    u.innerHTML = '<button type="button" class="au-av" title="Signed in as ' + esc(n) + '"><span class="au-ini">' + esc(ini) + '<span class="au-badge" aria-hidden="true"><svg class="b-cr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg><svg class="b-pl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/></svg></span></span><span class="au-nm">' + esc(n) + '</span></button>';
     host.insertBefore(u, host.querySelector('#theme-toggle'));
     var b = document.createElement('button');
     b.type = 'button'; b.className = 'hni-navbtn au-ph'; b.title = 'Navigate to'; b.setAttribute('aria-label', 'Navigate to');

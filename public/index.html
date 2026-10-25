@@ -16,8 +16,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");}catch(e){}})()</script>
-<link rel="stylesheet" href="auth.css?v=37">
-<script type="module" src="auth.js?v=37"></script>
+<link rel="stylesheet" href="auth.css?v=38">
+<script type="module" src="auth.js?v=38"></script>
 <style>
 /* same colours and names as the other pages, so auth.css (popup, avatar, Prime purple) fits without changes */
 :root{--mono:'IBM Plex Mono',ui-monospace,monospace;--sans:'DM Sans',system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -46,7 +46,7 @@ body.day .toggle-thumb{transform:translateX(24px)}
 .top .au-user{position:relative!important;top:auto!important;right:auto!important}   /* menu drops under the pill (not at the page bottom) */
 .top .au-av{width:auto;height:40px;padding:0 16px 0 4px;gap:10px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
 .top .au-av:hover{border-color:var(--accent);filter:none}
-.top .au-ini{width:32px;height:32px;border-radius:50%;background:var(--accent);color:var(--bg);display:grid;place-items:center;font:700 12px var(--mono);flex:none}
+.top .au-ini{position:relative;width:32px;height:32px;border-radius:50%;background:var(--accent);color:var(--bg);display:grid;place-items:center;font:700 12px var(--mono);flex:none}
 .top .au-nm{display:block;font:600 13.5px var(--sans);letter-spacing:0;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .top .au-user.au-prime .au-av{border-color:#9b6bdf;box-shadow:0 0 0 1px #9b6bdf}
 
@@ -166,6 +166,8 @@ body.day{--dg-glow:rgba(31,107,69,.40)}
 .ibox li::before{content:"✓";position:absolute;left:0;top:0;color:var(--accent);font-weight:700}
 .ibox li b{display:block;color:var(--ink);font-size:13.5px;font-weight:600}
 .ibtn{align-self:flex-start;margin-top:4px;padding:8px 14px;border-radius:9px;border:1px solid var(--accent);color:var(--accent);text-decoration:none;font:600 12.5px var(--mono)}
+.foot a.xf svg{display:inline-block;vertical-align:-1.5px;margin-left:4px}
+button.ibtn{background:transparent;cursor:pointer}
 .ibtn:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .prime-box{border-color:#5b2d9c;background:linear-gradient(160deg,rgba(46,16,101,.45),var(--panel) 70%)}
 .prime-box h2 svg,.prime-box li::before{color:#b892f5}
@@ -328,7 +330,7 @@ html.lg-lock .main,html.lg-lock .foot,html.lg-lock .top{visibility:hidden}   /* 
         <li><b>News on Telegram</b>Headlines about the stocks in your portfolio, collected through Google's news search and sent to you on Telegram.</li>
         <li><b>Everything in Plus</b>Smallcap 500, Microcap 250 and every other NSE stock.</li>
       </ul>
-      <a class="ibtn p-off" href="builder" data-auth-link data-prime-link>See Prime plans</a>
+      <button type="button" class="ibtn p-off" id="povPlans">See Plus / Prime plans</button>
     </div>
   <div class="ibox plus-box">
     <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
@@ -372,7 +374,7 @@ html.lg-lock .main,html.lg-lock .foot,html.lg-lock .top{visibility:hidden}   /* 
   <span class="disc">Stock-screening software for learning and research. Not investment advice: we never tell anyone to buy, sell or hold a security.
     HNImanshu is not a SEBI-registered investment adviser or research analyst.</span>
   <span class="links"><a href="legal#about">About</a><a href="legal#pricing">Pricing</a><a href="legal#terms">Terms</a><a href="legal#privacy">Privacy</a><a href="legal#refund">Refunds</a><a href="legal#contact">Contact</a></span>
-  <span>Designed by Himanshu · <a href="https://x.com/intent/follow?screen_name=HNImanshu" target="_blank" rel="noopener">Follow on X</a> · <a class="tg" href="https://t.me/HNImanshu" target="_blank" rel="noopener"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.9 4.3 18.6 20c-.2 1.1-.9 1.4-1.8.9l-5-3.7-2.4 2.3c-.3.3-.5.5-1 .5l.4-5.1 9.3-8.4c.4-.4-.1-.6-.6-.2L6.1 13.5 1.2 12c-1.1-.3-1.1-1.1.2-1.6L20.6 3c.9-.3 1.6.2 1.3 1.3z"/></svg>Send private message</a></span>
+  <span>Designed by Himanshu · <a href="https://x.com/intent/follow?screen_name=HNImanshu" target="_blank" rel="noopener" class="xf" aria-label="Follow on X">Follow on <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.402 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.261 5.636 5.903-5.636Zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a> · <a class="tg" href="https://t.me/HNImanshu" target="_blank" rel="noopener"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.9 4.3 18.6 20c-.2 1.1-.9 1.4-1.8.9l-5-3.7-2.4 2.3c-.3.3-.5.5-1 .5l.4-5.1 9.3-8.4c.4-.4-.1-.6-.6-.2L6.1 13.5 1.2 12c-1.1-.3-1.1-1.1.2-1.6L20.6 3c.9-.3 1.6.2 1.3 1.3z"/></svg>Send private message</a></span>
 </footer>
 
 <script>
@@ -586,6 +588,15 @@ document.getElementById('theme-toggle').addEventListener('click', function () {
     if (o.classList.contains('open') && !o.contains(e.target) && !b.contains(e.target)) close();
   });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && o.classList.contains('open')) close(); });
+  /* See Plus / Prime plans: this overlay closes and the plans window opens (logged in or not: paying needs a login,
+     and closing the plans window then opens the login box) */
+  var pp = document.getElementById('povPlans');
+  if (pp) pp.addEventListener('click', function (e) {
+    e.stopPropagation(); close();
+    var go = function () { window.hniPlans(null, 'prime'); };
+    if (window.hniPlans) go();
+    else { var n = 0, t = setInterval(function () { if (window.hniPlans || ++n > 40) { clearInterval(t); if (window.hniPlans) go(); } }, 100); }   // login code still loading
+  });
 })();
 </script>
 </body>
