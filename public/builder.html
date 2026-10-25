@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>HNImanshu — Portfolio Builder</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cstyle%3Erect{fill:%23141414}text{fill:%23d4b47a}@media (prefers-color-scheme:dark){rect{fill:%23f1e8d8}text{fill:%234c2e0a}}%3C/style%3E%3Crect width='32' height='32' rx='7'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='18' font-weight='bold' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E">
-<meta name="description" content="Split a fund into index ETFs, value stocks and momentum stocks by fixed rules, with a 1-year backtest.">
+<meta name="description" content="Split a fund into index ETFs, value stocks and momentum stocks by fixed rules, with a backtest over 1 month to 1 year.">
 <style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>
 <script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>
-<link rel="stylesheet" href="auth.css?v=32">
+<link rel="stylesheet" href="auth.css?v=33">
 <style>html:not(.pb-admin) .lead,html:not(.pb-admin) .card,html:not(.pb-admin) .tabs,html:not(.pb-admin) #out,html:not(.pb-admin) .disc{display:none}</style>
-<script type="module" src="auth.js?v=32"></script>
+<script type="module" src="auth.js?v=33"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>
@@ -68,6 +68,26 @@ header .global{display:flex;align-items:center;gap:10px}
 h1{font:600 22px var(--sans);margin:20px 0 4px}
 .lead{color:var(--mute);margin:0 0 16px;max-width:760px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+/* the settings card folds away to one line: fund + the three percentages (remembered) */
+.cfg>summary{list-style:none;display:flex;align-items:center;gap:12px;cursor:pointer;margin:-4px 0 12px;user-select:none}
+.cfg>summary::-webkit-details-marker{display:none}
+.cfg-t{font:700 12.5px var(--mono);color:var(--brass);letter-spacing:.4px;text-transform:uppercase;flex:none}
+.cfg-sum{display:none;font:600 13px var(--mono);color:var(--ink);min-width:0;flex-wrap:wrap;gap:4px 12px}
+.cfg-sum i{font-style:normal;color:var(--faint);font-weight:500}
+.cfg:not([open])>summary{margin-bottom:0}
+.cfg:not([open]) .cfg-sum{display:flex}
+.cfg-chev{margin-left:auto;flex:none;width:9px;height:9px;border-right:2px solid var(--mute);border-bottom:2px solid var(--mute);transform:rotate(-135deg);transition:transform .15s}
+.cfg:not([open]) .cfg-chev{transform:rotate(45deg) translate(-2px,-2px)}
+.card .status{margin-top:12px}
+.cfg:not([open])~.status{margin-top:8px}
+/* backtest period: 1M … 1Y */
+.per{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px}
+.per>span{font:600 11.5px var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.5px}
+.per .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel)}
+.per .seg button{border:0;background:none;color:var(--mute);font:600 12.5px var(--mono);padding:7px 14px;cursor:pointer;border-right:1px solid var(--line)}
+.per .seg button:last-child{border-right:0}
+.per .seg button.on{background:var(--brass);color:var(--bg)}
+.per .seg button:not(.on):hover{color:var(--ink);background:var(--panel2)}
 .fund{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
 .fund label{display:flex;flex-direction:column;gap:6px;font:500 12px var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.06em}
 .fund input{height:44px;width:min(260px,100%);padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink);
@@ -113,7 +133,7 @@ tbody tr:hover td{background:var(--hover)}
 :root{--dd:#ff6b5e;--c-bench:#7aa2d6;--c-g:#e0b840;--c-j:#78cc90;--c-m:#9b8cf0;--c-h:#d48ae0;--c-f:#e09878;--c-a:#5fc9c9;--c-i:#c8c8c8}
 :root[data-theme=day]{--dd:#b3261e;--c-bench:#1f4e8c;--c-g:#8a5a00;--c-j:#0b6b24;--c-m:#4a3fb0;--c-h:#8a2a9c;--c-f:#a03a14;--c-a:#0a6a6a;--c-i:#444}
 h1{margin:22px 0 6px}
-.how{margin:0 0 16px;border:1px solid var(--line);border-radius:10px;background:var(--panel);max-width:860px}
+.how,.how.lead{margin:0 0 16px;border:1px solid var(--line);border-radius:10px;background:var(--panel);max-width:none}   /* same width as the card under it */
 .how>summary{cursor:pointer;padding:9px 14px;font:600 12.5px var(--mono);color:var(--mute);list-style:none}
 .how>summary::-webkit-details-marker{display:none}
 .how>summary::before{content:'+ ';color:var(--brass)}
@@ -271,9 +291,11 @@ tbody tr.held:hover td{background:var(--heldbg);filter:brightness(1.08)}
     <b>momentum stocks</b> (top 15 of the Momentum screen), equal weight inside each part, using the same data and
     screens as the Factor Screener. The split is 40 / 40 / 20 by default: type the ETF % and the Value % and Momentum gets the rest. For the Value and Momentum parts you can pick the list (universe), what to sort by (value score, momentum score, PE or PB, either way) and how many stocks to take; the sort always uses the numbers of the date shown (today, or 1 year back in the backtest). <b>PSU stocks are never picked</b> (value or momentum). The index part holds two ETF/Gold slots
     (IT/Gold and ALPHA/Gold): a slot holds Gold while its ETF is not stronger, so Gold can be held twice (2× weight).
-    The backtest applies the same rules as they stood 1 year ago, and re-checks the ETF pairs every month.</p></details>
+    The backtest applies the same rules as they stood 1, 3, 6 or 9 months or 1 year ago (you pick), and re-checks the ETF pairs every month.</p></details>
 
   <div class="card">
+    <details class="cfg" id="cfg" open>
+    <summary><span class="cfg-t">Fund &amp; split</span><span class="cfg-sum" id="cfgSum"></span><span class="cfg-chev" aria-hidden="true"></span></summary>
     <form class="fund" id="fundForm" autocomplete="off">
       <label>Fund value (₹)<input id="fund" inputmode="numeric" placeholder="e.g. 10,00,000" aria-label="Fund value in rupees"></label>
       <label class="pc">Index ETFs %<input id="pEtf" inputmode="decimal" aria-label="Index ETFs percent"></label>
@@ -286,12 +308,13 @@ tbody tr.held:hover td{background:var(--heldbg);filter:brightness(1.08)}
     <p class="cashav" id="cashAv" hidden></p>
     <div class="split" id="split"></div>
     <div class="sel" id="sel"></div>
+    </details>
     <p class="status" id="status" role="status">Loading the screens…</p>
   </div>
 
   <div class="tabs" role="tablist">
     <button type="button" class="on" data-tab="now" role="tab">Today</button>
-    <button type="button" data-tab="back" role="tab">1-year backtest</button>
+    <button type="button" data-tab="back" role="tab">Backtest</button>
   </div>
   <div id="out"></div>
 
@@ -338,6 +361,11 @@ const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return 
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 const status = (t, err) => { const s = $('#status'); s.textContent = t; s.classList.toggle('err', !!err); };
 
+/* ---------- backtest period: 1M, 3M, 6M, 9M or 1Y back (the Factor Screener's Historical dates, months = ETF month points) ---------- */
+const PERS = [['1M', '1 month', 1], ['3M', '3 months', 3], ['6M', '6 months', 6], ['9M', '9 months', 9], ['1Y', '1 year', 12]];
+let PER = (v => PERS.some(p => p[0] === v) ? v : '1Y')(lsGet('pb_per'));
+const perM = (k = PER) => (PERS.find(p => p[0] === k) || PERS[4])[2];
+const perName = (k = PER) => (PERS.find(p => p[0] === k) || PERS[4])[1];
 /* ---------- the screens: Fundamentals itself, running hidden inside this page (same login, same engine) ---------- */
 /* Code run inside that page: the Deep value list and the Momentum list, today or (BACK) as of the back date */
 const HELPER = () => `window.__pb = function (unisJson, etfJson) {
@@ -397,23 +425,44 @@ const waitFor = (test, ms = 45000) => new Promise((res, rej) => {
   const tick = () => { let v = false; try { v = test(); } catch (e) {} if (v) return res(); if (Date.now() - t0 > ms) return rej(new Error('timeout')); setTimeout(tick, 200); };
   tick();
 });
-async function screens(etf) {
-  const E = (etf && etf.etf) || {}, moms = k => JSON.stringify(Object.fromEntries(Object.keys(E).map(s => [s, E[s][k] || []])));
+const momsOf = (E, k) => JSON.stringify(Object.fromEntries(Object.keys(E).map(s => [s, E[s][k] || []])));
+async function screens(etf, keys) {                               // today + the back periods asked for (keys)
+  const E = (etf && etf.etf) || {};
   const w = await engine();
   status('Working out today\'s lists…');
   w.eval('setHistorical(false, null, true)');
   await waitFor(() => w.eval('!BACK'));
   const unis = ['all'].concat(JSON.parse(w.eval('JSON.stringify(D.lists)')));
-  const now = JSON.parse(w.__pb(JSON.stringify(unis), moms('mom')));
-  status('Working out the lists as they stood 1 year ago…');
-  w.eval("setHistorical(true, '1Y', true)");
-  let back = null;
-  try {
-    await waitFor(() => w.eval("BACK && D.then && (D.then.key || '1Y') === '1Y' && !!D.then.stocks"));
-    back = JSON.parse(w.__pb(JSON.stringify(unis), moms('momBack')));
-  } catch (e) { back = null; }
+  const now = JSON.parse(w.__pb(JSON.stringify(unis), momsOf(E, 'mom')));
+  const backs = {};
+  for (const k of keys || []) backs[k] = await backScreen(w, E, unis, k);
   w.eval('setHistorical(false, null, true)');
-  return {now, back};
+  return {now, backs};
+}
+/* one back period's lists, as they stood then. The ETF pairs are scored with that month point's composite (compM[months]). */
+async function backScreen(w, E, unis, key) {
+  status(`Working out the lists as they stood ${perName(key)} ago…`);
+  let b = null;
+  try {
+    w.eval(`setHistorical(true, '${key}', true)`);
+    await waitFor(() => w.eval(`BACK && D.then && (D.then.key || '1Y') === '${key}' && !!D.then.stocks`));
+    b = JSON.parse(w.__pb(JSON.stringify(unis), momsOf(E, key === '1Y' ? 'momBack' : '_none')));
+    const m = perM(key);
+    Object.keys(E).forEach(s => { const c = E[s] && E[s].compM; if (c && num(c[m])) b.etfScore[s] = c[m]; });
+  } catch (e) { b = null; }
+  return b;
+}
+/* a period not worked out yet in this session: the screens run for it once, then it is kept with the others */
+async function ensurePeriod(key) {
+  if (!DATA || (DATA.backs && key in DATA.backs)) return;
+  $('#out').innerHTML = `<p class="building" role="status"><i></i>Building the ${esc(perName(key))} backtest…</p>`;
+  const w = await engine();
+  const E = (DATA.etf && DATA.etf.etf) || {};
+  const unis = ['all'].concat(DATA.now.lists || []);
+  DATA.backs[key] = await backScreen(w, E, unis, key);
+  w.eval('setHistorical(false, null, true)');
+  status(READY);
+  saveScreens();
 }
 /* finished Today / 1-year-back lists, kept in this browser (IndexedDB "hni-pb") until the user logs out. Reused while
    build_info.json's fingerprint (the CSVs + the screening code) is unchanged, so the page opens at once. */
@@ -427,7 +476,17 @@ async function cacheGet(k) {
   catch (e) { return null; }
 }
 async function cachePut(k, v) { try { const db = await pbDb(); db.transaction('kv', 'readwrite').objectStore('kv').put(v, k); } catch (e) {} }
-let INFO_P = null;
+let INFO_P = null, INFO = null, CACHE_V = '';
+function saveScreens() {                                          // today + every period worked out so far
+  if (!DATA) return;
+  const uid = (window.hniStore && window.hniStore.uid) || '';
+  cachePut('screens', {v: CACHE_V, uid, s: {now: DATA.now, backs: DATA.backs}});
+}
+function readyLine() {
+  const B = DATA && DATA.backs && DATA.backs[PER];
+  READY = DATA ? `Ready · data as of ${DATA.now.date}${B ? ' · backtest from ' + B.date : ''}${INFO && INFO.others ? ' · last built ' + builtTxt(INFO.others) : ''}` : '';
+  if (READY) status(READY);
+}
 const buildInfo = () => INFO_P = INFO_P || fetch('build_info.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null);
 /* "2026-10-19T02:41+05:30" → "19 Oct 2026, 2:41 am"; a date only → "17 Oct 2026" */
 const builtTxt = v => { const d = new Date(v); if (isNaN(d)) return String(v);
@@ -533,19 +592,19 @@ function etfPick(sc) {
    builder_daily.json (saved daily closes, etf_prices/daily_close.csv) → the sleeve is valued DAY BY DAY between the month points
    (total return and drawdown charts). Without it the same maths runs on the 13 monthly points. */
 function hasMonthly(E) { return Object.keys(E).some(s => E[s] && Array.isArray(E[s].pxM) && E[s].pxM.length === 13); }
-function etfBacktest(E, dates, D) {
+function etfBacktest(E, dates, D, M = 12) {
   const rows = [], held = {}, cd = [], cv = [];
   let scored = 0, switches = 0, prev = null, taxPaid = 0, V = 1, pos = {};
   /* daily closes: map each month point k (12 … 0) to the last trading day on / before it (k = 0: the latest day) */
   let at = null;
   if (D && Array.isArray(D.dates) && D.dates.length > 20 && dates) {
     at = {};
-    for (let k = 12; k >= 0; k--) {
+    for (let k = M; k >= 0; k--) {
       const lim = k === 0 ? D.dates[D.dates.length - 1] : dates[k]; let j = -1;
       for (let i = 0; i < D.dates.length; i++) { if (D.dates[i] <= lim) j = i; else break; }
       at[k] = j;
     }
-    if (Object.values(at).some(j => j < 0) || at[12] >= at[0]) at = null;
+    if (Object.values(at).some(j => j < 0) || at[M] >= at[0]) at = null;
   }
   const dpx = (s, i) => { const p = D && D.px && D.px[s]; const v = p && p[i]; return num(v) && v > 0 ? v : null; };
   const ratio = (s, k) => {                                   // price ratio of ETF s over month k (from point k to point k-1)
@@ -554,7 +613,7 @@ function etfBacktest(E, dates, D) {
   };
   const put = (d, v) => { if (cd.length && cd[cd.length - 1] === d) cv[cv.length - 1] = v * 100; else { cd.push(d); cv.push(v * 100); } };
   const pdate = k => at ? D.dates[at[k]] : (dates && dates[k]) || ('−' + k + ' mo');
-  for (let k = 12; k >= 1; k--) {
+  for (let k = M; k >= 1; k--) {
     const sc = {}; Object.keys(E).forEach(s => { const v = E[s] && E[s].compM; sc[s] = v && num(v[k]) ? v[k] : null; });
     const pk = etfPick(sc);
     if (PAIRS.some(([c, d]) => num(sc[c]) && num(sc[d]))) scored++;
@@ -585,7 +644,7 @@ function etfBacktest(E, dates, D) {
     pk.list.forEach((s, i) => { const h = held[s] = held[s] || {months: 0, g: 1}; h.months++; h.g *= 1 + rets[i] / 100; });
     rows.push({k, date: dates && dates[k], list: pk.list, rows: pk.rows, notes: pk.notes, ret: mr, tax});
   }
-  return {rows, ret: (V - 1) * 100, held, scored, switches, taxPaid: taxPaid * 100, curve: {dates: cd, v: cv}, at, mode: at ? 'daily' : 'monthly'};
+  return {rows, ret: (V - 1) * 100, held, scored, switches, taxPaid: taxPaid * 100, curve: {dates: cd, v: cv}, at, M, mode: at ? 'daily' : 'monthly'};
 }
 
 /* ---------- the portfolio chart: whole portfolio, day by day ---------- */
@@ -605,7 +664,7 @@ const rsC = rsK;
    Momentum = equal-weight buy-and-hold of the picks (daily closes from builder_daily.json). A pick without saved daily closes
    is drawn as a straight line from its start to its end price (counted in P.lines). */
 function portfolio(BT, L, F, D, bench) {
-  const dates = BT.curve.dates, n = dates.length, i0 = BT.at ? BT.at[12] : 0;
+  const dates = BT.curve.dates, n = dates.length, i0 = BT.at ? BT.at[BT.M] : 0;
   let lines = 0, real = 0;
   const grow = (sym, ret) => {
     const p = BT.at && D && D.px && D.px[sym], a = p && p[i0];
@@ -617,7 +676,7 @@ function portfolio(BT, L, F, D, bench) {
   const vA = avgOf(L.value), mA = avgOf(L.mom);
   const total = dates.map((_, i) => F * (sh.index * BT.curve.v[i] / 100 + sh.value * vA[i] + sh.mom * mA[i]));
   let nifty = null;
-  const np = BT.at && D && D.px && D.px.NIFTY500 ? D.px.NIFTY500.slice(i0, i0 + n) : (!BT.at && bench && Array.isArray(bench.pxM) && bench.pxM.length === 13 ? bench.pxM.slice().reverse() : null);
+  const np = BT.at && D && D.px && D.px.NIFTY500 ? D.px.NIFTY500.slice(i0, i0 + n) : (!BT.at && bench && Array.isArray(bench.pxM) && bench.pxM.length === 13 ? bench.pxM.slice(0, BT.M + 1).reverse() : null);
   if (np && num(np[0]) && np[0] > 0) { let last = np[0]; nifty = np.map(v => { if (num(v)) last = v; return F * last / np[0]; }); }
   const dd = ddSeries(total), mx = maxDD(total), avgDD = dd.reduce((s, v) => s + (v || 0), 0) / dd.length;
   return {dates, total, nifty, dd, mx, avgDD, F, lines, real, daily: !!BT.at};
@@ -686,13 +745,17 @@ const fundVal = () => +String($('#fund').value).replace(/[^\d.]/g, '') || 0;
 function paintSplit() {
   const f = fundVal();
   $('#split').innerHTML = SPLIT.map(([, label, s]) => `<span class="chip">${label} <b>${+(s * 100).toFixed(1)}%</b>${f ? ' · ' + rs(f * s) : ''}</span>`).join('');
+  $('#cfgSum').innerHTML = (f ? `<span>${rsK(f)}</span>` : '') + SPLIT.map(([, label, s]) => `<span><i>${label}</i> ${+(s * 100).toFixed(1)}%</span>`).join('');
 }
+/* the settings card: open / folded is remembered */
+(() => { const c = $('#cfg'); if (lsGet('pb_cfg') === '0') c.open = false;
+  c.addEventListener('toggle', () => lsSet('pb_cfg', c.open ? '1' : '0')); })();
 function lists(when) {
   const D = DATA, E = (D.etf && D.etf.etf) || {}, S = when === 'now' ? D.now : D.back;
   const key = when === 'now' ? 'r3' : 'r3Back', sc = (S && S.etfScore) || {};
   const pk = etfPick(sc);
   const index = pk.rows.map(r => { const e = E[r.sym] || {};
-    return {sym: r.sym, label: r.label, name: ETF_NAME[r.sym] || r.sym, price: e.ltp, r3: e[key], mom: sc[r.sym], ret: e.ret1y, etf: true}; });
+    return {sym: r.sym, label: r.label, name: ETF_NAME[r.sym] || r.sym, price: e.ltp, r3: e[key], mom: sc[r.sym], ret: when === 'now' || PER === '1Y' ? e.ret1y : null, etf: true}; });
   const stock = s => ({sym: s.sym, name: s.name, ind: s.ind, price: s.cmp, pe: s.pe, pb: s.pb, mom: s.mom, score: s.score, url: s.url, ret: s.ret,
     mcap: s.mcap, cagr: s.cagr, vs52: num(s.cmp) && num(s.hi52) && s.hi52 > 0 ? (s.cmp / s.hi52 - 1) * 100 : null});
   const from = k => { const P = (S && S.pools) || {}, c = SELC[k]; return choose((P[c.uni] || P.all || {})[k] || [], c, k).map(stock); };
@@ -738,10 +801,10 @@ function section(k, title, small, body, def) {
 function indexBack(BT, sh) {
   const cell = n => `${esc(n.label)} <small>(${esc(n.c)} ${ms(n.mc)} vs ${esc(n.d)} ${ms(n.md)})</small>`;
   const heldRows = Object.entries(BT.held).sort((a, b) => b[1].months - a[1].months)
-    .map(([s, h]) => `<tr${heldTr({sym: s})}><td>${symCell({sym: s})}</td><td class="nm">${esc(ETF_NAME[s] || s)}</td><td class="r">${h.months} of 12</td><td class="r">${pill((h.g - 1) * 100)}</td></tr>`).join('');
+    .map(([s, h]) => `<tr${heldTr({sym: s})}><td>${symCell({sym: s})}</td><td class="nm">${esc(ETF_NAME[s] || s)}</td><td class="r">${h.months} of ${BT.M}</td><td class="r">${pill((h.g - 1) * 100)}</td></tr>`).join('');
   const monthRows = BT.rows.map(x => `<tr><td>${esc(x.date || ('−' + x.k + ' mo'))}</td>${x.notes.map(n => `<td>${cell(n)}</td>`).join('')}<td class="r">${x.rows.length}</td><td class="r">${pill(x.ret)}</td></tr>`).join('');
-  const cov = BT.scored < 12 ? `<p class="note">Composite scores were available for ${BT.scored} of 12 months; in the others the default (${esc(PAIRS[0][1])}) is held.</p>` : '';
-  return `<p class="rule">Composite Dual Momentum (score = 0.5 × 6M + 0.5 × 12M return): each month a slot holds the challenger only if its score is above 0 and above ${esc(PAIRS[0][1])}'s, otherwise ${esc(PAIRS[0][1])}. When both slots hold ${esc(PAIRS[0][1])} it is held twice (2× weight). After every switch the sold ETF's profit is taxed at 15% (tax paid over the year: ${fmt(BT.taxPaid, 2)}% of the starting amount). ${esc(ALWAYS.join(', '))} are always held; each other ETF once, rebalanced monthly.</p>${cov}
+  const cov = BT.scored < BT.M ? `<p class="note">Composite scores were available for ${BT.scored} of ${BT.M} months; in the others the default (${esc(PAIRS[0][1])}) is held.</p>` : '';
+  return `<p class="rule">Composite Dual Momentum (score = 0.5 × 6M + 0.5 × 12M return): each month a slot holds the challenger only if its score is above 0 and above ${esc(PAIRS[0][1])}'s, otherwise ${esc(PAIRS[0][1])}. When both slots hold ${esc(PAIRS[0][1])} it is held twice (2× weight). After every switch the sold ETF's profit is taxed at 15% (tax paid over the ${BT.M === 12 ? 'year' : BT.M + ' month' + (BT.M > 1 ? 's' : '')}: ${fmt(BT.taxPaid, 2)}% of the starting amount). ${esc(ALWAYS.join(', '))} are always held; each other ETF once, rebalanced monthly.</p>${cov}
     <div class="tw"><table><thead><tr><th>Month</th>${PAIRS.map(([c, d], i) => `<th>Slot ${i + 1}: ${esc(c)} vs ${esc(d)}</th>`).join('')}<th class="r">Holdings</th><th class="r">Sleeve return</th></tr></thead><tbody>${monthRows}</tbody></table></div>
     <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Months held</th><th class="r">Return while held</th></tr></thead><tbody>${heldRows}</tbody></table></div>`;
 }
@@ -798,7 +861,7 @@ async function ensureDaily(syms, force) {
   paint();                                                                  // button goes grey at once
   let res = null;
   try { res = window.hniStore && window.hniStore.builderPrices ? await window.hniStore.builderPrices(syms) : {error: 'not signed in'}; } catch (e) { res = {error: 'network'}; }
-  if (res && res.ok) { lsSet('pb_req', JSON.stringify({sig, syms, t: Date.now()})); toast('Preparing the 1-year prices: check back in 5 minutes. You can refresh or leave this page; it opens on the 1-year backtest with the new prices.', 9000); }
+  if (res && res.ok) { lsSet('pb_req', JSON.stringify({sig, syms, t: Date.now()})); toast('Preparing the backtest prices: check back in 5 minutes. You can refresh or leave this page; it opens on the backtest with the new prices.', 9000); }
   else { PREP.state = 'failed'; PREP.msg = res && res.running ? 'another chart is being prepared, try again in a few minutes' : (res && res.error) || ''; paint(); return; }
   paint(); pollDaily(syms);
 }
@@ -808,15 +871,17 @@ function resumeReq() {
   if (r && PREP.state !== 'working' && PREP.state !== 'still') { PREP.sig = r.sig; PREP.state = 'working'; PREP.t0 = r.t; PREP.msg = ''; pollDaily(r.syms); }
 }
 function drawCharts() { const h = $('#chPf'); if (h && PF) pfChart(h, PF); }
+const perBar = () => `<div class="per"><span>Backtest from</span><div class="seg" role="tablist">${PERS.map(([k, n]) =>
+  `<button type="button" data-per="${k}" role="tab" class="${k === PER ? 'on' : ''}" title="${n} ago">${k}</button>`).join('')}</div></div>`;
 function paintBack(fund) {
-  const out = $('#out'), B = DATA.back;
+  const out = $('#out'), B = DATA.back = DATA.backs ? DATA.backs[PER] : null;
   PF = null;
-  if (!B || !B.hasPrice) { out.innerHTML = '<p class="empty">The 1-year backtest needs prices from 1 year back (prices.csv); they are not available yet.</p>'; return; }
+  if (!B || !B.hasPrice) { out.innerHTML = perBar() + `<p class="empty">The ${esc(perName())} backtest needs prices from ${esc(perName())} back (prices.csv); they are not available yet${PER === '1M' ? ' (the 1-month date fills in with the next weekly price update)' : ''}.</p>`; return; }
   const L = lists('back');
-  const EM = (DATA.etf && DATA.etf.etf) || {}, BT = hasMonthly(EM) ? etfBacktest(EM, DATA.etf.monthDates, DATA.daily) : null;
+  const EM = (DATA.etf && DATA.etf.etf) || {}, BT = hasMonthly(EM) ? etfBacktest(EM, DATA.etf.monthDates, DATA.daily, perM()) : null;
   const r = {index: BT ? BT.ret : avg(L.index.map(x => x.ret)), value: avg(L.value.map(x => x.ret)), mom: avg(L.mom.map(x => x.ret))};
   const tot = SPLIT.reduce((s, [k, , sh]) => s + sh * (num(r[k]) ? r[k] : 0), 0);
-  const bench = num(B.bench) ? B.bench : (DATA.etf && DATA.etf.bench ? DATA.etf.bench.ret1y : null);
+  const bench = num(B.bench) ? B.bench : (PER === '1Y' && DATA.etf && DATA.etf.bench ? DATA.etf.bench.ret1y : null);
   const F = fund || 100000;
   if (BT) PF = portfolio(BT, L, F, DATA.daily, DATA.etf && DATA.etf.bench);
   const need = [...L.value, ...L.mom].map(x => x.sym).filter(Boolean);
@@ -828,10 +893,10 @@ function paintBack(fund) {
   const locked = PREP.state === 'working' || PREP.state === 'still' || !!pendingReq();
   const note = !BT ? 'Monthly ETF data is not in yet, so there is no chart: the ETFs are held as picked at the start.'
     : (fund ? '' : 'No fund amount entered: the chart starts from ₹1,00,000. ')
-      + (PF.daily ? `Valued on ${PF.dates.length} trading days.` : 'Daily prices are not saved yet: the chart uses 13 monthly points and max drawdown is understated.')
+      + (PF.daily ? `Valued on ${PF.dates.length} trading days.` : `Daily prices are not saved yet: the chart uses ${perM() + 1} monthly points and max drawdown is understated.`)
       + (PF.lines ? ` ${PF.lines} of ${PF.lines + PF.real} value / momentum stocks have no daily prices (yet) and are drawn as a straight line from start to end.` : '')
       + ' Index ETFs are after 15% tax on switches; value and momentum stocks are bought once and held.';
-  let html = `<p class="lead2">The same rules applied to the data as it stood on <b>${esc(B.date)}</b>, held until ${esc(DATA.now.date)}: value and momentum stocks (PSU left out) without changes; the index ETFs re-checked every month. Equal weight inside each part; ${SPLIT.map(x => +(x[2] * 100).toFixed(1)).join(' / ')} between parts.</p>
+  let html = perBar() + `<p class="lead2">The same rules applied to the data as it stood on <b>${esc(B.date)}</b>, held until ${esc(DATA.now.date)}: value and momentum stocks (PSU left out) without changes; the index ETFs re-checked every month. Equal weight inside each part; ${SPLIT.map(x => +(x[2] * 100).toFixed(1)).join(' / ')} between parts.</p>
     <div class="kpis">
       <div class="kpi"><span>Mix return</span><b class="${tot >= 0 ? 'pos' : 'neg'}">${pct(tot)}</b></div>
       <div class="kpi"><span>NIFTY 500</span><b class="${(bench || 0) >= 0 ? 'pos' : 'neg'}">${pct(bench)}</b></div>
@@ -1108,10 +1173,16 @@ function setTab(t, save) {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x.dataset.tab === TAB));
   if (save) lsSet(tabKey(), TAB);
 }
-document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => { setTab(b.dataset.tab, true); paint(); }));
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', async () => {
+  setTab(b.dataset.tab, true);
+  if (TAB === 'back' && DATA && !(PER in DATA.backs)) { try { await ensurePeriod(PER); } catch (e) {} }
+  paint(); readyLine();
+}));
 /* section open / closed (kept across repaints), expand / collapse all, chart legend */
 $('#out').addEventListener('toggle', e => { const d = e.target; if (d.classList && d.classList.contains('sec')) OPEN[TAB + d.dataset.k] = d.open; }, true);
-$('#out').addEventListener('click', e => {
+$('#out').addEventListener('click', async e => {
+  const pb = e.target.closest('[data-per]');
+  if (pb) { PER = pb.dataset.per; lsSet('pb_per', PER); if (DATA && !(PER in DATA.backs)) { try { await ensurePeriod(PER); } catch (x) {} } paint(); readyLine(); return; }
   if (e.target.closest('#refreshChart')) { if (e.target.closest('#refreshChart').disabled) return; const L = lists('back'); ensureDaily([...L.value, ...L.mom].map(x => x.sym).filter(Boolean), true); return; }
   if (e.target.closest('#prepGo')) {
     const L = lists('back'), syms = [...L.value, ...L.mom].map(x => x.sym).filter(Boolean);
@@ -1198,23 +1269,32 @@ paintSplit();
   document.documentElement.classList.add('pb-admin'); $('#gate').remove();
   if (REVIEW.includes(((window.hniStore && window.hniStore.email) || '').toLowerCase())) return reviewView();   // review account: paper portfolio only
   setTab(lsGet(tabKey()) || 'now', false);                         // the tab this user had open last time
-  if (TAB === 'back' && pendingReq()) toast('Still preparing the 1-year prices: they appear here by themselves, or check back in a few minutes.', 6000);
+  if (TAB === 'back' && pendingReq()) toast('Still preparing the backtest prices: they appear here by themselves, or check back in a few minutes.', 6000);
   try {
     const dly = dailyData();                       // big file: start it now, awaited with the screens
     const [etf, info] = await Promise.all([etfData(), buildInfo()]);
+    INFO = info;
     const uid = (window.hniStore && window.hniStore.uid) || '';
+    /* The lists change only when the data does (the Saturday scans) or this code changes, so they are built at most ONCE per
+       browser session: inside a session the lists already built are always used; a new session uses them too while the data
+       fingerprint (build_info.json) is unchanged, else builds once. Kept in IndexedDB until logout (auth.js clears it). */
     let sc = null;
-    const c = await cacheGet('screens');           // lists built earlier in this browser, same data + code → used as they are
-    if (c && info && info.data && c.v === info.data && c.uid === uid) sc = c.s;
+    const c = await cacheGet('screens');
+    const sameSession = (() => { try { return sessionStorage.getItem('pb_built') === uid; } catch (e) { return false; } })();
+    if (c && c.uid === uid && c.s && c.s.now && (sameSession || (info && info.data && c.v === info.data))) {
+      sc = c.s; if (!sc.backs) sc = {now: sc.now, backs: sc.back ? {'1Y': sc.back} : {}};   // older cache: only the 1-year list
+    }
     if (!sc) {
       $('#out').innerHTML = '<p class="building" role="status"><i></i>Building…</p>';
-      sc = await screens(etf);
-      if (info && info.data) cachePut('screens', {v: info.data, uid, s: sc});   // kept until logout (auth.js clears it)
-    }
+      sc = await screens(etf, [PER]);
+      CACHE_V = (info && info.data) || 'x';
+    } else CACHE_V = c.v;
     DATA = Object.assign({etf, daily: await dly}, sc);
+    if (!(PER in DATA.backs) && TAB === 'back') await ensurePeriod(PER);
+    else saveScreens();
+    try { sessionStorage.setItem('pb_built', uid); } catch (e) {}
     paintSel();
-    READY = `Ready · data as of ${DATA.now.date}${DATA.back ? ' · backtest from ' + DATA.back.date : ''}${info && info.others ? ' · last built ' + builtTxt(info.others) : ''}`;
-    if (READY) status(READY);
+    readyLine();
     paint();
   } catch (e) { status(e.message || 'Could not load the screens.', true); }
 })();

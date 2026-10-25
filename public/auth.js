@@ -510,6 +510,23 @@ async function pay() {
   } finally { planBusy = false; paintPlans(); }
 }
 
+// Back from a Cashfree page that left this site (some UPI apps / net banking): the order's return_url is
+// /?order_id=… — check it with the Worker (the webhook may already have switched the plan on) and say so here.
+async function payReturn() {
+  const q = new URLSearchParams(location.search), oid = q.get("order_id");
+  if (!oid || !/^hni_[pu]\d+_[A-Za-z0-9_-]+$/.test(oid) || !current) return;
+  q.delete("order_id");
+  history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash);
+  const name = /^hni_u/.test(oid) ? "Plus" : "Prime";
+  openPlans(); planMsg("Checking your payment…");
+  const r = await payCall("/verify", { order_id: oid }).catch(() => null);
+  if (r && r.ok) {
+    planMsg((r.note ? r.note + " " : "") + `${name} is on, valid till ${dateTxt(r.until)}. Reloading…`, "ok");
+    try { localStorage.setItem(PRO_HINT, name === "Prime" ? "1" : localStorage.getItem(PRO_HINT) || "0"); localStorage.setItem(PLUS_HINT, "1"); } catch (e) {}
+    setTimeout(() => location.reload(), 1600);
+  } else planMsg(`Payment not confirmed yet. If money was debited, ${name} switches on by itself within a few minutes; reload this page then.`, "bad");
+}
+
 // ---------- free trial: 1 hour of Prime for ₹0, once per Google account (the pay Worker checks and blocks the email) ----------
 async function startTrial() {
   if (planBusy || !current) return;
@@ -847,6 +864,7 @@ const ready = new Promise((resolve) => {
     window.hniPlus = (async () => (await window.hniBuilder) || !!(await window.hniPlusInfo))();
     window.hniPlans = openPlans;
     window.dispatchEvent(new Event("hni-ready"));
+    payReturn();
     if (GATED) showUser(u);
     mountNav();
     Promise.all([window.hniAdmin, window.hniPrimeInfo, window.hniPlusInfo]).then(([admin, p, plus]) => { markPro(!!admin, p, plus); if (!admin && !p) endedSince(); });
