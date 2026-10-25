@@ -156,6 +156,14 @@ function buildPopup() {
   $(".au-x", box).addEventListener("click", closePopup);
   box.addEventListener("click", (e) => { if (e.target === box) closePopup(); });
   box.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") closePopup(); });   // page shortcuts stay out
+  document.addEventListener("keydown", (e) => {            // typing anywhere in the popup goes straight into Username
+    if (!box.classList.contains("open") || e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+    const t = e.target, typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+    if (typing || !/^[a-z0-9._]$/i.test(e.key)) return;
+    e.preventDefault(); e.stopPropagation();
+    const i = f.u; if (i.value.length < 20) i.value += e.key.toLowerCase();
+    i.focus(); try { i.setSelectionRange(i.value.length, i.value.length); } catch (x) {}
+  }, true);
 
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -256,12 +264,13 @@ function addItem(label, fn, cls) {                         // also adds to a men
 }
 function showUser(u, slot) {
   const host = slot || document.querySelector("header .global");        // Fundamentals header, or the screener's #au-slot
-  if (host) host.querySelectorAll(".au-user.au-ph").forEach((x) => x.remove());   // hdr.js drew it from the last visit: the real one goes in its place
-  if (!host || $(".au-user", host)) return;
+  if (!host || $(".au-user:not(.au-ph)", host)) return;
   const n = nameOf(u);
   try { localStorage.setItem("hni_nm", n); } catch (e) {}                 // hdr.js: the header at once next time
-  const el = document.createElement("span");
-  el.className = "au-user";
+  let el = $(".au-user.au-ph", host);                                     // hdr.js drew it from the last visit: filled in where it stands (no blink)
+  if (el) host.querySelectorAll(".au-user.au-ph").forEach((x) => { if (x !== el) x.remove(); });
+  else { el = document.createElement("span"); el.className = "au-user"; }
+  el.classList.remove("au-ph");
   el.innerHTML = `<button type="button" class="au-av" aria-haspopup="menu" title="Signed in as ${esc(n)}"><span class="au-ini">${esc(initials(n))}</span><span class="au-nm">${esc(n)}</span></button>
     <span class="au-menu" role="menu"><span class="au-who"><b>${esc(n)}</b>${u.email && !u.email.endsWith("@" + USER_DOMAIN) ? `<i>${esc(u.email)}</i>` : ""}</span>
     <button type="button" class="au-out" role="menuitem">Logout</button></span>`;
@@ -274,14 +283,14 @@ function showUser(u, slot) {
     await signOut(auth); if (GATED) location.href = HOME; else location.reload();   // screener: reloads signed out
   });
   EXTRA.forEach((it) => $(".au-menu", el).insertBefore(itemBtn(it, el), $(".au-out", el)));
-  host.insertBefore(el, host.querySelector("#theme-toggle"));   // (no toggle in the slot: it simply goes at the end)
+  if (!el.parentNode) host.insertBefore(el, host.querySelector("#theme-toggle"));   // (no toggle in the slot: it simply goes at the end)
 }
 /* screener: "Login" when signed out, the initials menu when signed in */
 function paintSlot(u) {
   const slot = document.getElementById("au-slot");
   if (!slot) return;
+  if (u) { slot.querySelectorAll(".au-login").forEach((x) => x.remove()); return showUser(u, slot); }   // hdr.js placeholders stay put
   slot.innerHTML = "";
-  if (u) return showUser(u, slot);
   const b = document.createElement("button");
   b.type = "button"; b.className = "au-login"; b.setAttribute("aria-label", "Login");
   b.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span>Login</span>';
@@ -630,7 +639,7 @@ const NAV_ICON = {
   valuation: SVG('<path d="M4 6h16M4 12h16M4 18h10"/>'),
   factor: SVG('<path d="M3 20h18"/><path d="M6 16v-5M11 16V6M16 16v-8M21 16v-3"/>'),
   portfolio: SVG('<path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/>'),
-  builder: SVG('<path d="M10 10.5H4.8L3.5 21.5H10z" fill="currentColor" fill-opacity=".18"/><path d="M6.9 10.5V8.8a3 3 0 0 1 3.1-3"/><g transform="translate(1.2 -0.6) rotate(-42 16.5 11)"><path d="M12.6 3.4h8a1 1 0 0 1 1 1v2.8a1 1 0 0 1-1 1h-8l-1.9-2.4z" fill="currentColor" stroke-width="1"/><path d="M16.6 8.2v10.4" stroke-width="3"/></g>'),
+  builder: SVG('<g transform="translate(9.6 6.7) rotate(-38)"><path d="M0 2V15.6" stroke-width="3"/><g fill="currentColor" stroke="none"><rect x="-8.9" y="-2.3" width="2.7" height="4.6" rx="1.2"/><path d="M-6.5 -1.5h1.6v3h-1.6z"/><path d="M-5.2 -2.5Q-4 -3.7 -1.5 -3.7H1.6C5.6 -3.7 8.5 -2.2 9.7 .1 7.7 -1 5.2 -1.3 2.6 -.5L1.9 2.3H-1.9L-3.2 1.9H-5.2z"/></g></g><path d="M3.3 15.6h4.5v6.1H2.1z" stroke-width="1.8"/><path d="M5 15.6v-1.1a1.5 1.5 0 0 1 1.5-1.5h1.3" stroke-width="1.7"/>'),
   weekly: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#29a9eb"/><path d="M5.4 11.6l11.5-4.4c.5-.2 1 .1.8.9l-2 9.3c-.1.6-.5.8-1.1.5l-3-2.2-1.5 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5.1c.2-.2 0-.3-.4-.1l-6.9 4.4-3-.9c-.6-.2-.7-.6.1-1z" fill="#fff"/></svg>',
 };
 const NAV = [
