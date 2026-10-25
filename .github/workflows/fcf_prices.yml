@@ -1,9 +1,10 @@
 name: Yearly prices (owner-earnings backtest)
 
-# fetch_prices.py --yearly → prices_yearly.csv: the split-adjusted close on 1 July of every year since 2019 for the
-# 3 lists + NIFTY 500. The Valuation page's Owner earnings → Backtest tab is built from it (build.py → oe_backtest.json).
-# ~1,250 symbols × ~8 Angel requests ≈ 60–80 min. Runs by itself on the 2nd of every month (06:30 IST), or by hand
-# (Actions → this workflow → Run workflow). It only commits prices_yearly.csv; the next normal build picks it up.
+# fetch_prices.py --yearly → prices_yearly.csv: the split-adjusted close on 1 July of every year since 2019.
+#   part 0 = the 3 lists (~765 stocks) + NIFTY 500 (~40 min) · parts 1 / 2 / 3 = a third of Others each (~620, ~35 min)
+# Started by the Oracle server's crontab (oracle/crontab.txt, once a month), or by hand: Actions → this workflow → Run
+# workflow, pick the part. Each part rewrites only its own rows and commits prices_yearly.csv. Nothing on the site reads
+# it yet: it is the price history for a multi-year owner-earnings backtest (the Factor screener's Historical covers 1.5 years).
 
 permissions:
   contents: write
@@ -15,17 +16,19 @@ concurrency:
 on:
   workflow_dispatch:
     inputs:
+      part:
+        description: "0 = the 3 lists + NIFTY 500 (~765)  |  1 / 2 / 3 = Others, first / middle / last third"
+        required: false
+        default: "0"
       limit:
         description: "Only the first N stocks (quick test). Empty = all"
         required: false
         default: ""
-  schedule:
-    - cron: "0 1 2 * *"           # 2nd of every month, 01:00 UTC = 06:30 IST
 
 jobs:
   yearly:
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -49,8 +52,12 @@ jobs:
           ANGEL_PIN:         ${{ secrets.ANGEL_PIN }}
           ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
           LIMIT:             ${{ github.event.inputs.limit }}
+          PART:              ${{ github.event.inputs.part }}
         run: |
-          if [ -n "$LIMIT" ]; then python -u fetch_prices.py --yearly --limit "$LIMIT"; else python -u fetch_prices.py --yearly; fi
+          P="${PART:-0}"; case "$P" in 0|1|2|3) ;; *) echo "part must be 0-3"; exit 1 ;; esac
+          ARGS="--yearly"; [ "$P" != "0" ] && ARGS="$ARGS --part $P"
+          [ -n "$LIMIT" ] && ARGS="$ARGS --limit $LIMIT"
+          python -u fetch_prices.py $ARGS
 
       - name: Commit & push prices_yearly.csv
         if: always()
@@ -60,7 +67,7 @@ jobs:
           git config --global user.email "actions@github.com"
           git add prices_yearly.csv
           git diff --cached --quiet && { echo "Nothing new"; exit 0; }
-          git commit -m "Yearly prices for the owner-earnings backtest [skip ci]"
+          git commit -m "Yearly prices, part ${{ github.event.inputs.part || '0' }} [skip ci]"
           for i in 1 2 3; do
             if git pull --rebase -X theirs origin main && git push origin main; then echo "Pushed"; exit 0; fi
             git rebase --abort 2>/dev/null || true
