@@ -256,8 +256,10 @@ function addItem(label, fn, cls) {                         // also adds to a men
 }
 function showUser(u, slot) {
   const host = slot || document.querySelector("header .global");        // Fundamentals header, or the screener's #au-slot
+  if (host) host.querySelectorAll(".au-user.au-ph").forEach((x) => x.remove());   // hdr.js drew it from the last visit: the real one goes in its place
   if (!host || $(".au-user", host)) return;
   const n = nameOf(u);
+  try { localStorage.setItem("hni_nm", n); } catch (e) {}                 // hdr.js: the header at once next time
   const el = document.createElement("span");
   el.className = "au-user";
   el.innerHTML = `<button type="button" class="au-av" aria-haspopup="menu" title="Signed in as ${esc(n)}"><span class="au-ini">${esc(initials(n))}</span><span class="au-nm">${esc(n)}</span></button>
@@ -647,6 +649,10 @@ function pageNow() {                                                    // which
 }
 let navBox = null;
 function mountNav() {                                                   // the button, just left of the avatar / Login button
+  const ph = document.querySelector(".hni-navbtn.au-ph");                // hdr.js drew it already: take it over (no redraw)
+  if (ph) { ph.classList.remove("au-ph"); ph.setAttribute("aria-haspopup", "dialog"); ph.addEventListener("click", (e) => { e.stopPropagation(); openNav(); });
+    const av = document.querySelector(".au-user"); if (av && ph.nextElementSibling !== av) av.parentNode.insertBefore(ph, av);
+    document.documentElement.classList.add("hni-nav"); return; }
   if (document.querySelector(".hni-navbtn") || document.documentElement.dataset.page === "home") return;   // the landing page has its own links
   const av = document.querySelector(".au-user") || document.querySelector(".au-slot .au-login");
   if (!av) return;
@@ -724,7 +730,7 @@ window.hniFadeAway = fadeAway;
 // Everything kept in this browser for ONE account (Factor Screener filters / tabs / Compare list "hnif_*", PF Builder
 // settings "pb_*", the builder → portfolio basket, the demo flag) goes at logout, so the next account on this device
 // starts clean. Theme, the daily notice and per-account keys ("…_<uid>") stay.
-const USER_KEYS = /^(hnif_|pb_)|^hni_pf_basket$|^hni_demo$/;
+const USER_KEYS = /^(hnif_|pb_)|^hni_pf_basket$|^hni_demo$|^hni_nm$/;
 function clearUserKeys() {
   try { const L = localStorage; for (let i = L.length - 1; i >= 0; i--) { const k = L.key(i); if (k && USER_KEYS.test(k)) L.removeItem(k); } } catch (e) {}
 }
@@ -820,6 +826,9 @@ const ready = new Promise((resolve) => {
       email: u.email || "",                                  // PF Builder: the review account sees its portfolio instead
       load: async () => { await needFS(); const d = await getDoc(doc(db, PORTFOLIO, u.uid)); return d.exists() ? d.data() : {}; },             // {txns, rates} (or old {items})
       save: async (data) => { await needFS(); return setDoc(doc(db, PORTFOLIO, u.uid), { txns: data.txns || [], rates: data.rates || {}, updated: serverTimestamp() }); },
+      // PF Builder settings (fund, split, list / sort / top n, backtest period): one per account, so every device shows the same
+      prefs: async () => { await needFS(); const d = await getDoc(doc(db, "hni_settings", u.uid)); return d.exists() ? d.data() : null; },
+      savePrefs: async (pb) => { await needFS(); return setDoc(doc(db, "hni_settings", u.uid), { pb, updated: serverTimestamp() }); },
       market: async () => { await needFS(); const d = await getDoc(doc(db, ...MARKET)); return d.exists() ? d.data() : null; },
       // live: cb(prices) every time new prices are written (Firestore pushes them, no polling) → returns "stop"
       watchMarket: async (cb) => { await needFS(); return onSnapshot(doc(db, ...MARKET), (d) => cb(d.exists() ? d.data() : null), () => {}); },

@@ -8,9 +8,10 @@
 <meta name="description" content="Split a fund into index ETFs, value stocks and momentum stocks by fixed rules, with a backtest over 1 month to 1 year.">
 <style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>
 <script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>
-<link rel="stylesheet" href="auth.css?v=34">
+<link rel="stylesheet" href="auth.css?v=35">
 <style>html:not(.pb-admin) .lead,html:not(.pb-admin) .card,html:not(.pb-admin) .tabs,html:not(.pb-admin) #out,html:not(.pb-admin) .disc{display:none}</style>
-<script type="module" src="auth.js?v=34"></script>
+<script type="module" src="auth.js?v=35"></script>
+<script defer src="hdr.js?v=35"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>
@@ -356,7 +357,30 @@ const crf = v => !num(v) ? '–' : v >= 1e5 ? (v / 1e5).toFixed(2) + 'L Cr' : fm
 const pill = v => num(v) ? `<span class="pill ${v >= 0 ? 'pos' : 'neg'}">${pct(v)}</span>` : '–';
 const avg = a => { const x = a.filter(num); return x.length ? x.reduce((s, v) => s + v, 0) / x.length : null; };
 const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
-const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} if (/^pb_(fund|split|sel|per)$/.test(k)) prefsLater(); };
+/* PF Builder settings belong to the ACCOUNT (Firestore hni_settings/{uid} through auth.js), not to this browser: whatever device
+   or network you log in from, the same fund, split, list / sort / top n and backtest period come back. Saved 1 s after a change. */
+let PREFS_T = null, PREFS_APPLYING = false;
+const prefsNow = () => ({fund: fundVal(), split: [+$('#pEtf').value || 0, +$('#pVal').value || 0], sel: SELC, per: PER});
+function prefsLater() {
+  if (PREFS_APPLYING || !window.hniStore || !window.hniStore.savePrefs) return;
+  clearTimeout(PREFS_T); PREFS_T = setTimeout(() => window.hniStore.savePrefs(JSON.parse(JSON.stringify(prefsNow()))).catch(() => {}), 1000);
+}
+function applyPrefs(pb) {                                             // the account's settings → this page (and this browser's copy)
+  PREFS_APPLYING = true;
+  try {
+    if (pb.fund > 0) { $('#fund').value = (+pb.fund).toLocaleString('en-IN'); lsSet('pb_fund', String(+pb.fund)); }
+    if (Array.isArray(pb.split) && pb.split.length === 2 && pb.split.every(x => isFinite(x) && x >= 0) && pb.split[0] + pb.split[1] <= 100) {
+      $('#pEtf').value = pb.split[0]; $('#pVal').value = pb.split[1]; $('#pMom').value = +(100 - pb.split[0] - pb.split[1]).toFixed(2);
+      setSplit(pb.split[0], pb.split[1]); lsSet('pb_split', pb.split.join(','));
+    }
+    if (pb.sel) ['value', 'mom'].forEach(k => { const v = pb.sel[k]; if (v) Object.assign(SELC[k], {uni: String(v.uni || 'all'), key: SORT_KEYS.some(x => x[0] === v.key) ? v.key : SELC[k].key,
+      dir: v.dir === 'asc' ? 'asc' : 'desc', n: Math.max(0, parseInt(v.n, 10) || 0)}); });
+    lsSet('pb_sel', JSON.stringify(SELC));
+    if (PERS.some(p => p[0] === pb.per)) { PER = pb.per; lsSet('pb_per', PER); }
+    paintSel(); paintSplit();
+  } finally { PREFS_APPLYING = false; }
+}
 const status = (t, err) => { const s = $('#status'); s.textContent = t; s.classList.toggle('err', !!err); };
 
 /* ---------- backtest period: 1M, 3M, 6M, 9M or 1Y back (the Factor Screener's Historical dates, months = ETF month points) ---------- */
@@ -1267,6 +1291,10 @@ paintSplit();
     return;
   }
   document.documentElement.classList.add('pb-admin'); $('#gate').remove();
+  try {                                                             // this account's settings (any device); none yet → this browser's become them
+    const r = window.hniStore && window.hniStore.prefs ? await window.hniStore.prefs() : null;
+    if (r && r.pb) applyPrefs(r.pb); else if (window.hniStore && window.hniStore.savePrefs) window.hniStore.savePrefs(JSON.parse(JSON.stringify(prefsNow()))).catch(() => {});
+  } catch (e) {}
   if (REVIEW.includes(((window.hniStore && window.hniStore.email) || '').toLowerCase())) return reviewView();   // review account: portfolio only
   setTab(lsGet(tabKey()) || 'now', false);                         // the tab this user had open last time
   if (TAB === 'back' && pendingReq()) toast('Still preparing the backtest prices: they appear here by themselves, or check back in a few minutes.', 6000);
