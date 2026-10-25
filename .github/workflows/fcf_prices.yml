@@ -1,0 +1,69 @@
+name: Yearly prices (owner-earnings backtest)
+
+# fetch_prices.py --yearly → prices_yearly.csv: the split-adjusted close on 1 July of every year since 2019 for the
+# 3 lists + NIFTY 500. The Valuation page's Owner earnings → Backtest tab is built from it (build.py → oe_backtest.json).
+# ~1,250 symbols × ~8 Angel requests ≈ 60–80 min. Runs by itself on the 2nd of every month (06:30 IST), or by hand
+# (Actions → this workflow → Run workflow). It only commits prices_yearly.csv; the next normal build picks it up.
+
+permissions:
+  contents: write
+
+concurrency:
+  group: smart-weekly            # same lane as the weekly scrape / price parts: never two Angel jobs at once
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Only the first N stocks (quick test). Empty = all"
+        required: false
+        default: ""
+  schedule:
+    - cron: "0 1 2 * *"           # 2nd of every month, 01:00 UTC = 06:30 IST
+
+jobs:
+  yearly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install pandas numpy requests smartapi-python pyotp logzero websocket-client
+
+      # Broker credentials go ONLY to this step
+      - name: "📈 Yearly prices (Angel)"
+        env:
+          ANGEL_API_KEY:     ${{ secrets.ANGEL_API_KEY }}
+          ANGEL_CLIENT_CODE: ${{ secrets.ANGEL_CLIENT_CODE }}
+          ANGEL_PIN:         ${{ secrets.ANGEL_PIN }}
+          ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
+          LIMIT:             ${{ github.event.inputs.limit }}
+        run: |
+          if [ -n "$LIMIT" ]; then python -u fetch_prices.py --yearly --limit "$LIMIT"; else python -u fetch_prices.py --yearly; fi
+
+      - name: Commit & push prices_yearly.csv
+        if: always()
+        run: |
+          [ -f prices_yearly.csv ] || { echo "No prices_yearly.csv"; exit 0; }
+          git config --global user.name  "github-actions"
+          git config --global user.email "actions@github.com"
+          git add prices_yearly.csv
+          git diff --cached --quiet && { echo "Nothing new"; exit 0; }
+          git commit -m "Yearly prices for the owner-earnings backtest [skip ci]"
+          for i in 1 2 3; do
+            if git pull --rebase -X theirs origin main && git push origin main; then echo "Pushed"; exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((i * 5))
+          done
+          echo "::warning::Could not push prices_yearly.csv"
