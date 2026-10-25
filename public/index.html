@@ -127,8 +127,8 @@ body.day .pr-btn .pl{background:#4c1d95}
 .pov .plus-box h2 svg,.pov .plus-box li::before{color:#2bb3a3}
 body.day .pov .plus-box{border-color:#14665e}
 body.day .pov .plus-box h2 svg,body.day .pov .plus-box li::before{color:#14665e}
-.pov-x{position:absolute;top:12px;right:12px;z-index:2;width:34px;height:34px;border:0;border-radius:50%;background:transparent;color:var(--faint);font-size:24px;line-height:1;cursor:pointer}
-.pov-x:hover{color:var(--ink)}
+.pov-x{position:absolute;top:10px;right:12px;z-index:3;width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:var(--faint);font-size:26px;line-height:1;cursor:pointer}   /* the window's own corner */
+.pov-x:hover,.pov-x:focus-visible{color:var(--ink);background:color-mix(in srgb,var(--ink) 8%,transparent);outline:none}
 .hero{position:relative}
 .demo{position:absolute;inset:-4vh -2vw;z-index:20;display:none;align-items:center;justify-content:center;padding:clamp(14px,2.2vw,30px);
   border-radius:18px;border:0;background:transparent;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}   /* no box: the page behind just blurs */
@@ -241,7 +241,8 @@ html.lg-lock .main,html.lg-lock .foot,html.lg-lock .top{visibility:hidden}   /* 
   html .demo .stage{inset:auto;top:50%;left:50%;width:100vh;width:100dvh;height:100vw;transform:translate(-50%,-50%) rotate(90deg)}   /* upright phone: turn the player */
 }
 @media (max-width:760px){
-  .pov{position:fixed;inset:0;border-radius:0;border:0;z-index:400;padding:max(14px,env(safe-area-inset-top)) 14px 14px}
+  .pov{position:fixed;inset:0;border-radius:0;border:0;z-index:400;padding:calc(max(10px,env(safe-area-inset-top)) + 44px) 14px 14px}   /* room for × above the boxes */
+  .pov-x{top:max(10px,env(safe-area-inset-top))}
   .pov-box{grid-template-columns:1fr}
   .foot{padding:8px 12px max(10px,env(safe-area-inset-bottom));gap:4px;font-size:11px}
   .foot .disc{font-size:10.5px;line-height:1.4}
@@ -318,8 +319,7 @@ html.lg-lock .main,html.lg-lock .foot,html.lg-lock .top{visibility:hidden}   /* 
       <button type="button" class="demo-btn" id="demoBtn" aria-haspopup="dialog"><span class="pl"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg></span>View demo</button>
       <button type="button" class="demo-btn pr-btn" id="prBtn" aria-haspopup="dialog"><span class="pl"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg></span>Prime Benefits</button>
     </div>
-<div class="pov" id="pov" role="dialog" aria-modal="true" aria-label="Prime benefits"><div class="pov-box">
-  <button type="button" class="pov-x" aria-label="Close">×</button>
+<div class="pov" id="pov" role="dialog" aria-modal="true" aria-label="Prime benefits"><button type="button" class="pov-x" aria-label="Close" title="Close (Esc)">×</button><div class="pov-box">
   <div class="ibox prime-box">
       <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg>
         <span class="p-off">Prime <small>from ₹99 a month</small></span><span class="p-on">Included in your Prime</span></h2>
@@ -582,6 +582,9 @@ document.getElementById('theme-toggle').addEventListener('click', function () {
   var close = function () { o.classList.remove('open'); };
   b.addEventListener('click', function () { o.classList.add('open'); var x = o.querySelector('.pov-x'); if (x) x.focus(); });
   o.addEventListener('click', function (e) { if (e.target === o || e.target.closest('.pov-x')) close(); });
+  document.addEventListener('click', function (e) {                    // PC: a click anywhere outside the window closes it
+    if (o.classList.contains('open') && !o.contains(e.target) && !b.contains(e.target)) close();
+  });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && o.classList.contains('open')) close(); });
 })();
 </script>
