@@ -22,7 +22,7 @@ daily candles and writes ONE row per symbol:
     ADJ_FACTOR, CORP_ACTIONS              detected split / bonus factor after BACK_DATE, and every event found
     BACK_DATE, STATUS, FETCHED_AT
 
-BACK_DATE = (newest DATE_DOWNLOADED in the CSVs) − 365 days, the same date fundamentals.py uses for 1Y back.
+BACK_DATE = (the day the prices are fetched, Friday night) − 365 days; fundamentals.py matches it within ±7 days.
 
 Splits / bonuses: NSE price bands make a 38%+ overnight drop practically impossible without a corporate
 action, so a close-to-close drop that matches a standard ratio (1:2, 1:5, 1:10 split, 1:1 / 1:2 bonus …)
@@ -700,10 +700,16 @@ def main():
 	if not a.map_only and not is_due(a.force):
 		return 0                                                     # weekly rule: nothing to do
 
-	syms, asof = load_symbols()
+	syms, data_date = load_symbols()
+	# Back dates (1M … 1.5Y) count from the day the prices are fetched (Friday night), not from the last scrape: the
+	# scrape now runs on Sunday, after the prices, and the site accepts a price within ±7 days of the date it stands for
+	# (fundamentals.PRICE_TOL_DAYS), so Friday-based prices fit both the old and the new data date.
+	asof = datetime.now(IST).date()
+	if asof < data_date:
+		asof = data_date
 	back = asof - timedelta(days=BACK_DAYS)
 	start = asof - timedelta(days=max(PERIODS.values()) + 380)       # oldest back date + its 52-week high / 12-month momentum
-	log(f"{len(syms)} symbols  |  data date {asof}  |  BACK_DATE {back}  |  candles from {start}")
+	log(f"{len(syms)} symbols  |  prices as of {asof} (data date {data_date})  |  BACK_DATE {back}  |  candles from {start}")
 
 	tmap = build_token_map(scrip_master())
 	if a.etf_only:                                                   # mode 4: just the builder's ETFs + benchmark
