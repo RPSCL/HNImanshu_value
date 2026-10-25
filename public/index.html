@@ -16,16 +16,16 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");}catch(e){}})()</script>
-<link rel="stylesheet" href="auth.css?v=33">
-<script type="module" src="auth.js?v=33"></script>
+<link rel="stylesheet" href="auth.css?v=34">
+<script type="module" src="auth.js?v=34"></script>
 <style>
 /* same colours and names as the other pages, so auth.css (popup, avatar, Prime purple) fits without changes */
 :root{--mono:'IBM Plex Mono',ui-monospace,monospace;--sans:'DM Sans',system-ui,-apple-system,"Segoe UI",sans-serif}
 body.night{--bg:#0e0e0f;--panel:#141416;--panel2:#1a1a1d;--line:#323238;--ink:#f0ece4;--mute:#c0b8ae;--faint:#807870;--brass:#d4b47a;--brassbg:rgba(212,180,122,.12);--bad:#e09878;--hover:#1f1f23;--accent:#d4b47a;color-scheme:dark}
 body.day{--bg:#c8c1b5;--panel:#bdb6a8;--panel2:#cdc6b8;--line:#7a7468;--ink:#060402;--mute:#281e12;--faint:#4a4238;--brass:#4c2e0a;--brassbg:rgba(76,46,10,.12);--bad:#781c00;--hover:#b5ae9f;--accent:#4c2e0a;color-scheme:light}
 *{box-sizing:border-box}
-html,body{margin:0;min-height:100%}
-body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);transition:background .3s,color .3s;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
+html,body{margin:0;height:100%;overflow:hidden}   /* the landing page is one screen: it never scrolls (very short screens: see the end) */
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);transition:background .3s,color .3s;height:100vh;height:100dvh;display:flex;flex-direction:column}
 a{color:inherit}
 
 /* top bar: Login (or the avatar menu) + day / night */
@@ -51,8 +51,8 @@ body.day .toggle-thumb{transform:translateX(24px)}
 .top .au-user.au-prime .au-av{border-color:#9b6bdf;box-shadow:0 0 0 1px #9b6bdf}
 
 /* hero (centre) + the four page links (right; under the hero on a phone) */
-.main{flex:1 1 auto;display:flex;flex-wrap:wrap;align-items:center;gap:40px;padding:0 56px 32px}
-.hero{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;text-align:center;min-height:min(62vh,600px)}
+.main{flex:1 1 auto;min-height:0;display:flex;flex-wrap:wrap;align-items:center;align-content:center;gap:40px;padding:0 56px 16px}
+.hero{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;text-align:center}
 .mark{display:flex;align-items:center;justify-content:center}
 .tile{width:96px;height:96px;border-radius:22px;background:var(--panel2);border:1px solid var(--line);display:grid;place-items:center;flex:none;
   box-shadow:0 18px 50px var(--shade);cursor:pointer;-webkit-tap-highlight-color:transparent}
@@ -108,6 +108,21 @@ body.day{--dg:#1f6b45;--dg-ink:#fff;--dg-line:rgba(31,107,69,.6);--dg-bg:rgba(31
 .demo-btn:hover,.demo-btn:focus-visible{border-color:var(--dg);background:color-mix(in srgb,var(--dg) 20%,transparent);translate:0 -2px;outline:none}
 .demo-btn .pl{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--dg);color:var(--dg-ink);flex:none}
 .go-anim .demo-btn{animation:up .7s 1.7s ease forwards}
+.hbtns{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+/* Prime Benefits: same pebble, purple */
+.pr-btn{border-color:rgba(155,107,223,.6);background:rgba(155,107,223,.12)}
+.pr-btn .pl{background:#7c4ddb;color:#fff}
+.pr-btn:hover,.pr-btn:focus-visible{border-color:#9b6bdf;background:rgba(155,107,223,.22)}
+body.day .pr-btn{border-color:rgba(76,29,149,.55);background:rgba(76,29,149,.10)}
+body.day .pr-btn .pl{background:#4c1d95}
+/* its overlay */
+.pov{position:fixed;inset:0;z-index:450;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.6)}
+.pov.open{display:flex;animation:demoIn .2s ease}
+.pov-box{position:relative;width:min(520px,100%);max-height:calc(100dvh - 32px);overflow:auto}
+.pov-box .ibox{box-shadow:0 18px 50px rgba(0,0,0,.4);padding:22px 22px 20px}
+.pov-box .ibox{background-color:var(--bg)}   /* solid under its purple tint: the page never shows through */
+.pov-x{position:absolute;top:10px;right:10px;z-index:2;width:34px;height:34px;border:0;border-radius:50%;background:transparent;color:var(--faint);font-size:24px;line-height:1;cursor:pointer}
+.pov-x:hover{color:var(--ink)}
 .hero{position:relative}
 .demo{position:absolute;inset:-4vh -2vw;z-index:20;display:none;align-items:center;justify-content:center;padding:clamp(14px,2.2vw,30px);
   border-radius:18px;border:0;background:transparent;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}   /* no box: the page behind just blurs */
@@ -214,6 +229,12 @@ html.lg-lock .main,html.lg-lock .foot,html.lg-lock .top{visibility:hidden}   /* 
 @media (max-width:760px) and (orientation:portrait){
   html .demo .stage{inset:auto;top:50%;left:50%;width:100vh;width:100dvh;height:100vw;transform:translate(-50%,-50%) rotate(90deg)}   /* upright phone: turn the player */
 }
+@media (max-width:760px){
+  .foot{padding:8px 12px max(10px,env(safe-area-inset-bottom));gap:4px;font-size:11px}
+  .foot .disc{font-size:10.5px;line-height:1.4}
+  .foot .links{gap:2px 12px}
+}
+@media (max-height:600px) and (min-width:761px),(max-height:520px){html,body{overflow:auto;height:auto}body{min-height:100dvh}}   /* too short for one screen: scroll after all */
 @media (prefers-reduced-motion:reduce){
   .tile,.word,.word-in,.lede,.card,.foot,.demo-btn,.go .lbl{animation:none!important;opacity:1!important;transform:none!important;max-width:none!important}
 }
@@ -229,8 +250,10 @@ html.lg-lock .main,html.lg-lock .foot,html.lg-lock .top{visibility:hidden}   /* 
   .top{padding:14px 16px;gap:16px;justify-content:flex-end}
   .top .au-av{height:38px}
   .top .au-nm{max-width:42vw}
-  .main{padding:0 16px 8px;gap:26px}
-  .hero{min-height:auto;padding-top:9vh;gap:14px}
+  .main{padding:0 16px 6px;gap:18px;align-content:space-evenly}
+  .hero{min-height:auto;padding-top:0;gap:12px}
+  .demo-btn{height:36px;font-size:12px;padding:0 14px 0 5px}
+  .demo-btn .pl{width:26px;height:26px}
   .tile{width:60px;height:60px;border-radius:14px}
   .tile span{font-size:36px}
   .word-in{padding-left:12px;gap:2px;transform:translateX(-24px)}
@@ -239,7 +262,9 @@ html.lg-lock .main,html.lg-lock .foot,html.lg-lock .top{visibility:hidden}   /* 
   .lede .t1{font-size:13px}.lede .t2{font-size:13.5px}
   .go{max-width:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
   .go .lbl{grid-column:1 / -1}
-  .card{flex-direction:column;align-items:flex-start;gap:10px;padding:16px 14px;min-height:104px}
+  .card{flex-direction:column;align-items:flex-start;gap:8px;padding:12px 12px;min-height:0}
+  .card .ic{width:34px;height:34px}
+  .card b{font-size:15px}
   .card small,.card .chev{display:none}
   html:not(.hni-pro) .card.prime .cr{position:absolute;top:14px;right:14px}
   .card.prime{position:relative}
@@ -275,7 +300,10 @@ html.lg-lock .main,html.lg-lock .foot,html.lg-lock .top{visibility:hidden}   /* 
       <p class="t1">No noise. No hype. Just data.</p>
       <p class="t2">Indian stocks valued from company financials: NIFTY 500, Smallcap 500 and Microcap 250.</p>
     </div>
-    <button type="button" class="demo-btn" id="demoBtn" aria-haspopup="dialog"><span class="pl"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg></span>View demo</button>
+    <div class="hbtns">
+      <button type="button" class="demo-btn" id="demoBtn" aria-haspopup="dialog"><span class="pl"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg></span>View demo</button>
+      <button type="button" class="demo-btn pr-btn" id="prBtn" aria-haspopup="dialog"><span class="pl"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg></span>Prime Benefits</button>
+    </div>
     <div class="demo" id="demo" role="dialog" aria-modal="true" aria-label="Demo video"><div class="stage"><div class="frame"><div class="vid"></div><button type="button" class="x" aria-label="Close video"><b>×</b> Close</button></div></div></div>
   </section>
 
@@ -291,7 +319,7 @@ html.lg-lock .main,html.lg-lock .foot,html.lg-lock .top{visibility:hidden}   /* 
     </a>
     <a class="card" href="factor#/portfolio" data-auth-link>
       <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg></span>
-      <span class="tx"><b data-pf-name>Paper portfolio</b><small data-pf-sub>Track holdings and P&amp;L you type in · no money moves here</small></span><span class="chev" aria-hidden="true">›</span>
+      <span class="tx"><b data-pf-name>Portfolio</b><small data-pf-sub>Track holdings and P&amp;L you type in · no money moves here</small></span><span class="chev" aria-hidden="true">›</span>
     </a>
     <a class="card prime" href="builder" data-auth-link data-prime-link>
       <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 10.5H4.8L3.5 21.5H10z" fill="currentColor" fill-opacity=".18"/><path d="M6.9 10.5V8.8a3 3 0 0 1 3.1-3"/><g transform="translate(1.2 -0.6) rotate(-42 16.5 11)"><path d="M12.6 3.4h8a1 1 0 0 1 1 1v2.8a1 1 0 0 1-1 1h-8l-1.9-2.4z" fill="currentColor" stroke-width="1"/><path d="M16.6 8.2v10.4" stroke-width="3"/></g></svg></span>
@@ -301,8 +329,11 @@ html.lg-lock .main,html.lg-lock .foot,html.lg-lock .top{visibility:hidden}   /* 
     </a>
   </nav>
 
-  <section class="info" aria-label="Prime and how HNImanshu works">
-    <div class="ibox prime-box">
+</main>
+
+<div class="pov" id="pov" role="dialog" aria-modal="true" aria-label="Prime benefits"><div class="pov-box">
+  <button type="button" class="pov-x" aria-label="Close">×</button>
+  <div class="ibox prime-box">
       <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg>
         <span class="p-off">Become a Prime member</span><span class="p-on">Included in your Prime</span></h2>
       <ul>
@@ -312,25 +343,13 @@ html.lg-lock .main,html.lg-lock .foot,html.lg-lock .top{visibility:hidden}   /* 
       </ul>
       <a class="ibtn p-off" href="builder" data-auth-link data-prime-link>See Prime plans</a>
     </div>
-    <div class="ibox tool-box">
-      <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M16 11h0M8 15h2M12 15h2M8 19h0"/></svg>
-        A tool, not advice</h2>
-      <ul>
-        <li><b>Software, like a spreadsheet</b>It works out ratios from companies' published results and public prices. You choose every filter and limit.</li>
-        <li><b>No tips, no calls</b>No buy / sell / hold advice, no target prices, no stock picks sent to anyone. Nobody here manages money.</li>
-        <li><b>Your decisions stay yours</b>Plans pay for software features, not for opinions. For advice, talk to a SEBI-registered adviser.</li>
-      </ul>
-      <a class="ibtn" href="legal#about">How it works and terms</a>
-    </div>
-  </section>
-</main>
+</div></div>
 
 <footer class="foot go-anim">
   <span class="disc">Stock-screening software for learning and research. Not investment advice: we never tell anyone to buy, sell or hold a security.
     HNImanshu is not a SEBI-registered investment adviser or research analyst.</span>
   <span class="links"><a href="legal#about">About</a><a href="legal#pricing">Pricing</a><a href="legal#terms">Terms</a><a href="legal#privacy">Privacy</a><a href="legal#refund">Refunds</a><a href="legal#contact">Contact</a></span>
-  <span>Designed by Himanshu · <a href="https://x.com/intent/follow?screen_name=HNImanshu" target="_blank" rel="noopener">Follow on X</a></span>
-  <span><a class="tg" href="https://t.me/HNImanshu" target="_blank" rel="noopener"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.9 4.3 18.6 20c-.2 1.1-.9 1.4-1.8.9l-5-3.7-2.4 2.3c-.3.3-.5.5-1 .5l.4-5.1 9.3-8.4c.4-.4-.1-.6-.6-.2L6.1 13.5 1.2 12c-1.1-.3-1.1-1.1.2-1.6L20.6 3c.9-.3 1.6.2 1.3 1.3z"/></svg>Send private message</a></span>
+  <span>Designed by Himanshu · <a href="https://x.com/intent/follow?screen_name=HNImanshu" target="_blank" rel="noopener">Follow on X</a> · <a class="tg" href="https://t.me/HNImanshu" target="_blank" rel="noopener"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.9 4.3 18.6 20c-.2 1.1-.9 1.4-1.8.9l-5-3.7-2.4 2.3c-.3.3-.5.5-1 .5l.4-5.1 9.3-8.4c.4-.4-.1-.6-.6-.2L6.1 13.5 1.2 12c-1.1-.3-1.1-1.1.2-1.6L20.6 3c.9-.3 1.6.2 1.3 1.3z"/></svg>Send private message</a></span>
 </footer>
 
 <script>
@@ -512,6 +531,17 @@ document.getElementById('theme-toggle').addEventListener('click', function () {
     if (!a || e.ctrlKey || e.metaKey || e.shiftKey) return;
     e.preventDefault(); open((a.getAttribute('href').split('#')[1]) || 'about');
   });
+})();
+</script>
+<script>
+/* Prime Benefits: the Prime list in an overlay (×, Esc or a tap outside closes it) */
+(function () {
+  var b = document.getElementById('prBtn'), o = document.getElementById('pov');
+  if (!b || !o) return;
+  var close = function () { o.classList.remove('open'); };
+  b.addEventListener('click', function () { o.classList.add('open'); var x = o.querySelector('.pov-x'); if (x) x.focus(); });
+  o.addEventListener('click', function (e) { if (e.target === o || e.target.closest('.pov-x')) close(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && o.classList.contains('open')) close(); });
 })();
 </script>
 </body>

@@ -8,9 +8,9 @@
 <meta name="description" content="Split a fund into index ETFs, value stocks and momentum stocks by fixed rules, with a backtest over 1 month to 1 year.">
 <style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>
 <script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>
-<link rel="stylesheet" href="auth.css?v=33">
+<link rel="stylesheet" href="auth.css?v=34">
 <style>html:not(.pb-admin) .lead,html:not(.pb-admin) .card,html:not(.pb-admin) .tabs,html:not(.pb-admin) #out,html:not(.pb-admin) .disc{display:none}</style>
-<script type="module" src="auth.js?v=33"></script>
+<script type="module" src="auth.js?v=34"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>
@@ -68,18 +68,15 @@ header .global{display:flex;align-items:center;gap:10px}
 h1{font:600 22px var(--sans);margin:20px 0 4px}
 .lead{color:var(--mute);margin:0 0 16px;max-width:760px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
-/* the settings card folds away to one line: fund + the three percentages (remembered) */
-.cfg>summary{list-style:none;display:flex;align-items:center;gap:12px;cursor:pointer;margin:-4px 0 12px;user-select:none}
-.cfg>summary::-webkit-details-marker{display:none}
+/* the settings card: fund, split and the buttons always show; "Lists & sorting" opens the rest (cash, split chips, list / sort per part).
+   Opens folded on every visit. */
+.cfg-h{display:flex;align-items:center;gap:12px;margin:-4px 0 10px}
 .cfg-t{font:700 12.5px var(--mono);color:var(--brass);letter-spacing:.4px;text-transform:uppercase;flex:none}
-.cfg-sum{display:none;font:600 13px var(--mono);color:var(--ink);min-width:0;flex-wrap:wrap;gap:4px 12px}
-.cfg-sum i{font-style:normal;color:var(--faint);font-weight:500}
-.cfg:not([open])>summary{margin-bottom:0}
-.cfg:not([open]) .cfg-sum{display:flex}
-.cfg-chev{margin-left:auto;flex:none;width:9px;height:9px;border-right:2px solid var(--mute);border-bottom:2px solid var(--mute);transform:rotate(-135deg);transition:transform .15s}
-.cfg:not([open]) .cfg-chev{transform:rotate(45deg) translate(-2px,-2px)}
+.cfg-tg{margin-left:auto;display:inline-flex;align-items:center;gap:8px;border:0;background:none;color:var(--mute);font:600 12px var(--mono);cursor:pointer;padding:4px 2px}
+.cfg-tg:hover{color:var(--ink)}
+.cfg-chev{width:8px;height:8px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translate(-2px,-2px);transition:transform .15s}
+.cfg-tg[aria-expanded="true"] .cfg-chev{transform:rotate(-135deg)}
 .card .status{margin-top:12px}
-.cfg:not([open])~.status{margin-top:8px}
 /* backtest period: 1M … 1Y */
 .per{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px}
 .per>span{font:600 11.5px var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.5px}
@@ -225,7 +222,7 @@ details.sec>.body{padding:0 14px 14px}
 .cch{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;justify-content:space-between}
 .cch .rh{font:500 11.5px var(--mono);color:var(--faint);margin:0 0 6px}
 .lead2{color:var(--mute);font-size:12.5px;margin:0 0 12px}
-/* review account (REVIEW below): its paper portfolio only, no builder */
+/* review account (REVIEW below): its portfolio only, no builder */
 html.pb-review .card,html.pb-review .tabs,html.pb-review details.how,html.pb-review .disc{display:none!important}
 .rv-empty{margin:26px 0;padding:22px 20px;border:1px dashed var(--line);border-radius:12px;background:var(--panel);color:var(--mute);font-size:15px;line-height:1.6;max-width:760px}
 .rv-empty a{color:var(--brass)}
@@ -294,8 +291,8 @@ tbody tr.held:hover td{background:var(--heldbg);filter:brightness(1.08)}
     The backtest applies the same rules as they stood 1, 3, 6 or 9 months or 1 year ago (you pick), and re-checks the ETF pairs every month.</p></details>
 
   <div class="card">
-    <details class="cfg" id="cfg" open>
-    <summary><span class="cfg-t">Fund &amp; split</span><span class="cfg-sum" id="cfgSum"></span><span class="cfg-chev" aria-hidden="true"></span></summary>
+    <div class="cfg-h"><span class="cfg-t">Fund &amp; split</span>
+      <button type="button" class="cfg-tg" id="cfgTg" aria-expanded="false" aria-controls="cfgMore"><span>Lists &amp; sorting</span><i class="cfg-chev" aria-hidden="true"></i></button></div>
     <form class="fund" id="fundForm" autocomplete="off">
       <label>Fund value (₹)<input id="fund" inputmode="numeric" placeholder="e.g. 10,00,000" aria-label="Fund value in rupees"></label>
       <label class="pc">Index ETFs %<input id="pEtf" inputmode="decimal" aria-label="Index ETFs percent"></label>
@@ -305,10 +302,11 @@ tbody tr.held:hover td{background:var(--heldbg);filter:brightness(1.08)}
       <button class="btn" id="csv" type="button" disabled>Download CSV</button>
       <button class="btn addpf" id="addPf" type="button" disabled title="Buy every pick in your Portfolio, by its weight, at the LTP, within your cash">Add all stocks to portfolio</button>
     </form>
+    <div class="cfg-more" id="cfgMore" hidden>
     <p class="cashav" id="cashAv" hidden></p>
     <div class="split" id="split"></div>
     <div class="sel" id="sel"></div>
-    </details>
+    </div>
     <p class="status" id="status" role="status">Loading the screens…</p>
   </div>
 
@@ -493,13 +491,13 @@ const builtTxt = v => { const d = new Date(v); if (isNaN(d)) return String(v);
   const day = d.toLocaleDateString('en-IN', {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata'});
   return /T\d/.test(v) ? day + ', ' + d.toLocaleTimeString('en-IN', {hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata'}) : day; };
 /* ---------- REVIEW ACCOUNT (for Razorpay's website check) ----------
-   These logins see no Today / backtest builder: until they add stocks to their (paper) Portfolio, one line asking them to;
+   These logins see no Today / backtest builder: until they add stocks to their Portfolio, one line asking them to;
    after that, a detailed table of what they hold. To switch it off: empty the list (const REVIEW = [];). */
 const REVIEW = ['razorpay@users.hnimanshu.app', 'demo@users.hnimanshu.app'];
 async function reviewView() {
   document.documentElement.classList.add('pb-review');
-  const h1 = $('h1'); if (h1) h1.textContent = 'Paper portfolio';      // no builder here: just the practice holdings
-  document.title = 'HNImanshu — Paper portfolio';
+  const h1 = $('h1'); if (h1) h1.textContent = 'Portfolio';      // no builder here: just the practice holdings
+  document.title = 'HNImanshu — Portfolio';
   const out = $('#out');
   status('');
   out.innerHTML = '<p class="building" role="status"><i></i>Building…</p>';
@@ -518,7 +516,7 @@ async function reviewView() {
   });
   const rows = [...pos.values()].filter(p => p.qty > 1e-9);
   if (!rows.length) {
-    out.innerHTML = '<div class="rv-empty">Start adding stocks to your paper portfolio to see the details on this page. <a href="factor#/portfolio">Open Paper portfolio →</a></div>';
+    out.innerHTML = '<div class="rv-empty">Start adding stocks to your portfolio to see the details on this page. <a href="factor#/portfolio">Open Portfolio →</a></div>';
     return;
   }
   let info = {};                                          // name, industry, PE, PB, ROE, value score, momentum (the Factor Screener's own numbers)
@@ -557,7 +555,7 @@ async function reviewView() {
       <td class="r">${fmt(r.pe, 1)}</td><td class="r">${fmt(r.pb, 2)}</td><td class="r">${fmt(r.roe, 1)}</td><td class="r">${num(r.score) ? fmt(r.score, 0) : '–'}</td><td class="r">${num(r.mom) ? Math.round(r.mom) : '–'}</td></tr>`).join('')}
       <tr class="rv-tot"><td>Total</td><td class="nm"></td><td></td><td></td><td></td><td></td><td class="r">${fmt(tc, 0)}</td><td class="r">${fmt(tv, 0)}</td><td class="r">${sg(tv - tc)}</td>
       <td class="r">${pill(tc ? (tv - tc) / tc * 100 : null)}</td><td class="r">${sg(td)}</td><td class="r">100%</td><td colspan="5"></td></tr></tbody></table></div>
-    <p class="note">Paper portfolio: no real money. Prices are the latest live prices (market hours) or the last close. Numbers from the Factor Screener's data.</p>`;
+    <p class="note">Portfolio: entries you type in, no real money moves here. Prices are the latest live prices (market hours) or the last close. Numbers from the Factor Screener's data.</p>`;
 }
 let ETF_P = null;
 const etfData = () => ETF_P = ETF_P || fetch('builder_etf.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null);
@@ -745,11 +743,9 @@ const fundVal = () => +String($('#fund').value).replace(/[^\d.]/g, '') || 0;
 function paintSplit() {
   const f = fundVal();
   $('#split').innerHTML = SPLIT.map(([, label, s]) => `<span class="chip">${label} <b>${+(s * 100).toFixed(1)}%</b>${f ? ' · ' + rs(f * s) : ''}</span>`).join('');
-  $('#cfgSum').innerHTML = (f ? `<span>${rsK(f)}</span>` : '') + SPLIT.map(([, label, s]) => `<span><i>${label}</i> ${+(s * 100).toFixed(1)}%</span>`).join('');
 }
-/* the settings card: open / folded is remembered */
-(() => { const c = $('#cfg'); if (lsGet('pb_cfg') === '0') c.open = false;
-  c.addEventListener('toggle', () => lsSet('pb_cfg', c.open ? '1' : '0')); })();
+/* the settings card: "Lists & sorting" opens / folds the rest; always folded when the page opens */
+$('#cfgTg').addEventListener('click', () => { const m = $('#cfgMore'), open = m.hidden; m.hidden = !open; $('#cfgTg').setAttribute('aria-expanded', open); });
 function lists(when) {
   const D = DATA, E = (D.etf && D.etf.etf) || {}, S = when === 'now' ? D.now : D.back;
   const key = when === 'now' ? 'r3' : 'r3Back', sc = (S && S.etfScore) || {};
@@ -1098,8 +1094,12 @@ async function addToPortfolio(only) {                        // only = 'index' |
       const cur = await window.hniStore.load() || {}, base = Array.isArray(cur.txns) ? cur.txns : [];   // fresh copy: nothing typed meanwhile is lost
       if (base.length + rows.length + (payIn ? 1 : 0) > 3000) throw new Error('Transaction limit reached (3000)');
       const add = payIn ? [{id: pfId(), t: 'in', amt: payIn, date: dt}] : [];
+      /* "Add all stocks to portfolio": the settings used are kept with each buy, so the Portfolio's (i) check compares with the
+         SAME settings later (and shows them): split %, and list / sort / top n of the Value and Momentum parts */
+      const pbs = only ? null : {s: SPLIT.map(x => +(x[2] * 100).toFixed(2)), v: Object.assign({}, SELC.value), m: Object.assign({}, SELC.mom), d: DATA && DATA.now ? DATA.now.date : dt};
       rows.forEach(r => {
         const rec = {id: pfId(), t: 'buy', sym: r.sym, qty: r.qty, px: +r.px.toFixed(2), ch: r.ch, date: dt, src: r.src};
+        if (pbs) rec.pbs = pbs;
         if (num(r.pe) && r.pe > 0) rec.pe = +(+r.pe).toFixed(2);
         if (num(r.score)) rec.sc = Math.round(r.score);
         if (r.etf) rec.name = String(r.name || r.sym).slice(0, 80);
@@ -1134,8 +1134,8 @@ async function cashLine() {
       else if (x.t === 'sell') cash += (+x.qty || 0) * (+x.px || 0) - (+x.ch || 0);
     });
     cash = Math.floor(cash);
-    el.innerHTML = cash > 0 ? `Paper cash in your Portfolio <b>${rs(cash)}</b><button type="button" id="useCash">Use as fund</button>`
-                            : 'No free paper cash in your Portfolio yet. Add to portfolio offers a paper pay-in for the amount.';
+    el.innerHTML = cash > 0 ? `Cash in your Portfolio <b>${rs(cash)}</b><button type="button" id="useCash">Use as fund</button>`
+                            : 'No free cash in your Portfolio yet. Add to portfolio offers a pay-in for the amount.';
     el.hidden = false;
     const u = $('#useCash');
     if (u) u.addEventListener('click', () => { $('#fund').value = cash.toLocaleString('en-IN'); paintSplit(); lsSet('pb_fund', String(cash)); paint(); });
@@ -1267,7 +1267,7 @@ paintSplit();
     return;
   }
   document.documentElement.classList.add('pb-admin'); $('#gate').remove();
-  if (REVIEW.includes(((window.hniStore && window.hniStore.email) || '').toLowerCase())) return reviewView();   // review account: paper portfolio only
+  if (REVIEW.includes(((window.hniStore && window.hniStore.email) || '').toLowerCase())) return reviewView();   // review account: portfolio only
   setTab(lsGet(tabKey()) || 'now', false);                         // the tab this user had open last time
   if (TAB === 'back' && pendingReq()) toast('Still preparing the backtest prices: they appear here by themselves, or check back in a few minutes.', 6000);
   try {
