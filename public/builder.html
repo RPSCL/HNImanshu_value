@@ -391,18 +391,13 @@ const perName = (k = PER) => (PERS.find(p => p[0] === k) || PERS[4])[1];
 /* ---------- the screens: Fundamentals itself, running hidden inside this page (same login, same engine) ---------- */
 /* Code run inside that page: the Deep value list and the Momentum list, today or (BACK) as of the back date */
 const HELPER = () => `window.__pb = function (unisJson, etfJson) {
-  GF.psu = true; GF.semi = false;                               // PSU stocks hidden = never picked, now or in the backtest (not saved to its settings)
-  /* ETFs: composite momentum = W6 x 6M + W12 x 12M return (etf[k] = [3M, 6M, 12-1M]) */
+  GF.psu = true; GF.semi = false;
   const etfScore = {}, etf = JSON.parse(etfJson || '{}');
   for (const k in etf) { const m = etf[k] || []; etfScore[k] = ok(m[1]) && ok(m[2]) ? ${W6} * m[1] + ${W12} * m[2] : null; }
-  /* every stock as it stands in the mode on screen (BACK = the back date: PE, PB, scores and momentum are all THAT date's numbers) */
   const pick = s => ({sym: s.sym, name: s.name, ind: s.ind, cmp: s.cmp, pe: s.pe, pb: s.pb, mom: s.momS, score: s.score, url: s.url,
                       mcap: s.mcap, cagr: s.cagr, hi52: s.hi52,
                       ret: BACK ? sv(s, 'ret') : null});
   const vf = Object.assign({}, VF_DEF, (VF_PRESETS.find(p => p.name === 'Deep value') || {}).st);
-  /* no recent IPOs: a stock needs at least ceil(years back) whole years of prices BEFORE the date it is judged on (Today: 1 year; 1Y back: 1 year
-     before that date). lf = first price day we have (prices.csv LISTED_FROM). Prices are fetched from a fixed start date, so a stock whose first
-     price sits on that start (a few days after it) is older than that and passes. Unknown lf = passes (it has no price, so it is dropped anyway). */
   const day = 864e5, asOfT = Date.parse(D.asOf), judged = BACK ? asOfT - D.then.days * day : asOfT;
   const need = BACK ? Math.max(1, Math.ceil(D.then.days / 365)) : 1;
   const cutISO = new Date(judged - need * 365 * day).toISOString().slice(0, 10);
@@ -411,10 +406,10 @@ const HELPER = () => `window.__pb = function (unisJson, etfJson) {
   const startISO = new Date(Date.parse(first) + 7 * day).toISOString().slice(0, 10);
   const young = s => !!(s.lf && s.lf > cutISO && s.lf > startISO);
   const pools = {};
-  JSON.parse(unisJson).forEach(u => {                           // one candidate pool per universe: all lists, or one list
+  JSON.parse(unisJson).forEach(u => {
     GF.uni = u; setMode(); computeScores.S = null; computeScores();
-    pools[u] = {value: V().filter(s => !young(s) && s.score != null && s.cmp != null && passVF(s, vf)).map(pick),          // pass the Deep value screen
-                mom: V().filter(s => !young(s) && ok(s.momS) && s.cmp != null && passVF(s, MOM_DEF)).map(pick)};          // pass the Momentum screen
+    pools[u] = {value: V().filter(s => !young(s) && s.score != null && s.cmp != null && passVF(s, vf)).map(pick),
+                mom: V().filter(s => !young(s) && ok(s.momS) && s.cmp != null && passVF(s, MOM_DEF)).map(pick)};
   });
   GF.uni = 'all'; setMode(); computeScores.S = null; computeScores();
   return JSON.stringify({back: BACK, date: BACK ? D.then.date : D.asOf, hasPrice: BACK ? !!D.then.hasPrice : true,
