@@ -1359,6 +1359,8 @@ body.pf-mode #saveHtml,body.pf-mode #nav,body.pf-mode #meta{display:none!importa
 /* icon-only buttons (charges, refresh); refresh spins while live prices are being fetched */
 .pf-acts .btn.ico{width:38px;padding:0;justify-content:center}
 .pf-acts .btn.pf-chk{position:relative;color:var(--mute)}
+.pf-acts .btn.pf-chk:disabled{opacity:.38;cursor:not-allowed;pointer-events:auto}
+.chk-set + .chk-set{margin-top:-4px}
 .pf-acts .btn.pf-chk.alert{color:#fff;background:#d23b3b;border-color:#d23b3b}
 .pf-acts .btn.pf-chk b{position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#fff;color:#c42e2e;border:1px solid #d23b3b;font:700 10.5px/16px var(--mono)}
 .wip-box.chk-box{width:min(560px,100%)}
@@ -1929,7 +1931,7 @@ __AUTH_BODY__<script>
     </div>
     <button class="btn primary" id="saveHtml">Save as HTML</button>
     <button type="button" class="btn hweek" id="weeklyBtn" title="Weekly updates on Telegram"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#29a9eb"/><path d="M5.4 11.6l11.5-4.4c.5-.2 1 .1.8.9l-2 9.3c-.1.6-.5.8-1.1.5l-3-2.2-1.5 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5.1c.2-.2 0-.3-.4-.1l-6.9 4.4-3-.9c-.6-.2-.7-.6.1-1z" fill="#fff"/></svg>Weekly</button>
-    <a class="btn hbag bld" id="pfBuilder" href="builder" target="_blank" rel="noopener" title="PF Builder" aria-label="PF Builder"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 10.5H4.8L3.5 21.5H10z" fill="currentColor" fill-opacity=".18"/><path d="M6.9 10.5V8.8a3 3 0 0 1 3.1-3"/><g transform="translate(1.2 -0.6) rotate(-42 16.5 11)"><path d="M12.6 3.4h8a1 1 0 0 1 1 1v2.8a1 1 0 0 1-1 1h-8l-1.9-2.4z" fill="currentColor" stroke-width="1"/><path d="M16.6 8.2v10.4" stroke-width="3"/></g></svg><span class="lg">PF Builder</span></a>
+    <a class="btn hbag bld" id="pfBuilder" href="builder" target="_blank" rel="noopener" title="PF Builder" aria-label="PF Builder"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="translate(9.6 6.7) rotate(-38)"><path d="M0 2V15.6" stroke-width="3"/><g fill="currentColor" stroke="none"><rect x="-8.9" y="-2.3" width="2.7" height="4.6" rx="1.2"/><path d="M-6.5 -1.5h1.6v3h-1.6z"/><path d="M-5.2 -2.5Q-4 -3.7 -1.5 -3.7H1.6C5.6 -3.7 8.5 -2.2 9.7 .1 7.7 -1 5.2 -1.3 2.6 -.5L1.9 2.3H-1.9L-3.2 1.9H-5.2z"/></g></g><path d="M3.3 15.6h4.5v6.1H2.1z" stroke-width="1.8"/><path d="M5 15.6v-1.1a1.5 1.5 0 0 1 1.5-1.5h1.3" stroke-width="1.7"/></svg><span class="lg">PF Builder</span></a>
     <a class="btn hbag" id="pfBag" href="#/portfolio" title="Portfolio" aria-label="Portfolio"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg><span class="lg">Portfolio</span></a>
     <div id="theme-toggle" title="Day / night">
       <span class="toggle-icon moon-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
@@ -1938,7 +1940,7 @@ __AUTH_BODY__<script>
     </div>
   </div>
 </header>
-<nav id="nav">
+__AUTH_HDR__<nav id="nav">
   <a href="#/" data-t="home">Industries</a>
   <a href="#/value" data-t="value">Value screen</a>
   <a href="#/momentum" data-t="momentum">Momentum</a>
@@ -3818,12 +3820,18 @@ const PB_KEYS = {score: 'Value score', mom: 'Momentum score', pe: 'PE', pb: 'PB'
 let PF_CHK = null, PF_CHK_SIG = '', PF_CHK_P = null, PB_ETF = null;
 const IC_INFO = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r=".6" fill="currentColor"/></svg>';
 function pfChkBtn() {
-  const c = PF_CHK, n = c ? c.out.length + c.inn.length : 0;
+  const c = PF_CHK, n = c && c.ok ? c.out.length + c.inn.length : 0;
+  const off = !c || !c.ok;                                     // only when every holding came from PF Builder ("Add … to portfolio")
   const t = !c ? 'PF Builder check: compares your PF Builder holdings with the PF Builder lists of today'
-    : !c.parts.length ? 'No holdings from PF Builder to compare' : n ? `${n} difference${n > 1 ? 's' : ''} with today's PF Builder lists` : "Your PF Builder holdings match today's lists";
-  return `<button type="button" class="btn ghost ico pf-chk${n ? ' alert' : ''}" data-open="chk" title="${esc(t)}" aria-label="${esc(t)}">${IC_INFO}${n ? `<b>${n}</b>` : ''}</button>`;
+    : !c.parts.length ? 'PF Builder check: no holdings from PF Builder yet. Add stocks with “Add all stocks to portfolio” in PF Builder'
+    : !c.ok ? `PF Builder check is off: ${c.other.length} holding${c.other.length > 1 ? 's' : ''} came from elsewhere (${c.other.slice(0, 4).join(', ')}${c.other.length > 4 ? '…' : ''}). It works when every holding came from PF Builder`
+    : n ? `${n} difference${n > 1 ? 's' : ''} with today's PF Builder lists` : "Your PF Builder holdings match today's lists";
+  return `<button type="button" class="btn ghost ico pf-chk${n ? ' alert' : ''}" data-open="chk"${off ? ' disabled' : ''} title="${esc(t)}" aria-label="${esc(t)}">${IC_INFO}${n ? `<b>${n}</b>` : ''}</button>`;
 }
-const pbSel = () => { let v = null; try { v = JSON.parse(localStorage.getItem('pb_sel') || 'null'); } catch (e) {}
+let PB_REMOTE = null;                                          // this account's PF Builder settings (same on every device), auth.js prefs()
+window.addEventListener('hni-ready', () => { if (window.hniStore && window.hniStore.prefs) window.hniStore.prefs().then(r => {
+  PB_REMOTE = r && r.pb ? r.pb : null; PF_CHK_SIG = ''; if ((location.hash || '') === '#/portfolio' && PF.txns) pfChkRun(); }).catch(() => {}); });
+const pbSel = () => { let v = PB_REMOTE && PB_REMOTE.sel ? PB_REMOTE.sel : null; if (!v) try { v = JSON.parse(localStorage.getItem('pb_sel') || 'null'); } catch (e) {}
   const o = JSON.parse(JSON.stringify(PB_SEL_DEF));
   if (v) ['value', 'mom'].forEach(k => { if (v[k]) Object.assign(o[k], {uni: String(v[k].uni || 'all'), key: PB_KEYS[v[k].key] ? v[k].key : o[k].key,
     dir: v[k].dir === 'asc' ? 'asc' : 'desc', n: Math.max(0, parseInt(v[k].n, 10) || 0)}); });
@@ -3863,20 +3871,30 @@ function pbLists(C0) {                                        // today's PF Buil
   } finally { Object.assign(GF, keep); setMode(); computeScores.S = null; computeScores(); }
   return {C, value: out.value, mom: out.mom};
 }
+const PB_SCOPE = {all: 'All parts', index: 'Index ETFs only', value: 'Value only', mom: 'Momentum only'};
 async function pfChkCalc() {
   if (BACK || !PF.txns) return null;
-  const P = pfSummary(PF.txns), part = (r, t) => (r.srcs || String(r.remark || '').split(' · ')).some(x => /^PF Builder/.test(x) && x.split(/→|\+/).map(y => y.trim()).includes(t));
-  const rows = P.open.map(r => ({sym: r.sym, remark: r.remark || ''}));
+  const P = pfSummary(PF.txns), srcsOf = r => (r.srcs || String(r.remark || '').split(' · ')).filter(Boolean);
+  const part = (r, t) => srcsOf(r).some(x => /^PF Builder/.test(x) && x.split(/→|\+/).map(y => y.trim()).includes(t));
+  const rows = P.open.map(r => ({sym: r.sym, remark: r.remark || '', srcs: r.srcs}));
   const has = t => rows.filter(r => part(r, t)), parts = ['Value', 'Momentum', 'ETF', 'ETF pair'].filter(t => has(t).length);
-  const res = {parts, out: [], inn: [], pairs: [], C: null, saved: null};
-  if (!parts.length) return res;
-  /* the settings kept with the last "Add all stocks to portfolio" (each buy carries them, pbs) win over this browser's PF Builder settings */
-  const held0 = new Set(rows.map(r => r.sym));
-  const last = PF.txns.filter(x => x.t === 'buy' && x.pbs && held0.has(x.sym)).sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))).pop();
-  const sv = last && last.pbs;
+  /* on only when EVERY holding came from PF Builder: one bought any other way (screens, by hand) and the check is off */
+  const other = rows.filter(r => { const a = srcsOf(r); return !a.length || a.some(x => !/^PF Builder/.test(x)); }).map(r => r.sym);
+  const res = {parts, other, ok: parts.length > 0 && !other.length, out: [], inn: [], pairs: [], C: null, adds: []};
+  if (!res.ok) return res;
+  /* what was added, with which settings: each "Add … to portfolio" keeps them on its buys (pbs). Grouped per add, latest first */
+  const held0 = new Set(rows.map(r => r.sym)), grp = new Map();
+  PF.txns.filter(x => x.t === 'buy' && x.pbs && held0.has(x.sym)).forEach(x => {
+    const k = (x.date || '') + '|' + JSON.stringify(x.pbs);
+    const g = grp.get(k) || {date: x.date || '', pbs: x.pbs, k: x.pbs.k || 'all', syms: new Set()}; g.syms.add(x.sym); grp.set(k, g);
+  });
+  res.adds = [...grp.values()].sort((p, q) => String(q.date).localeCompare(String(p.date)));
   const norm = (c, d) => c ? {uni: String(c.uni || 'all'), key: PB_KEYS[c.key] ? c.key : d.key, dir: c.dir === 'asc' ? 'asc' : 'desc', n: Math.max(0, parseInt(c.n, 10) || 0)} : d;
-  if (sv) res.saved = {s: sv.s, d: sv.d || last.date, C: {value: norm(sv.v, PB_SEL_DEF.value), mom: norm(sv.m, PB_SEL_DEF.mom)}};
-  const L = pbLists(res.saved ? res.saved.C : null); res.C = L.C;
+  const latest = k => res.adds.find(g => g.k === 'all' || g.k === k);                 // the newest add that carried that part
+  const sel = pbSel(), gv = latest('value'), gm = latest('mom');
+  const C = {value: gv ? norm(gv.pbs.v, sel.value) : sel.value, mom: gm ? norm(gm.pbs.m, sel.mom) : sel.mom};
+  const need = parts.includes('Value') || parts.includes('Momentum');
+  const L = need ? pbLists(C) : {C, value: [], mom: []}; res.C = L.C;
   const held = new Set(rows.map(r => r.sym));
   const diff = (t, list, why) => {
     const on = new Set(list);
@@ -3920,13 +3938,24 @@ async function pfChkOpen() {
   const tbl = (t, a, cls) => `<h4 class="chk-h ${cls}">${t} <span>${a.length}</span></h4>` + (a.length
     ? `<div class="chk-tw"><table class="chk-t"><thead><tr><th>Stock</th><th>Part</th></tr></thead><tbody>${a.map(row).join('')}</tbody></table></div>`
     : '<p class="na">None.</p>');
+  const dd = x => { const m = /^(\d{4})-(\d\d)-(\d\d)/.exec(String(x || '')); return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString('en-IN', {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'}) : String(x || ''); };
+  const addHtml = g => {                                       // one "Add … to portfolio": when, which part, which settings
+    const p = g.pbs, k = g.k, sp = Array.isArray(p.s) ? p.s : null;
+    const line = (l, v) => `<div><span>${l}</span><b>${v}</b></div>`;
+    return `<div class="chk-set">${line('Added', `${esc(dd(g.date))} · ${esc(PB_SCOPE[k] || PB_SCOPE.all)} · ${g.syms.size} holding${g.syms.size > 1 ? 's' : ''}`)}
+      ${ok(+p.f) && +p.f > 0 ? line('Fund', '₹' + fmt(+p.f, 0)) : ''}
+      ${k === 'all' && sp ? line('Split', `Index ETFs ${sp[0]}% · Value ${sp[1]}% · Momentum ${sp[2]}%`) : ''}
+      ${(k === 'all' || k === 'value') && p.v ? line('Value', esc(pbSelTxt(Object.assign({}, PB_SEL_DEF.value, p.v)))) : ''}
+      ${(k === 'all' || k === 'mom') && p.m ? line('Momentum', esc(pbSelTxt(Object.assign({}, PB_SEL_DEF.mom, p.m)))) : ''}
+      ${k === 'all' || k === 'index' ? line('Index ETFs', 'ETF pairs by 6M / 12M momentum, plus ' + PB_ALWAYS.join(', ')) : ''}
+      ${p.d ? line('Lists of', esc(dd(p.d))) : ''}</div>`;
+  };
+  const checked = c && c.parts.length ? c.parts.map(x => x === 'ETF' ? 'Index ETFs' : x === 'ETF pair' ? 'ETF pairs' : x).join(', ') : '';
   const body = !c ? '<p class="na">Could not work out the PF Builder lists right now.</p>'
-    : !c.parts.length ? '<p class="na">No holdings came from PF Builder (their Remark starts with “PF Builder”), so there is nothing to compare. Add stocks from PF Builder to see this check.</p>'
-    : `<p class="chk-sub">Your holdings bought from PF Builder, compared with the PF Builder lists worked out from today's data with
-        ${c.saved ? 'the settings you used for <b>Add all stocks to portfolio</b>' : 'your PF Builder settings'}.</p>
-       <div class="chk-set">${c.saved && Array.isArray(c.saved.s) ? `<div><span>Split</span><b>Index ETFs ${c.saved.s[0]}% · Value ${c.saved.s[1]}% · Momentum ${c.saved.s[2]}%</b></div>` : ''}
-         ${c.C ? `<div><span>Value</span><b>${esc(pbSelTxt(c.C.value))}</b></div><div><span>Momentum</span><b>${esc(pbSelTxt(c.C.mom))}</b></div>` : ''}
-         ${c.saved && c.saved.d ? `<div><span>Lists of</span><b>${esc(c.saved.d)}</b></div>` : ''}</div>
+    : !c.parts.length ? '<p class="na">No holdings came from PF Builder, so there is nothing to compare. Add stocks with “Add all stocks to portfolio” in PF Builder to use this check.</p>'
+    : !c.ok ? `<p class="na">This check works only when every holding came from PF Builder. ${c.other.length} came from elsewhere: ${c.other.map(esc).join(', ')}.</p>`
+    : `<p class="chk-sub">Only the parts you added are checked (<b>${esc(checked)}</b>), against today's PF Builder lists worked out with the settings you added them with.</p>
+       ${c.adds.length ? c.adds.slice(0, 4).map(addHtml).join('') : `<div class="chk-set">${c.C ? `<div><span>Value</span><b>${esc(pbSelTxt(c.C.value))}</b></div><div><span>Momentum</span><b>${esc(pbSelTxt(c.C.mom))}</b></div>` : ''}</div>`}
        ${c.pairs.length ? `<p class="chk-sub">${c.pairs.map(n => `${esc(n.c)} vs ${esc(n.d)}: ${esc(n.c)} ${ok(n.mc) ? fmt(n.mc, 1) : '–'} · ${esc(n.d)} ${ok(n.md) ? fmt(n.md, 1) : '–'} → slot holds <b>${esc(n.win)}</b>`).join('<br>')}</p>` : ''}
        ${tbl('No longer on the list', c.out, 'out')}${tbl('New on the list (not held)', c.inn, 'in')}
        <p class="chk-note">Lists change with the weekly data update. This is information only, not a recommendation to buy or sell.</p>`;
@@ -5223,8 +5252,10 @@ AUTH_WEB = {
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
                      # signed in and checked within the last hour → page shows at once; auth.js confirms quietly behind it
                      '<script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>\n'
-                     '<link rel="stylesheet" href="auth.css?v=34">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=34"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=37">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=37"></script>\n',
+    # straight after the header, not deferred: Navigate + avatar are there from the first paint (no blink)
+    "__AUTH_HDR__": '<script src="hdr.js?v=37"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
