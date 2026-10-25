@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<!-- index.html — HNImanshu landing page ("/"). Hand-made: build.py writes valuation.html and factor.html, never this file.
+     The H mark pops in, "HNImanshu" slides out of it (the pair stays centred), then the tagline and the page links.
+     Day / night: the same saved setting as every other page (hnimanshu_theme), night by default.
+     Login / avatar menu and the login popup come from auth.js, exactly as on the other pages
+     (other pages send a signed-out visitor here as /?login=<page>, and the popup opens at once). -->
+<html lang="en" data-page="home">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HNImanshu</title>
+<meta name="description" content="Indian stocks valued from company financials: NIFTY 500, Smallcap 500 and Microcap 250. No noise. No hype. Just data.">
+<meta name="theme-color" content="#0e0e0f">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cstyle%3Erect{fill:%23141414}text{fill:%23d4b47a}@media (prefers-color-scheme:dark){rect{fill:%23f1e8d8}text{fill:%234c2e0a}}%3C/style%3E%3Crect width='32' height='32' rx='7'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='18' font-weight='bold' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap">
+<script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");}catch(e){}})()</script>
+<link rel="stylesheet" href="auth.css?v=38">
+<script type="module" src="auth.js?v=38"></script>
+<style>
+/* same colours and names as the other pages, so auth.css (popup, avatar, Prime purple) fits without changes */
+:root{--mono:'IBM Plex Mono',ui-monospace,monospace;--sans:'DM Sans',system-ui,-apple-system,"Segoe UI",sans-serif}
+body.night{--bg:#0e0e0f;--panel:#141416;--panel2:#1a1a1d;--line:#323238;--ink:#f0ece4;--mute:#c0b8ae;--faint:#807870;--brass:#d4b47a;--brassbg:rgba(212,180,122,.12);--bad:#e09878;--hover:#1f1f23;--accent:#d4b47a;color-scheme:dark}
+body.day{--bg:#c8c1b5;--panel:#bdb6a8;--panel2:#cdc6b8;--line:#7a7468;--ink:#060402;--mute:#281e12;--faint:#4a4238;--brass:#4c2e0a;--brassbg:rgba(76,46,10,.12);--bad:#781c00;--hover:#b5ae9f;--accent:#4c2e0a;color-scheme:light}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden}   /* the landing page is one screen: it never scrolls (very short screens: see the end) */
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);transition:background .3s,color .3s;height:100vh;height:100dvh;display:flex;flex-direction:column}
+a{color:inherit}
+
+/* top bar: Login (or the avatar menu) + day / night */
+.top{display:flex;align-items:center;justify-content:center;gap:22px;padding:18px 28px}
+.au-slot{display:inline-flex;align-items:center;min-width:32px;min-height:32px}
+.au-slot:empty{visibility:hidden}                                   /* nothing until the login state is known */
+.au-login{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 16px;border:1px solid var(--accent);border-radius:8px;background:transparent;
+  color:var(--accent);font:600 13px var(--mono);letter-spacing:.3px;cursor:pointer;transition:background .15s,color .15s}
+.au-login:hover{background:var(--accent);color:var(--bg)}
+/* day / night: 1.5× the other pages' size */
+#theme-toggle{display:flex;align-items:center;gap:10px;cursor:pointer;border:0;background:transparent;padding:6px;color:var(--faint)}
+#theme-toggle svg{width:22px;height:22px}
+.toggle-track{position:relative;width:57px;height:33px;border-radius:17px;background:var(--line);transition:background .3s}
+body.day .toggle-track{background:var(--accent)}
+.toggle-thumb{position:absolute;top:4.5px;left:4.5px;width:24px;height:24px;border-radius:50%;background:var(--panel2);transition:transform .25s cubic-bezier(.4,0,.2,1)}
+body.day .toggle-thumb{transform:translateX(24px)}
+/* signed in: initials + full name in one pill, same height as the toggle, in line with it */
+.top .au-user{position:relative!important;top:auto!important;right:auto!important}   /* menu drops under the pill (not at the page bottom) */
+.top .au-av{width:auto;height:40px;padding:0 16px 0 4px;gap:10px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+.top .au-av:hover{border-color:var(--accent);filter:none}
+.top .au-ini{position:relative;width:32px;height:32px;border-radius:50%;background:var(--accent);color:var(--bg);display:grid;place-items:center;font:700 12px var(--mono);flex:none}
+.top .au-nm{display:block;font:600 13.5px var(--sans);letter-spacing:0;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top .au-user.au-prime .au-av{border-color:#9b6bdf;box-shadow:0 0 0 1px #9b6bdf}
+
+/* hero (centre) + the four page links (right; under the hero on a phone) */
+.main{flex:1 1 auto;min-height:0;display:flex;flex-wrap:wrap;align-items:center;align-content:center;gap:40px;padding:0 56px 16px}
+.hero{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;text-align:center}
+.mark{display:flex;align-items:center;justify-content:center}
+.tile{width:96px;height:96px;border-radius:22px;background:var(--panel2);border:1px solid var(--line);display:grid;place-items:center;flex:none;
+  box-shadow:0 18px 50px var(--shade);cursor:pointer;-webkit-tap-highlight-color:transparent}
+/* shadow under the H tile and under HNImanshu, coloured for the background: dark charcoal → light charcoal glow, dark purple (Prime)
+   → light purple glow, light beige / light purple → black */
+body.night{--shade:rgba(140,140,148,.13);--tshade:rgba(150,150,158,.34)}             /* dark: a soft, dim glow (tile) + a visible one under the text */
+body.day{--shade:rgba(0,0,0,.38);--tshade:rgba(0,0,0,.30)}
+html.hni-pro body.night{--shade:rgba(150,110,240,.14);--tshade:rgba(160,120,250,.38)}
+html.hni-pro body.day{--shade:rgba(0,0,0,.34);--tshade:rgba(0,0,0,.28)}
+html.hni-plus body.night{--shade:rgba(60,190,175,.12);--tshade:rgba(70,200,185,.34)}
+html.hni-plus body.day{--shade:rgba(0,40,32,.30);--tshade:rgba(0,40,32,.26)}
+.word .hni,.word .manshu{text-shadow:0 10px 18px var(--tshade)}
+.tile span{font:700 58px Georgia,'Times New Roman',serif;color:var(--accent);line-height:1}
+.word{display:inline-block;overflow:hidden;white-space:nowrap;max-width:0;padding:24px 40px 40px 0;margin:-24px -40px -40px 0}   /* room for the text shadow inside the clip */
+.word-in{display:inline-flex;align-items:baseline;gap:4px;padding-left:22px;transform:translateX(-36px);opacity:0}
+.word .hni{font:700 64px var(--mono);letter-spacing:6px;color:var(--accent)}
+.word .manshu{font:400 48px var(--mono);letter-spacing:1px;color:var(--faint)}
+.lede{display:flex;flex-direction:column;gap:10px;align-items:center;opacity:0;transform:translateY(8px)}
+.lede .t1{margin:0;font:500 15px var(--mono);letter-spacing:.5px;color:var(--mute)}
+.lede .t2{margin:0;max-width:520px;font-size:15px;line-height:1.6;color:var(--faint)}
+
+.go{flex:1 1 300px;max-width:360px;display:flex;flex-direction:column;gap:12px}
+.go .lbl{font:600 11px var(--mono);letter-spacing:2px;text-transform:uppercase;color:var(--faint);padding-left:4px;opacity:0}
+.go-anim .lbl{animation:fade .5s 1.65s ease forwards}
+.card{display:flex;align-items:center;gap:14px;padding:16px 18px;border-radius:12px;border:1px solid var(--line);background:var(--panel);text-decoration:none;
+  opacity:0;transform:translateX(24px);transition:border-color .15s,translate .15s}
+.card:hover,.card:focus-visible{border-color:var(--accent);translate:-3px 0;outline:none}
+.card .ic{width:40px;height:40px;border-radius:10px;background:var(--bg);color:var(--accent);display:grid;place-items:center;flex:none}
+.card .tx{flex:1;min-width:0}
+.card b{display:block;font-size:16px;font-weight:600}
+.card small{display:block;font-size:12.5px;color:var(--faint)}
+.card .chev{color:var(--faint);font-size:20px;line-height:1}
+.card .cr{display:none;flex:none;color:#c9b3f5}
+/* Portfolio Builder: purple + crown until the visitor is Prime (or admin) */
+html:not(.hni-pro) .card.prime{border-color:#5b2d9c;background:linear-gradient(90deg,rgba(46,16,101,.55),rgba(46,16,101,.18))}
+html:not(.hni-pro) .card.prime .ic{background:#2e1065;color:#efe7ff}
+html:not(.hni-pro) .card.prime small{color:#c9b3f5}
+html:not(.hni-pro) .card.prime .cr{display:block}
+html:not(.hni-pro) .card.prime .chev{display:none}
+html:not(.hni-pro) body.day .card.prime{background:linear-gradient(90deg,rgba(76,29,149,.18),rgba(76,29,149,.05));border-color:#4c1d95}
+html:not(.hni-pro) body.day .card.prime small,html:not(.hni-pro) body.day .card.prime .cr{color:#4c1d95}
+.card.prime .p-on{display:none}
+html.hni-pro .card.prime .p-on{display:inline}
+html.hni-pro .card.prime .p-off{display:none}
+
+/* "View demo": a pebble under the tagline → the video plays in a big purple frame over the hero (full screen on a phone) */
+/* green (open to everyone), not purple (Prime): soft light green at night, deep green by day */
+body.night{--dg:#7fd4a2;--dg-ink:#0d2a1b;--dg-line:rgba(127,212,162,.55);--dg-bg:rgba(127,212,162,.10);--dg-frame:rgba(14,52,34,.72)}
+body.day{--dg:#1f6b45;--dg-ink:#fff;--dg-line:rgba(31,107,69,.6);--dg-bg:rgba(31,107,69,.10);--dg-frame:rgba(31,107,69,.20)}
+.demo-btn{display:inline-flex;align-items:center;gap:9px;height:40px;padding:0 18px 0 6px;margin-top:6px;border-radius:999px;cursor:pointer;
+  border:1px solid var(--dg-line);background:var(--dg-bg);color:var(--ink);
+  font:600 13px var(--mono);letter-spacing:.3px;opacity:0;transform:translateY(8px);transition:background .15s,border-color .15s,translate .15s}
+.demo-btn:hover,.demo-btn:focus-visible{border-color:var(--dg);background:color-mix(in srgb,var(--dg) 20%,transparent);translate:0 -2px;outline:none}
+.demo-btn .pl{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--dg);color:var(--dg-ink);flex:none}
+.go-anim .demo-btn{animation:up .7s 1.7s ease forwards}
+.hbtns{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+/* Prime Benefits: same pebble, purple */
+.pr-btn{border-color:rgba(155,107,223,.6);background:rgba(155,107,223,.12)}
+.pr-btn .pl{background:#7c4ddb;color:#fff}
+.pr-btn:hover,.pr-btn:focus-visible{border-color:#9b6bdf;background:rgba(155,107,223,.22)}
+body.day .pr-btn{border-color:rgba(76,29,149,.55);background:rgba(76,29,149,.10)}
+body.day .pr-btn .pl{background:#4c1d95}
+/* its overlay: covers the hero (H, HNImanshu, tagline, both buttons) like the demo player; solid; phone = full screen */
+.pov{position:absolute;inset:-4vh -2vw;z-index:20;display:none;align-items:center;justify-content:center;padding:14px;border-radius:18px;
+  background:var(--bg);border:1px solid var(--line);box-shadow:0 18px 50px rgba(0,0,0,.35)}
+.pov.open{display:flex;animation:demoIn .2s ease}
+.pov-box{position:relative;width:min(980px,100%);max-height:100%;overflow:auto;display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:4px 2px;align-items:stretch}   /* Prime and Plus side by side */
+.pov-box .ibox{box-shadow:none;padding:18px 20px 16px;text-align:left}
+.pov-box .prime-box,.pov-box .plus-box{background-color:var(--panel)!important}   /* solid: the hero never shows through */
+.pov-box h2 small{font:600 11.5px var(--mono);color:var(--faint);margin-left:4px}
+.pov .plus-box{border-color:#1f8f84}
+.pov .plus-box h2 svg,.pov .plus-box li::before{color:#2bb3a3}
+body.day .pov .plus-box{border-color:#14665e}
+body.day .pov .plus-box h2 svg,body.day .pov .plus-box li::before{color:#14665e}
+.pov-x{position:absolute;top:10px;right:12px;z-index:3;width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:var(--faint);font-size:26px;line-height:1;cursor:pointer}   /* the window's own corner */
+.pov-x:hover,.pov-x:focus-visible{color:var(--ink);background:color-mix(in srgb,var(--ink) 8%,transparent);outline:none}
+.hero{position:relative}
+.demo{position:absolute;inset:-4vh -2vw;z-index:20;display:none;align-items:center;justify-content:center;padding:clamp(14px,2.2vw,30px);
+  border-radius:18px;border:0;background:transparent;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}   /* no box: the page behind just blurs */
+.demo.open{display:flex;animation:demoIn .25s ease}
+@keyframes demoIn{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:none}}
+.demo .stage{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;container-type:size}
+/* a real 16:9 player, as big as fits the space (never wider than 1100 px): width = the smaller of the space's width and 16/9 × its height */
+.demo .frame{position:relative;width:min(100cqw,177.78cqh,1100px);aspect-ratio:16/9;height:auto;border-radius:12px;overflow:hidden;background:#000;
+  box-shadow:0 18px 50px var(--dg-glow)}                                 /* soft green glow under the window, like the H tile's */
+body.night{--dg-glow:rgba(127,212,162,.22)}
+body.day{--dg-glow:rgba(31,107,69,.40)}
+.demo iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.demo .soon{position:absolute;inset:0;display:grid;place-items:center;color:#e9dcff;font:600 15px var(--mono);text-align:center;padding:20px}
+.demo .vid{position:absolute;inset:0}
+/* Close sits inside the video, top right: no outline; half-faded while the video plays (web), full on hover */
+.demo .x{position:absolute;top:10px;right:10px;height:32px;padding:0 12px;border:0;border-radius:8px;background:rgba(0,0,0,.55);
+  color:#fff;font:600 13px var(--mono);cursor:pointer;z-index:3;display:inline-flex;align-items:center;gap:6px;transition:opacity .3s,background .15s}
+.demo .x b{font-size:18px;font-weight:400;line-height:1}
+.demo .x:hover,.demo .x:focus-visible{opacity:1!important;background:rgba(0,0,0,.8);outline:none}
+.demo.playing .x{opacity:.5}
+.demo .fs{right:auto;left:10px}                                          /* full screen: top left, same look as Close */
+.demo.playing .fs{opacity:.5}
+.demo .frame:fullscreen{border-radius:0;width:100%;height:100%;aspect-ratio:auto}
+.demo .frame:-webkit-full-screen{border-radius:0;width:100%;height:100%}
+
+/* bottom, centred */
+/* Prime + "a tool, not advice": full width under the hero and the links */
+.info{flex:1 1 100%;min-width:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;max-width:980px;margin:0 auto;opacity:0}
+.go-anim .info{animation:up .7s 1.9s ease forwards}
+.ibox{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:18px 20px;display:flex;flex-direction:column;gap:10px;box-shadow:0 10px 28px var(--shade,rgba(0,0,0,.25))}
+.ibox h2{margin:0;display:flex;align-items:center;gap:8px;font:700 15px var(--sans);color:var(--ink)}
+.ibox h2 svg{flex:none;color:var(--accent)}
+.ibox ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px}
+.ibox li{font-size:13px;line-height:1.5;color:var(--faint);padding-left:16px;position:relative}
+.ibox li::before{content:"✓";position:absolute;left:0;top:0;color:var(--accent);font-weight:700}
+.ibox li b{display:block;color:var(--ink);font-size:13.5px;font-weight:600}
+.ibtn{align-self:flex-start;margin-top:4px;padding:8px 14px;border-radius:9px;border:1px solid var(--accent);color:var(--accent);text-decoration:none;font:600 12.5px var(--mono)}
+.foot a.xf svg{display:inline-block;vertical-align:-1.5px;margin-left:4px}
+button.ibtn{background:transparent;cursor:pointer}
+.ibtn:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.prime-box{border-color:#5b2d9c;background:linear-gradient(160deg,rgba(46,16,101,.45),var(--panel) 70%)}
+.prime-box h2 svg,.prime-box li::before{color:#b892f5}
+.prime-box .ibtn{border-color:#8b5cf6;color:#c9b3f5}
+body.day .prime-box{border-color:#4c1d95;background:linear-gradient(160deg,rgba(76,29,149,.16),var(--panel) 70%)}
+body.day .prime-box h2 svg,body.day .prime-box li::before{color:#4c1d95}
+body.day .prime-box .ibtn{border-color:#4c1d95;color:#4c1d95}
+.prime-box .p-on{display:none}
+html.hni-pro .prime-box .p-on{display:inline}
+html.hni-pro .prime-box .p-off{display:none}
+/* phone: the two boxes side by side in their own strip that scrolls sideways (the page itself never does) */
+@media (max-width:700px){
+  .info{display:flex;gap:12px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;
+    padding:4px 2px 14px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+  .info::-webkit-scrollbar{height:5px}
+  .info::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+  .ibox{flex:0 0 86%;scroll-snap-align:start;padding:16px;box-shadow:none}
+}
+/* About / Pricing / Terms / Privacy / Refunds / Contact: legal.html's text in an overlay, in this page's own colours */
+.lg{position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.6)}
+.lg.open{display:flex}
+html.lg-lock,html.lg-lock body{overflow:hidden}
+html.lg-lock .main,html.lg-lock .foot,html.lg-lock .top{visibility:hidden}   /* nothing behind the overlay is painted while it scrolls */
+.lg-box{position:relative;width:min(860px,100%);height:min(88vh,900px);height:min(88dvh,900px);display:flex;flex-direction:column;background:var(--bg);color:var(--ink);
+  border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 32px rgba(0,0,0,.35);overflow:hidden}
+.lg-top{flex:none;display:flex;align-items:center;gap:8px;padding:12px 56px 0 18px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.lg-top::-webkit-scrollbar{display:none}
+.lg-top button{flex:none;border:0;background:none;color:var(--faint);font:600 12.5px var(--mono);padding:8px 6px 11px;cursor:pointer;border-bottom:2px solid transparent}
+.lg-top button:hover{color:var(--ink)}
+.lg-top button.on{color:var(--accent);border-bottom-color:var(--accent)}
+.lg-x{position:absolute;top:8px;right:10px;width:36px;height:36px;border:0;border-radius:50%;background:var(--panel);color:var(--ink);font-size:22px;line-height:1;cursor:pointer;z-index:2}
+.lg-x:hover{background:var(--panel2)}
+.lg-body{position:relative;flex:1;overflow-y:auto;contain:content;will-change:scroll-position;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:4px 24px 40px;font-size:14.5px;line-height:1.65}
+.lg-body h1{font:700 23px var(--sans);margin:22px 0 4px}
+.lg-body h2{font:700 18px var(--sans);margin:36px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
+.lg-body h3{font:700 14.5px var(--sans);margin:20px 0 6px}
+.lg-body p,.lg-body li{color:var(--mute)}
+.lg-body b,.lg-body strong{color:var(--ink)}
+.lg-body a{color:var(--accent)}
+.lg-body .upd{font:500 12px var(--mono);color:var(--faint)}
+.lg-body .note{border:1px solid var(--accent);border-radius:10px;padding:12px 15px;background:var(--panel);margin:16px 0}
+.lg-body .note p{margin:0}
+.lg-body table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13.5px}
+.lg-body th,.lg-body td{text-align:left;padding:8px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+.lg-body th{font:600 11.5px var(--mono);color:var(--faint)}
+.lg-body td.r,.lg-body th.r{text-align:right;white-space:nowrap}
+.lg-body .wait{padding:40px 0;text-align:center;color:var(--faint);font:500 13px var(--mono)}
+@media (max-width:600px){.lg{padding:0;align-items:stretch}.lg-box{height:100%;border-radius:0;border:0}.lg-body{padding:4px 16px 40px}.lg-body th,.lg-body td{padding:7px 5px}}
+.foot{padding:18px 16px 26px;text-align:center;font:500 12.5px var(--mono);color:var(--faint);display:flex;flex-direction:column;gap:6px;opacity:0}
+.foot a{color:var(--accent);text-decoration:none;border-bottom:1px dotted currentColor}
+.foot a:hover{border-bottom-style:solid}
+.foot a.tg{display:inline-flex;align-items:center;gap:6px}                /* Telegram logo in the text's own colour */
+.foot a.tg svg{flex:none}
+.foot .disc{max-width:640px;margin:0 auto;font:500 11.5px/1.55 var(--sans);text-wrap:balance}
+.foot .links{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 16px}
+
+/* the intro: H pops in → HNImanshu slides out of it → words → links → footer */
+.go-anim .tile{animation:pop .7s cubic-bezier(.2,.8,.2,1) both}
+@keyframes pop{0%{transform:scale(.55) rotate(-8deg);opacity:0}70%{transform:scale(1.06)}100%{transform:none;opacity:1}}
+.go-anim .word{animation:grow 1s .65s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes grow{to{max-width:620px}}
+.go-anim .word-in{animation:slide 1s .65s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes slide{to{transform:none;opacity:1}}
+.go-anim .lede{animation:up .7s 1.45s ease forwards}
+@keyframes up{to{opacity:1;transform:none}}
+.go-anim .card{animation:in .6s ease forwards}
+@keyframes in{to{opacity:1;transform:none}}
+.go-anim .card:nth-of-type(1){animation-delay:1.75s}.go-anim .card:nth-of-type(2){animation-delay:1.87s}
+.go-anim .card:nth-of-type(3){animation-delay:1.99s}.go-anim .card:nth-of-type(4){animation-delay:2.11s}
+.foot.go-anim{animation:fade .8s 2.3s ease forwards}
+@keyframes fade{to{opacity:1}}
+@media (max-width:760px) and (orientation:portrait){
+  html .demo .stage{inset:auto;top:50%;left:50%;width:100vh;width:100dvh;height:100vw;transform:translate(-50%,-50%) rotate(90deg)}   /* upright phone: turn the player */
+}
+@media (max-width:760px){
+  .pov{position:fixed;inset:0;border-radius:0;border:0;z-index:400;padding:calc(max(10px,env(safe-area-inset-top)) + 44px) 14px 14px}   /* room for × above the boxes */
+  .pov-x{top:max(10px,env(safe-area-inset-top))}
+  .pov-box{grid-template-columns:1fr}
+  .foot{padding:8px 12px max(10px,env(safe-area-inset-bottom));gap:4px;font-size:11px}
+  .foot .disc{font-size:10.5px;line-height:1.4}
+  .foot .links{gap:2px 12px}
+}
+@media (max-height:600px) and (min-width:761px),(max-height:520px){html,body{overflow:auto;height:auto}body{min-height:100dvh}}   /* too short for one screen: scroll after all */
+@media (prefers-reduced-motion:reduce){
+  .tile,.word,.word-in,.lede,.card,.foot,.demo-btn,.go .lbl{animation:none!important;opacity:1!important;transform:none!important;max-width:none!important}
+}
+
+@media (max-width:760px){
+  /* phone: always full screen and sideways, like a film app, whichever way the phone is held */
+  .demo{position:fixed;inset:0;border-radius:0;border:0;padding:0;z-index:400;background:#000;backdrop-filter:none;-webkit-backdrop-filter:none}
+  body.day .demo{background:#000}
+  .demo .stage{position:absolute;inset:0}
+  .demo .frame{max-width:none;width:100%;height:100%;aspect-ratio:auto;border-radius:0;box-shadow:none}
+  .demo .x{top:max(10px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right))}
+  .demo.playing .x{opacity:1}                                           /* phone: always fully visible (no hover on a phone) */
+  .demo .fs{display:none}                                               /* phone: already full screen */
+  .top{padding:14px 16px;gap:16px;justify-content:flex-end}
+  .top .au-av{height:38px}
+  .top .au-nm{max-width:42vw}
+  .main{padding:0 16px 6px;gap:18px;align-content:space-evenly}
+  .hero{min-height:auto;padding-top:0;gap:12px}
+  .demo-btn{height:36px;font-size:12px;padding:0 14px 0 5px}
+  .demo-btn .pl{width:26px;height:26px}
+  .tile{width:60px;height:60px;border-radius:14px}
+  .tile span{font-size:36px}
+  .word-in{padding-left:12px;gap:2px;transform:translateX(-24px)}
+  .word .hni{font-size:34px;letter-spacing:3px}
+  .word .manshu{font-size:26px;letter-spacing:0}
+  .lede .t1{font-size:13px}.lede .t2{font-size:13.5px}
+  .go{max-width:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .go .lbl{grid-column:1 / -1}
+  .card{flex-direction:column;align-items:flex-start;gap:8px;padding:12px 12px;min-height:0}
+  .card .ic{width:34px;height:34px}
+  .card b{font-size:15px}
+  .card small,.card .chev{display:none}
+  html:not(.hni-pro) .card.prime .cr{position:absolute;top:14px;right:14px}
+  .card.prime{position:relative}
+}
+</style>
+<script>
+/* day / night before the first paint: same key as every page, night by default */
+(function(){ var t = 'night'; try { if (localStorage.getItem('hnimanshu_theme') === 'day') t = 'day'; } catch (e) {}
+  document.documentElement.dataset.theme = t;
+  document.addEventListener('DOMContentLoaded', function(){ document.body.classList.add(t); });
+})();
+</script>
+</head>
+<body class="night">
+<script>document.body.className = document.documentElement.dataset.theme || 'night';</script>
+
+<header class="top">
+  <span id="au-slot" class="au-slot"></span>
+  <button type="button" id="theme-toggle" aria-label="Switch day / night">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+  </button>
+</header>
+
+<main class="main go-anim">
+  <section class="hero">
+    <h1 class="mark" aria-label="HNImanshu">
+      <span class="tile" id="hTile" role="button" tabindex="0" aria-label="Play the intro again"><span>H</span></span>
+      <span class="word" aria-hidden="true"><span class="word-in"><span class="hni">HNI</span><span class="manshu">manshu</span></span></span>
+    </h1>
+    <div class="lede">
+      <p class="t1">No noise. No hype. Just data.</p>
+      <p class="t2">Indian stocks valued from company financials: NIFTY 500, Smallcap 500 and Microcap 250.</p>
+    </div>
+    <div class="hbtns">
+      <button type="button" class="demo-btn" id="demoBtn" aria-haspopup="dialog"><span class="pl"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg></span>View demo</button>
+      <button type="button" class="demo-btn pr-btn" id="prBtn" aria-haspopup="dialog"><span class="pl"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg></span>Prime Benefits</button>
+    </div>
+<div class="pov" id="pov" role="dialog" aria-modal="true" aria-label="Prime benefits"><button type="button" class="pov-x" aria-label="Close" title="Close (Esc)">×</button><div class="pov-box">
+  <div class="ibox prime-box">
+      <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg>
+        <span class="p-off">Prime <small>from ₹99 a month</small></span><span class="p-on">Included in your Prime</span></h2>
+      <ul>
+        <li><b>Portfolio Builder</b>Set your own mix of index ETFs, value and momentum, see the result today and test the same rules on the past year.</li>
+        <li><b>News on Telegram</b>Headlines about the stocks in your portfolio, collected through Google's news search and sent to you on Telegram.</li>
+        <li><b>Everything in Plus</b>Smallcap 500, Microcap 250 and every other NSE stock.</li>
+      </ul>
+      <button type="button" class="ibtn p-off" id="povPlans">See Plus / Prime plans</button>
+    </div>
+  <div class="ibox plus-box">
+    <h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      Plus <small>₹499 a year</small></h2>
+    <ul>
+      <li><b>Every list</b>Smallcap 500, Microcap 250 and every other NSE stock (Others), on top of NIFTY 500.</li>
+      <li><b>On every screen</b>Industries, Value screen, Momentum, All Stocks and Compare, across all of them.</li>
+    </ul>
+  </div>
+</div></div>
+    <div class="demo" id="demo" role="dialog" aria-modal="true" aria-label="Demo video"><div class="stage"><div class="frame"><div class="vid"></div><button type="button" class="x fs" aria-label="Full screen" title="Full screen (F)"><b>⛶</b> Full screen</button><button type="button" class="x" aria-label="Close video"><b>×</b> Close</button></div></div></div>
+  </section>
+
+  <nav class="go" aria-label="Pages">
+    <span class="lbl">Go to</span>
+    <a class="card" href="valuation" data-auth-link>
+      <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>
+      <span class="tx"><b>Valuation</b><small>Model values worked out from company financials</small></span><span class="chev" aria-hidden="true">›</span>
+    </a>
+    <a class="card" href="factor" data-auth-link>
+      <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 20h18"/><path d="M6 16v-5M11 16V6M16 16v-8M21 16v-3"/></svg></span>
+      <span class="tx"><b>Factor Screener</b><small>Filter stocks with your own limits</small></span><span class="chev" aria-hidden="true">›</span>
+    </a>
+    <a class="card" href="factor#/portfolio" data-auth-link>
+      <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg></span>
+      <span class="tx"><b data-pf-name>Portfolio</b><small data-pf-sub>Track holdings and P&amp;L you type in · no money moves here</small></span><span class="chev" aria-hidden="true">›</span>
+    </a>
+    <a class="card prime" href="builder" data-auth-link data-prime-link>
+      <span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="translate(9.6 6.7) rotate(-38)"><path d="M0 2V15.6" stroke-width="3"/><g fill="currentColor" stroke="none"><rect x="-8.9" y="-2.3" width="2.7" height="4.6" rx="1.2"/><path d="M-6.5 -1.5h1.6v3h-1.6z"/><path d="M-5.2 -2.5Q-4 -3.7 -1.5 -3.7H1.6C5.6 -3.7 8.5 -2.2 9.7 .1 7.7 -1 5.2 -1.3 2.6 -.5L1.9 2.3H-1.9L-3.2 1.9H-5.2z"/></g></g><path d="M3.3 15.6h4.5v6.1H2.1z" stroke-width="1.8"/><path d="M5 15.6v-1.1a1.5 1.5 0 0 1 1.5-1.5h1.3" stroke-width="1.7"/></svg></span>
+      <span class="tx"><b>Portfolio Builder</b><small><span class="p-off">Part of Prime</span><span class="p-on">ETFs + value + momentum, with a backtest</span></small></span>
+      <svg class="cr" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-label="Prime"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg>
+      <span class="chev" aria-hidden="true">›</span>
+    </a>
+  </nav>
+
+</main>
+
+
+
+<footer class="foot go-anim">
+  <span class="disc">Stock-screening software for learning and research. Not investment advice: we never tell anyone to buy, sell or hold a security.
+    HNImanshu is not a SEBI-registered investment adviser or research analyst.</span>
+  <span class="links"><a href="legal#about">About</a><a href="legal#pricing">Pricing</a><a href="legal#terms">Terms</a><a href="legal#privacy">Privacy</a><a href="legal#refund">Refunds</a><a href="legal#contact">Contact</a></span>
+  <span>Designed by Himanshu · <a href="https://x.com/intent/follow?screen_name=HNImanshu" target="_blank" rel="noopener" class="xf" aria-label="Follow on X">Follow on <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.402 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.261 5.636 5.903-5.636Zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a> · <a class="tg" href="https://t.me/HNImanshu" target="_blank" rel="noopener"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.9 4.3 18.6 20c-.2 1.1-.9 1.4-1.8.9l-5-3.7-2.4 2.3c-.3.3-.5.5-1 .5l.4-5.1 9.3-8.4c.4-.4-.1-.6-.6-.2L6.1 13.5 1.2 12c-1.1-.3-1.1-1.1.2-1.6L20.6 3c.9-.3 1.6.2 1.3 1.3z"/></svg>Send private message</a></span>
+</footer>
+
+<script>
+/* "View demo": paste the YouTube link here (any form: youtu.be/…, youtube.com/watch?v=…, /shorts/…, /embed/…) */
+var DEMO_VIDEO = "";
+(function () {
+  var btn = document.getElementById('demoBtn'), box = document.getElementById('demo'), frame = box.querySelector('.vid'), player = null;
+  function ytId(u) { var m = String(u).match(/(?:youtu\.be\/|[?&]v=|\/(?:embed|shorts|live)\/)([\w-]{11})/); return m ? m[1] : ''; }
+  /* YouTube's player script (loaded only on the first click): tells us playing / paused / ended.
+     Ended → the window closes by itself. If the script can't load, a plain player is used (no auto-close). */
+  var ytWait = null;
+  function ytApi() {
+    if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+    return ytWait = ytWait || new Promise(function (ok, bad) {
+      var prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = function () { if (prev) prev(); ok(window.YT); };
+      var sc = document.createElement('script'); sc.src = 'https://www.youtube.com/iframe_api'; sc.onerror = function () { ytWait = null; bad(); };
+      document.head.appendChild(sc);
+      setTimeout(function () { if (!(window.YT && window.YT.Player)) { ytWait = null; bad(); } }, 8000);
+    });
+  }
+  function plain(id) {
+    frame.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&rel=0&modestbranding=1&playsinline=1" title="HNImanshu demo" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>';
+  }
+  /* web: the window uses all the height between the top bar and the footer (left column only, never over the cards),
+     so the 16:9 player can be as big as YouTube's own */
+  function place() {
+    if (phone()) { box.style.top = box.style.bottom = ''; return; }
+    var h = box.parentElement.getBoundingClientRect(), t = document.querySelector('.top'), f = document.querySelector('.foot');
+    var top = (t ? t.getBoundingClientRect().bottom : 0) + 12, bot = (f ? f.getBoundingClientRect().top : innerHeight) - 12;
+    box.style.top = Math.min(0, top - h.top) + 'px'; box.style.bottom = Math.min(0, h.bottom - bot) + 'px';
+  }
+  addEventListener('resize', function () { if (box.classList.contains('open')) place(); });
+  function open() {
+    var id = ytId(DEMO_VIDEO);
+    place();
+    box.classList.remove('playing');
+    if (!id) frame.innerHTML = '<div class="soon">The demo video is coming soon.</div>';   // no link: stays open until closed
+    else {
+      frame.innerHTML = '<div id="ytp"></div>';
+      ytApi().then(function (YT) {
+        if (!box.classList.contains('open')) return;
+        player = new YT.Player('ytp', { host: 'https://www.youtube-nocookie.com', videoId: id, width: '100%', height: '100%',
+          playerVars: { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1 },
+          events: {
+            onReady: function (e) { try { e.target.playVideo(); } catch (x) {} },
+            onStateChange: function (e) {
+              box.classList.toggle('playing', e.data === 1);         // 1 playing: Close fades to half (web)
+              if (e.data === 0) close();                              // 0 ended: close the window
+            }
+          } });
+      }).catch(function () { if (box.classList.contains('open') && !player) plain(id); });
+    }
+    box.classList.add('open'); box.querySelector('.x:not(.fs)').focus();
+  }
+  var phone = function () { return matchMedia('(max-width:760px)').matches; };
+  function goFull() {                                                   // hide the browser bars and turn the screen sideways where the phone allows it
+    var el = box, rq = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!rq) return;
+    try { Promise.resolve(rq.call(el, {navigationUI: 'hide'})).then(function () {
+      if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () {});
+    }).catch(function () {}); } catch (e) {}
+  }
+  function leaveFull() {
+    try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) {}
+    var fe = document.fullscreenElement || document.webkitFullscreenElement, ex = document.exitFullscreen || document.webkitExitFullscreen;
+    if (fe && ex) try { Promise.resolve(ex.call(document)).catch(function () {}); } catch (e) {}
+  }
+  function close() {
+    if (!box.classList.contains('open')) return;
+    box.classList.remove('open', 'playing');
+    try { if (player && player.destroy) player.destroy(); } catch (e) {}
+    player = null; frame.innerHTML = ''; leaveFull(); btn.focus();
+  }   // removing the player stops the sound
+  btn.addEventListener('click', function () { if (phone()) goFull(); });                              // must start inside the tap
+  ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (ev) {                               // phone back gesture left full screen → close
+    document.addEventListener(ev, function () { if (!(document.fullscreenElement || document.webkitFullscreenElement) && box.classList.contains('open') && phone()) close(); });
+  });
+  btn.addEventListener('click', open);
+  box.querySelector('.x:not(.fs)').addEventListener('click', close);
+  /* web: full screen for the player (YouTube's own ⛶ in its controls works too); F toggles it */
+  function toggleFull() {
+    var f = box.querySelector('.frame'), fe = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fe) { var ex = document.exitFullscreen || document.webkitExitFullscreen; if (ex) try { Promise.resolve(ex.call(document)).catch(function () {}); } catch (e) {} return; }
+    var rq = f.requestFullscreen || f.webkitRequestFullscreen; if (rq) try { Promise.resolve(rq.call(f)).catch(function () {}); } catch (e) {}
+  }
+  box.querySelector('.fs').addEventListener('click', toggleFull);
+  document.addEventListener('keydown', function (e) { if ((e.key === 'f' || e.key === 'F') && box.classList.contains('open') && !phone() && !e.ctrlKey && !e.metaKey) toggleFull(); });
+  box.addEventListener('click', function (e) { if (e.target === box) close(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && box.classList.contains('open')) close(); });
+})();
+
+/* tap the H: the intro plays again */
+(function () {
+  var t = document.getElementById('hTile');
+  function replay() {
+    var parts = [document.querySelector('.main'), document.querySelector('.foot')];
+    parts.forEach(function (el) { el.classList.remove('go-anim'); });
+    void document.body.offsetWidth;                                     // let the browser forget the finished animation
+    parts.forEach(function (el) { el.classList.add('go-anim'); });
+  }
+  t.addEventListener('click', replay);
+  t.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); replay(); } });
+})();
+
+/* day / night switch: same key as the other pages */
+document.getElementById('theme-toggle').addEventListener('click', function () {
+  var day = !document.body.classList.contains('day');
+  document.body.classList.toggle('day', day); document.body.classList.toggle('night', !day);
+  document.documentElement.dataset.theme = day ? 'day' : 'night';
+  try { localStorage.setItem('hnimanshu_theme', day ? 'day' : 'night'); } catch (e) {}
+});
+
+/* links that need a login (Factor Screener, Portfolio, Portfolio Builder): the first tap works even before auth.js has
+   loaded. Signed in → straight there; signed out → the login box, then that page. Portfolio Builder for a signed-in
+   account without Prime → the plans popup here instead of a locked page. */
+(function () {
+  function chk(on) {
+    var o = document.getElementById('au-chk');
+    if (on && !o) { o = document.createElement('div'); o.id = 'au-chk'; o.className = 'au-chk';
+      o.innerHTML = '<div class="au-chkbox" role="status" aria-live="polite"><i class="au-spin"></i><span>Checking login…</span></div>'; document.body.appendChild(o); }
+    if (o) o.classList.toggle('open', !!on);
+  }
+  window.hniDone = function () { chk(false); document.querySelectorAll('[data-auth-link]').forEach(function (a) { a.removeAttribute('aria-disabled'); a.classList.remove('au-busy'); }); };
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('[data-auth-link]');
+    if (!a || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (a.getAttribute('aria-disabled') === 'true') return;
+    if (a.hasAttribute('data-prime-link') && window.hniBuilder) {        // signed in: Prime or admin → go; else the plans
+      window.hniBuilder.then(function (ok) { if (ok) location.href = a.href; else if (window.hniPlans) window.hniPlans('builder'); });   // not Prime: plans here, builder only after paying
+      return;
+    }
+    a.setAttribute('aria-disabled', 'true'); a.classList.add('au-busy'); chk(true);
+    if (window.hniAuthGo) window.hniAuthGo(a.href); else window.hniPending = a.href;
+    setTimeout(function () { if (window.hniPending === a.href) { window.hniPending = null; location.href = a.href; } }, 8000);
+  }, true);
+  addEventListener('pageshow', function (e) { if (e.persisted) window.hniDone(); });
+})();
+</script>
+<script>
+/* footer About / Pricing / Terms / Privacy / Refunds / Contact (and "How it works and terms"): open legal.html's text in an
+   overlay here instead of a new page. legal.html stays as its own page too (a direct link for payment reviewers). */
+(function () {
+  var TABS = [['about', 'About'], ['pricing', 'Pricing'], ['terms', 'Terms'], ['privacy', 'Privacy'], ['refund', 'Refunds'], ['contact', 'Contact']];
+  var box = null, body = null, html = null, busy = false;
+  function load() {
+    if (html) return Promise.resolve(html);
+    return fetch('legal.html').then(function (r) { if (!r.ok) throw r.status; return r.text(); }).then(function (t) {
+      var m = new DOMParser().parseFromString(t, 'text/html').querySelector('main');
+      if (!m) throw 'no main'; html = m.innerHTML; return html;
+    });
+  }
+  // the text is fetched quietly 1 s after the intro animation ends (~3 s), so the overlay opens at once
+  addEventListener('load', function () { setTimeout(function () { load().catch(function () {}); }, 3200); });
+  function mark(id) { box.querySelectorAll('.lg-top button').forEach(function (b) { b.classList.toggle('on', b.dataset.id === id); }); }
+  function go(id) {
+    var el = body.querySelector('#' + id);
+    busy = true; body.scrollTop = el && id !== 'about' ? el.offsetTop - 6 : 0; mark(id);
+    setTimeout(function () { busy = false; }, 80);
+  }
+  function close() { box.classList.remove('open'); document.documentElement.classList.remove('lg-lock'); }
+  function build() {
+    box = document.createElement('div'); box.className = 'lg';
+    box.innerHTML = '<div class="lg-box" role="dialog" aria-modal="true" aria-label="About, terms and policies"><button type="button" class="lg-x" aria-label="Close">×</button>'
+      + '<nav class="lg-top">' + TABS.map(function (t) { return '<button type="button" data-id="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</nav>'
+      + '<div class="lg-body"><p class="wait">Loading…</p></div></div>';
+    document.body.appendChild(box); body = box.querySelector('.lg-body');
+    box.querySelector('.lg-x').addEventListener('click', close);
+    box.addEventListener('click', function (e) { if (e.target === box) close(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && box.classList.contains('open')) close(); });
+    box.querySelector('.lg-top').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) go(b.dataset.id); });
+    var tick = false;
+    body.addEventListener('scroll', function () {                        // the tab follows what is on screen (once a frame)
+      if (busy || tick) return; tick = true;
+      requestAnimationFrame(function () {
+        tick = false; var cur = 'about', y = body.scrollTop;
+        (body._tops || []).forEach(function (t) { if (t[1] - 40 <= y) cur = t[0]; });
+        if (y + body.clientHeight >= body.scrollHeight - 4) cur = 'contact'; mark(cur);
+      });
+    }, { passive: true });
+  }
+  function open(id) {
+    if (!box) build();
+    box.classList.add('open'); document.documentElement.classList.add('lg-lock'); mark(id);
+    load().then(function (h) {
+      if (!body.querySelector('h1')) body.innerHTML = h;
+      requestAnimationFrame(function () {
+        body._tops = TABS.map(function (t) { var el = body.querySelector('#' + t[0]); return [t[0], el ? el.offsetTop : 0]; });
+        go(id);
+      });
+    })
+      .catch(function () { location.href = 'legal#' + id; });                  // offline / not deployed yet: the page itself
+  }
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="legal"]');
+    if (!a || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    e.preventDefault(); open((a.getAttribute('href').split('#')[1]) || 'about');
+  });
+})();
+</script>
+<script>
+/* Prime Benefits: the Prime list in an overlay (×, Esc or a tap outside closes it) */
+(function () {
+  var b = document.getElementById('prBtn'), o = document.getElementById('pov');
+  if (!b || !o) return;
+  var close = function () { o.classList.remove('open'); };
+  b.addEventListener('click', function () { o.classList.add('open'); var x = o.querySelector('.pov-x'); if (x) x.focus(); });
+  o.addEventListener('click', function (e) { if (e.target === o || e.target.closest('.pov-x')) close(); });
+  document.addEventListener('click', function (e) {                    // PC: a click anywhere outside the window closes it
+    if (o.classList.contains('open') && !o.contains(e.target) && !b.contains(e.target)) close();
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && o.classList.contains('open')) close(); });
+  /* See Plus / Prime plans: this overlay closes and the plans window opens (logged in or not: paying needs a login,
+     and closing the plans window then opens the login box) */
+  var pp = document.getElementById('povPlans');
+  if (pp) pp.addEventListener('click', function (e) {
+    e.stopPropagation(); close();
+    var go = function () { window.hniPlans(null, 'prime'); };
+    if (window.hniPlans) go();
+    else { var n = 0, t = setInterval(function () { if (window.hniPlans || ++n > 40) { clearInterval(t); if (window.hniPlans) go(); } }, 100); }   // login code still loading
+  });
+})();
+</script>
+</body>
+</html>
