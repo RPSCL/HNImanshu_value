@@ -328,6 +328,8 @@ jobs:
 
       - name: "🏗 Full run (1) — build"
         if: steps.mode.outputs.mode == 'full'
+        env:
+          PAID_KEY: ${{ secrets.PAID_KEY }}     # Plus / Prime files are published encrypted with it (paid.py); empty = plain, as before
         run: |
           python build.py
 
@@ -335,12 +337,16 @@ jobs:
       # a manual run with 0 still scans news here too (backup for when the server is down).
       - name: "⚡ Light run — build (0)"
         if: steps.mode.outputs.mode == 'light'
+        env:
+          PAID_KEY: ${{ secrets.PAID_KEY }}     # Plus / Prime files are published encrypted with it (paid.py); empty = plain, as before
         run: |
           if [ "${{ github.event.inputs.force_full }}" = "0" ] || [ "${{ steps.mode.outputs.news }}" = "1" ]; then python -u fetch_news.py; fi   # by hand with 0, or the news back-up
           python build.py
 
       - name: "🔨 Build only (-1 / news from Oracle)"
         if: steps.mode.outputs.mode == 'build' || steps.mode.outputs.mode == 'news'
+        env:
+          PAID_KEY: ${{ secrets.PAID_KEY }}     # Plus / Prime files are published encrypted with it (paid.py); empty = plain, as before
         run: |
           python build.py
 
@@ -410,6 +416,12 @@ jobs:
         run: |
           pip install -q firebase-admin
           python account_deletes.py
+
+      # the website gets compressed copies without code notes; the repo (already committed above) keeps the readable ones
+      - name: "🗜 Compress the site's code"
+        if: steps.mode.outputs.mode != 'prices'
+        continue-on-error: true
+        run: bash .github/minify_site.sh
 
       - name: Deploy to Firebase Hosting
         if: steps.mode.outputs.mode != 'prices'
