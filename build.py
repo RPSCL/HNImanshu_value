@@ -41,7 +41,6 @@ Fundamentals:
   from the same three CSVs. A failure there never blocks the screener.
 """
 
-import fcf                                   # owner earnings / free cash flow value + its backtest data
 import pandas as pd
 import numpy as np
 import json
@@ -494,19 +493,30 @@ NEWS_SUFFIX = "?oc=5&hl=en-US&gl=US&ceid=US:en"
 NEWS_DAYS_KEEP, NEWS_PER_STOCK = 7, 8          # 8 headlines per stock (was 10): a smaller news.json
 
 
+NEWS_SHARDS = 32
+
+
+def news_shard(sym: str) -> int:
+    """Which news/<n>.json a stock's news is in. Must match newsShard() in both pages (h = h*31 + char, 32-bit)."""
+    h = 0
+    for ch in str(sym):
+        h = (h * 31 + ord(ch)) & 0xFFFFFFFF
+    return h % NEWS_SHARDS
+
+
 def write_news_json(path: Path, out: Path, main_syms=None) -> int:
-    """multi_stock_news.csv → public/news.json, compact and shared by both pages:
+    """multi_stock_news.csv → public/news/<0-31>.json (by symbol, news_shard), compact and shared by both pages:
       {"p": link prefix, "q": link suffix,
        "a": [[yymmddHHMM, headline, source, link-id], …]   each article once, even if several stocks carry it
        "s": {SYMBOL: [article index, …]}}                   newest first, at most 10 per stock, last 7 days
     The Google News link is stored without its fixed start / end (the page adds them back): ~20% of the link.
     Repeat stories are removed with news_dedup.py (same figures, same wording).
-    main_syms (the 3 lists): only their news goes in news.json; every other stock's news goes in news_more.json
-    (same format), which the pages load only when such a stock's news is opened. news.json lists those stocks in "m"."""
+    Each file holds every stock whose symbol hashes to it (3 lists + Others alike): a popup loads ~1/32 of all news."""
     if not path.exists():
         print(f"  [NEWS]  {path.name} not found — no news")
-        out.write_text('{"p":"","q":"","a":[],"s":{},"m":[]}', encoding="utf-8")
-        (out.parent / "news_more.json").write_text('{"p":"","q":"","a":[],"s":{}}', encoding="utf-8")
+        (out.parent / "news").mkdir(exist_ok=True)
+        for n in range(NEWS_SHARDS):
+            (out.parent / "news" / f"{n}.json").write_text('{"p":"","q":"","a":[],"s":{}}', encoding="utf-8")
         return 0
     from news_dedup import dedup_frame, source_of
     df = pd.read_csv(path, encoding="utf-8-sig", low_memory=False)
@@ -542,13 +552,24 @@ def write_news_json(path: Path, out: Path, main_syms=None) -> int:
         d = {"p": NEWS_PREFIX, "q": NEWS_SUFFIX, "a": [arts[i] for i in idx], "s": ss}
         d.update(extra or {})
         return json.dumps(d, ensure_ascii=False, separators=(",", ":"))
-    main = [k for k in per if main_syms is None or k in main_syms]
-    more = [k for k in per if not (main_syms is None or k in main_syms)]
-    txt, txt2 = pack(main, {"m": more}), pack(more)
-    out.write_text(txt, encoding="utf-8")
-    (out.parent / "news_more.json").write_text(txt2, encoding="utf-8")
+    # 32 small files by symbol (news_shard, same hash as the pages): a popup downloads ~1/32 of all news, not all of it
+    shard_dir = out.parent / "news"
+    shard_dir.mkdir(exist_ok=True)
+    for f in shard_dir.glob("*.json"):
+        f.unlink()
+    groups = {}
+    for k in per:
+        groups.setdefault(news_shard(k), []).append(k)
+    sizes = []
+    for n in range(NEWS_SHARDS):
+        t = pack(sorted(groups.get(n, [])))
+        (shard_dir / f"{n}.json").write_text(t, encoding="utf-8")
+        sizes.append(len(t))
+    for old in ("news.json", "news_more.json"):           # the old all-in-one files: nothing loads them any more
+        if (out.parent / old).exists():
+            (out.parent / old).unlink()
     print(f"  [NEWS]  {len(df)} stories after repeats removed → {len(arts)} articles for {len(per)} stocks: "
-          f"news.json {len(main)} stocks {len(txt) / 1e6:.2f} MB, news_more.json {len(more)} stocks {len(txt2) / 1e6:.2f} MB (on demand)")
+          f"news/0-{NEWS_SHARDS - 1}.json, {sum(sizes) / 1e6:.2f} MB in all, ~{sum(sizes) / NEWS_SHARDS / 1e3:.0f} KB each")
     return sum(len(v) for v in per.values())
 
 
@@ -724,12 +745,6 @@ def load_csv(path: Path, name_col: str, label: str, optional=False):
     df["QUALITY_SCORE"]   = calc_quality_score(df)       # 0–13.4
     df["COMBINED_SCORE"]  = (df["PIOTROSKI_SCORE"] + df["QUALITY_SCORE"]).round(2)
     df = calc_final_score(df)
-    try:                                                # owner earnings / FCF value (fcf.py): the Valuation page's "Owner earnings" tab
-        df = fcf.add_columns(df)
-        print(f"    Owner earnings value: {int(df['OE_VALUE'].notna().sum())} of {len(df)} stocks")
-    except Exception:
-        traceback.print_exc()
-        print("    [WARN] owner earnings skipped")
 
     # ── Debug stats ──────────────────────────────────────────────────────
     print(f"\n    {'Column':<22} {'Min':>6} {'Max':>6} {'Avg':>6}")
@@ -750,7 +765,7 @@ def load_csv(path: Path, name_col: str, label: str, optional=False):
     print(f"\n    Top 5:\n{top5.to_string(index=False)}\n")
 
     # ── Trim to output columns ───────────────────────────────────────────
-    needed = ["COMPANY_NAME"] + KEY_COLS + fcf.OE_COLS
+    needed = ["COMPANY_NAME"] + KEY_COLS
     df = df[[c for c in needed if c in df.columns]]
 
     df = df.replace([np.inf, -np.inf], None)
@@ -950,28 +965,6 @@ def write_builder_daily(out: Path) -> int:
         return 0
 
 
-PRICES_YEARLY = BASE / "prices_yearly.csv"           # fetch_prices.py --yearly: split-adjusted close on 1 July of every year since 2019
-
-
-def write_oe_backtest(out: Path) -> int:
-    """public/oe_backtest.json: every stock's owner-earnings value at each 1 July (only data known then) + its price that day.
-    The Valuation page's Backtest tab runs the strategy on it in the browser (top N, minimum gap, lists)."""
-    if not PRICES_YEARLY.exists():
-        print("  [oe backtest] prices_yearly.csv not there yet (run fetch_prices.py --yearly once): backtest tab waits for it")
-        if out.exists():
-            out.unlink()
-        return 0
-    prices = pd.read_csv(PRICES_YEARLY, low_memory=False)
-    frames = []
-    for key, f in (("n500", N500_CSV), ("sc250", SC250_CSV), ("mc250", MC250_CSV)):
-        if f.exists():
-            frames.append((key, pd.read_csv(f, low_memory=False)))
-    data = fcf.backtest_rows(frames, prices)
-    out.write_text(json.dumps(data, separators=(",", ":"), allow_nan=False), encoding="utf-8")
-    print(f"  [oe backtest] {len(data['stocks'])} stocks × {len(data['years'])} years → {out.name} ({out.stat().st_size // 1024} KB)")
-    return len(data["stocks"])
-
-
 def build_fundamentals():
     """Build public/factor.html (Factor Screener) from the same 3 CSVs (explicit paths, so test_*.csv is never read)."""
     print("\nBuilding Fundamentals page...\n")
@@ -1014,32 +1007,14 @@ def build(deploy=False):
     n_nse = write_nse_list(OUTPUT.parent / "nse_all.json")
     write_builder_etf(OUTPUT.parent / "builder_etf.json")   # Portfolio Builder: ETF prices / 3-month returns
     write_builder_daily(OUTPUT.parent / "builder_daily.json")   # Portfolio Builder: saved daily ETF closes (backtest charts)
-    try:
-        write_oe_backtest(OUTPUT.parent / "oe_backtest.json")   # Valuation → Backtest tab
-    except Exception:
-        traceback.print_exc()
-        print("  [WARN] oe_backtest.json skipped")
 
     if data_sc250 is None:
         data_sc250 = []
     if data_mc250 is None:
         data_mc250 = []
 
-    # owner earnings year by year (popup table): its own file, fetched the first time a popup needs it (keeps the page light)
-    oe_hist = {}
-    for rows in (data_n500 or [], data_sc250, data_mc250, data_oth):
-        for r in rows:
-            for k in [k for k, v in r.items() if v is None and (k.startswith("OE_") or k.startswith("FCF_"))]:
-                del r[k]                                # empty owner-earnings fields: left out (the page reads missing as empty)
-            h = r.pop("OE_HIST", None)
-            if h and r.get("SYMBOL"):
-                oe_hist.setdefault(str(r["SYMBOL"]), h)
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    (OUTPUT.parent / "oe_hist.json").write_text(json.dumps(oe_hist, separators=(",", ":"), allow_nan=False), encoding="utf-8")
-    print(f"  [owner earnings] year-by-year table for {len(oe_hist)} stocks → oe_hist.json")
-
     print("\nLoading News...\n")
-    # News is not baked into the page (it was ~70% of index.html): ONE compact public/news.json, shared by the
+    # News is not baked into the page (it was ~70% of index.html): 32 small public/news/<n>.json files, shared by the
     # screener and the Fundamentals Portfolio, fetched the first time news is needed.
     news_js  = build_news_js({})
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
@@ -1050,7 +1025,7 @@ def build(deploy=False):
         except Exception:
             pass
     n_news = write_news_json(NEWS_CSV, OUTPUT.parent / "news.json", main_syms or None)
-    for old in ("screener_news.json",):                 # leftovers nothing loads any more: not deployed again
+    for old in ("screener_news.json", "oe_hist.json", "oe_backtest.json", "fundamentals.html"):                 # leftovers nothing loads any more: not deployed again
         f = OUTPUT.parent / old
         if f.exists():
             f.unlink()

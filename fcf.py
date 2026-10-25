@@ -9,6 +9,8 @@ balance sheet, year by year:
     owner earnings = cash from operations − maintenance capex   (Buffett, 1986 letter; working capital is already in CFO)
     free cash flow = cash from operations − all capex           (stricter: growth spending counts too)
 
+Used by fundamentals.py (Factor screener → Value screen → "Owner earnings", today and every Historical date).
+
 Value per share (both, the same way):
     base     = average of the last 3 years (at least 2)                       — one lumpy year doesn't decide it
     growth g = the lower of the 5-year revenue and profit growth, 0 … 15 %    — conservative, like Buffett
@@ -146,58 +148,12 @@ def _r(v, d=2):
     return None if v is None else round(float(v), d)
 
 
-def add_columns(df):
-    """Adds the owner-earnings columns to one list's DataFrame (in place) and returns it."""
-    cols = {f: year_cols(df.columns, p) for f, p in FIELDS.items()}
-    out = {k: [] for k in ("OE_VALUE", "FCF_VALUE", "OE_GAP_PCT", "FCF_GAP_PCT", "OE_BUY_BELOW", "OE_CR", "FCF_CR",
-                           "OE_YIELD_PCT", "FCF_YLD_PCT", "OE_G_PCT", "OE_POS", "OE_NET_DEBT_CR", "OE_NOTE", "OE_HIST", "OE_FY", "OE_CYC")}
-    for row in df.to_dict("records"):
-        res = dict.fromkeys(out)
-        sh, cmp_, mc = _num(row.get("SHARES_CR")), _num(row.get("CMP")), _num(row.get("MARKET_CAP_CR"))
-        if not sh and mc and cmp_:
-            sh = mc / cmp_
-        if is_financial(row):
-            res["OE_NOTE"] = "fin"
-        else:
-            h = history(row, cols)
-            cyc = is_cyclical(row)
-            res["OE_CYC"] = 1 if cyc else None
-            v = value_at(h, len(h) - 1, sh, cyc) if h else None
-            res["OE_HIST"] = [[f"{MONTHS_R[r['m']]}{r['y'] % 100:02d}", _r(r["cfo"], 0), _r(r["capex"], 0), _r(r["dep"], 0),
-                               _r(r["oe"], 0), _r(r["fcf"], 0)] for r in h[-6:]] or None
-            if not v:
-                res["OE_NOTE"] = "short"
-            else:
-                res.update({"OE_CR": _r(v["oe"], 1), "FCF_CR": _r(v["fcf"], 1), "OE_G_PCT": _r(v["g"] * 100, 1),
-                            "OE_POS": f"{v['pos']}/{v['npos']}", "OE_NET_DEBT_CR": _r(v["nd"], 0),
-                            "OE_FY": f"{MONTHS_R[v['m']]} {v['y']}",
-                            "OE_VALUE": _r(v["v_oe"]), "FCF_VALUE": _r(v["v_fcf"])})
-                if mc and mc > 0:
-                    res["OE_YIELD_PCT"] = _r(v["oe"] / mc * 100)
-                    if v["fcf"] is not None:
-                        res["FCF_YLD_PCT"] = _r(v["fcf"] / mc * 100)
-                if cmp_ and cmp_ > 0:
-                    if v["v_oe"]:
-                        res["OE_GAP_PCT"] = _r((v["v_oe"] / cmp_ - 1) * 100, 1)
-                        res["OE_BUY_BELOW"] = _r(v["v_oe"] * (1 - MOS))
-                    if v["v_fcf"]:
-                        res["FCF_GAP_PCT"] = _r((v["v_fcf"] / cmp_ - 1) * 100, 1)
-                if v["v_oe"] is None:
-                    res["OE_NOTE"] = "neg"
-        for k in out:
-            out[k].append(res[k])
-    new = pd.DataFrame({k: pd.Series(v, index=df.index, dtype=object) for k, v in out.items()})
-    return pd.concat([df.drop(columns=[c for c in out if c in df.columns]), new], axis=1)
-
-
 MONTHS_R = {v: k.title() for k, v in MONTHS.items()}
-OE_COLS = ["OE_VALUE", "FCF_VALUE", "OE_GAP_PCT", "FCF_GAP_PCT", "OE_BUY_BELOW", "OE_CR", "FCF_CR", "OE_YIELD_PCT",
-           "FCF_YLD_PCT", "OE_G_PCT", "OE_POS", "OE_NET_DEBT_CR", "OE_NOTE", "OE_HIST", "OE_FY", "OE_CYC"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Backtest data: the owner-earnings value of every stock at every 1 July since 2019 (point in time),
-# with the split-adjusted price on that day (prices_yearly.csv, fetch_prices.py --yearly)
+# Multi-year backtest data (not on the site yet): the owner-earnings value of every stock at every 1 July since 2019
+# (point in time), with the split-adjusted price that day (prices_yearly.csv, fetch_prices.py --yearly)
 # ─────────────────────────────────────────────────────────────────────────────
 ANCHOR_M, ANCHOR_D = 7, 1           # 1 July: last year's annual results (to March) are all out by the end of May
 LAG_DAYS = 75                        # a year's numbers count only if the year ended ≥ 75 days before the buy date

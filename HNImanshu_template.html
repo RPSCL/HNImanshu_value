@@ -702,92 +702,6 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
   flex-shrink: 0; line-height: 1.6; min-width: 22px; text-align: center;
 }
 
-
-/* ═══════════════════════════════════════════════
-   VIEW TABS — Model value | Owner earnings (Buffett) | Backtest
-═══════════════════════════════════════════════ */
-#view-tabs{display:flex;align-items:flex-end;gap:2px;padding:6px 12px 0;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;scrollbar-width:none}
-#view-tabs::-webkit-scrollbar{display:none}
-.vt{position:relative;padding:8px 14px 10px;border:0;background:transparent;color:var(--text3);font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.4px;white-space:nowrap;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.vt small{font-size:9px;font-weight:500;margin-left:5px;opacity:.75}
-.vt:hover{color:var(--text)}
-.vt.active{color:var(--accent)}
-.vt.active::after{content:'';position:absolute;left:10px;right:10px;bottom:-1px;height:2px;border-radius:2px;background:var(--accent)}
-.vt-how{margin:0 0 6px auto;padding:5px 10px;border:1px solid var(--border2);border-radius:999px;background:transparent;color:var(--text3);font-family:var(--mono);font-size:10px;cursor:pointer;white-space:nowrap}
-.vt-how:hover{color:var(--accent);border-color:var(--accent)}
-#main-table tr.th-oe{display:none}
-body.v-oe #main-table tr.th-oe{display:table-row}
-body.v-oe #main-table tr.th-model{display:none}
-body.v-bt #toolbar,body.v-bt #table-wrap,body.v-bt #mobile-count-bar,body.v-bt #detail-panel{display:none!important}
-body.v-bt #sidebar{opacity:.35;pointer-events:none}
-body.v-bt #filter-fab-fixed{display:none!important}
-.oe-cyc{display:inline-block;margin-left:6px;padding:0 5px;border:1px solid var(--border2);border-radius:3px;font:600 8.5px/1.6 var(--mono);letter-spacing:.4px;color:var(--text3);vertical-align:1px}
-.oe-v{font-family:var(--mono);color:var(--text);font-weight:600}
-.oe-na{font-family:var(--mono);color:var(--text3)}
-/* stock popup: owner earnings block */
-.dp-oe{margin-top:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);padding:10px 12px}
-.dp-oe-h{display:flex;align-items:baseline;gap:8px;margin-bottom:8px;font:600 10px var(--mono);letter-spacing:.8px;text-transform:uppercase;color:var(--accent)}
-.dp-oe-h span{color:var(--text3);font-weight:500;letter-spacing:.3px;text-transform:none}
-.dp-oe-m{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:8px}
-.dp-oe-m div{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;min-width:0}
-.dp-oe-m i{display:block;font-style:normal;font-size:8.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;margin-bottom:2px}
-.dp-oe-m b{font:600 13px var(--mono)}
-.dp-oe-t{width:100%;border-collapse:collapse;font:11px var(--mono)}
-.dp-oe-t th,.dp-oe-t td{padding:4px 6px;text-align:right;border-bottom:1px solid var(--border);font-size:10.5px;white-space:nowrap}
-.dp-oe-t th{position:static;background:none;font-size:8.5px;cursor:default;padding:4px 6px;letter-spacing:.5px}
-.dp-oe-t th:first-child,.dp-oe-t td:first-child{text-align:left}
-.dp-oe-tw{overflow-x:auto}
-.dp-oe-note{margin:6px 0 0;font-size:10.5px;color:var(--text3);line-height:1.45}
-/* backtest */
-#bt-panel{display:none;flex:1;overflow:auto;padding:16px 18px 40px;-webkit-overflow-scrolling:touch}
-body.v-bt #bt-panel{display:block}
-.bt-wrap{max-width:1100px;margin:0 auto}
-.bt-ctl{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg2);margin-bottom:12px}
-.bt-ctl label{display:inline-flex;align-items:center;gap:6px;font:600 10.5px var(--mono);color:var(--text3);letter-spacing:.3px}
-.bt-ctl select{padding:5px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);font:600 11px var(--mono)}
-.bt-ctl input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px}
-.bt-ctl .bt-uni{font:600 11px var(--mono);color:var(--accent)}
-.bt-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px}
-.bt-card{border:1px solid var(--border);border-radius:10px;background:var(--bg2);padding:10px 12px;min-width:0}
-.bt-card i{display:block;font-style:normal;font:600 9px var(--mono);letter-spacing:.8px;text-transform:uppercase;color:var(--text3);margin-bottom:4px}
-.bt-card b{font:700 20px var(--mono);color:var(--text)}
-.bt-card small{display:block;margin-top:3px;font-size:10.5px;color:var(--text3)}
-.bt-chart{border:1px solid var(--border);border-radius:10px;background:var(--bg2);padding:10px 12px 6px;margin-bottom:12px}
-.bt-chart svg{display:block;width:100%;height:auto}
-.bt-leg{display:flex;gap:14px;font:600 10.5px var(--mono);color:var(--text3);margin-bottom:4px}
-.bt-leg span::before{content:'';display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:6px;vertical-align:3px;background:currentColor}
-.bt-tw{overflow-x:auto;border-radius:10px}
-.bt-tbl{width:100%;border-collapse:collapse;border:1px solid var(--border);border-radius:10px;overflow:hidden}
-.bt-tbl th{position:static;cursor:default}
-.bt-tbl td{font-family:var(--mono);font-size:12px}
-.bt-tbl tr.bt-yr{cursor:pointer}
-.bt-tbl tr.bt-picks td{white-space:normal;background:var(--bg2);padding:8px 10px 10px}
-.bt-pk{display:inline-flex;gap:5px;align-items:baseline;margin:2px 4px 2px 0;padding:2px 7px;border:1px solid var(--border);border-radius:5px;background:var(--bg);font:11px var(--mono)}
-.bt-pk b{color:var(--text)}
-.bt-pk em{font-style:normal;font-size:10px;color:var(--text3)}
-.bt-note{margin:12px 0 0;font-size:11.5px;line-height:1.55;color:var(--text3)}
-.bt-msg{padding:40px 20px;text-align:center;color:var(--text3);font-size:13px;line-height:1.6}
-/* how it works box */
-.oe-how-back{position:fixed;inset:0;z-index:700;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:16px}
-.oe-how-back.open{display:flex}
-.oe-how{position:relative;max-width:560px;width:100%;max-height:86vh;overflow:auto;background:var(--bg2);border:1px solid var(--border2);border-radius:14px;padding:18px 20px;color:var(--text2);font-size:13px;line-height:1.6;box-shadow:var(--shadow)}
-.oe-how h3{margin:0 0 8px;font:700 15px var(--sans);color:var(--text)}
-.oe-how h4{margin:12px 0 4px;font:600 10px var(--mono);letter-spacing:.8px;text-transform:uppercase;color:var(--accent)}
-.oe-how code{font:11.5px var(--mono);color:var(--text)}
-.oe-how ul{margin:4px 0;padding-left:18px}
-.oe-how-x{position:absolute;top:10px;right:12px;border:0;background:none;color:var(--text3);font-size:20px;cursor:pointer}
-@media (max-width: 768px){
-  #view-tabs{padding:4px 8px 0}
-  .vt{padding:7px 10px 9px;font-size:10.5px}
-  .vt small{display:none}
-  .vt-how{font-size:9.5px;padding:4px 8px}
-  .dp-oe-m{grid-template-columns:repeat(2,1fr)}
-  #bt-panel{padding:10px 10px 90px}
-  .bt-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .bt-card b{font-size:17px}
-  .bt-tbl th,.bt-tbl td{padding:6px 7px!important;font-size:11px}
-}
-
 /* ── MOBILE ── */
 @media (max-width: 768px) {
   body { overflow: hidden; }
@@ -1169,13 +1083,6 @@ body.v-bt #bt-panel{display:block}
 
   <!-- ── MAIN ── -->
   <div id="main">
-    <!-- view tabs: the composite model (as before) · Buffett owner earnings / free cash flow · its backtest -->
-    <div id="view-tabs" role="tablist">
-      <button type="button" class="vt active" data-v="model" role="tab">Model value</button>
-      <button type="button" class="vt" data-v="oe" role="tab">Owner earnings<small>Buffett FCF</small></button>
-      <button type="button" class="vt" data-v="bt" role="tab">Backtest</button>
-      <button type="button" class="vt-how" id="oe-how-btn">How it works</button>
-    </div>
     <div id="toolbar">
       <button id="filter-fab" style="display:none" aria-label="Open filters"></button>
       <div class="search-wrap">
@@ -1201,7 +1108,7 @@ body.v-bt #bt-panel{display:block}
     <div id="table-wrap">
       <table id="main-table">
         <thead>
-          <tr class="th-model">
+          <tr>
             <th data-col="FINAL_RANK"             data-dir="asc"  ># Sort order</th>
             <th data-col="COMPANY_NAME"           data-dir="asc"  >Company</th>
             <th data-col="INDUSTRY"               data-dir="asc"  >Industry</th>
@@ -1226,31 +1133,12 @@ body.v-bt #bt-panel{display:block}
             <th data-col="COMBINED_SCORE"         data-dir="desc" >Combined</th>
             <th data-col="FINAL_SCORE"            data-dir="desc" >Composite score</th>
           </tr>
-          <tr class="th-oe">
-            <th data-col="COMPANY_NAME"   data-dir="asc"  >Company</th>
-            <th data-col="OE_GAP_PCT"     data-dir="desc" title="Owner earnings value vs CMP">Gap %</th>
-            <th data-col="OE_VALUE"       data-dir="desc" title="Owner earnings value per share (10-year DCF at 12%)">Owner earnings value</th>
-            <th data-col="CMP"            data-dir="asc"  >CMP ₹</th>
-            <th data-col="OE_BUY_BELOW"   data-dir="desc" title="Value less a 25% margin of safety">Buy below</th>
-            <th data-col="FCF_VALUE"      data-dir="desc" title="Same DCF on free cash flow after ALL capex">Strict FCF value</th>
-            <th data-col="FCF_GAP_PCT"    data-dir="desc" >FCF gap %</th>
-            <th data-col="OE_YIELD_PCT"   data-dir="desc" title="Owner earnings (3-yr avg) ÷ market cap">OE yield %</th>
-            <th data-col="FCF_YLD_PCT"    data-dir="desc" title="Free cash flow (3-yr avg) ÷ market cap">FCF yield %</th>
-            <th data-col="OE_CR"          data-dir="desc" title="Owner earnings, 3-year average, ₹ Cr">Owner earnings ₹Cr</th>
-            <th data-col="OE_G_PCT"       data-dir="desc" title="Growth used: lower of 5-yr revenue and profit growth, 0–15%">Growth used</th>
-            <th data-col="OE_POS"         data-dir="desc" title="Years with positive owner earnings, last 5">+ve years</th>
-            <th data-col="OE_NET_DEBT_CR" data-dir="asc"  title="Borrowings − investments, ₹ Cr (minus = net cash)">Net debt ₹Cr</th>
-            <th data-col="ROCE_PCT"       data-dir="desc" >ROCE%</th>
-            <th data-col="INDUSTRY"       data-dir="asc"  >Industry</th>
-            <th data-col="GRADE"          data-dir="asc"  >Grade</th>
-          </tr>
         </thead>
         <tbody id="tbody"></tbody>
       </table>
       <div id="empty-state" class="empty-state" style="display:none">No stocks match current filters.</div>
     </div>
 
-    <div id="bt-panel"></div>
     <div id="mobile-list"></div>
     <div id="detail-overlay"></div>
 
@@ -1278,7 +1166,6 @@ body.v-bt #bt-panel{display:block}
         <div class="dp-body">
           <div class="dp-left">
             <div class="dp-metrics" id="dp-metrics"></div>
-            <div class="dp-oe" id="dp-oe" hidden></div>
 
             <div class="dp-action-row-mobile">
               <a href="#" class="mob-btn mob-btn-screener" id="dp-link-mobile" target="_blank">↗ View on Screener.in</a>
@@ -1398,38 +1285,6 @@ body.v-bt #bt-panel{display:block}
   </div>
 </div>
 
-<!-- ── OWNER EARNINGS: how it works ── -->
-<div class="oe-how-back" id="oe-how-back">
-  <div class="oe-how" role="dialog" aria-modal="true" aria-labelledby="oeHowT">
-    <button class="oe-how-x" type="button" aria-label="Close">×</button>
-    <h3 id="oeHowT">Owner earnings, the Buffett way</h3>
-    <p>Buffett values a business by the cash its owners could take out each year without hurting it (his 1986 letter calls this “owner earnings”), discounted back to today.</p>
-    <h4>Year by year, from the annual reports</h4>
-    <ul>
-      <li><b>Capex</b> = change in net block + change in capital work in progress + depreciation (never below 0)</li>
-      <li><b>Maintenance capex</b> = the smaller of capex and depreciation: what it costs just to stand still</li>
-      <li><b>Owner earnings</b> = cash from operations − maintenance capex (working capital is already inside operating cash)</li>
-      <li><b>Strict free cash flow</b> = cash from operations − all capex, growth spending included</li>
-    </ul>
-    <h4>Value per share</h4>
-    <ul>
-      <li>Base: average of the last 3 years, so one lumpy year doesn't decide it</li>
-      <li>Growth: the lower of 5-year revenue and profit growth, kept between 0% and 15%</li>
-      <li>Years 1–5 at that growth, years 6–10 at half of it, then 4% a year for ever, all discounted at 12%</li>
-      <li>Borrowings minus investments come off (net cash is added), then ÷ shares today</li>
-      <li><b>Buy below</b> keeps a 25% margin of safety under the value</li>
-    </ul>
-    <h4>Left out or treated differently</h4>
-    <ul>
-      <li>Banks, NBFCs and insurers: their cash flow isn't a fair measure, so no value</li>
-      <li>Oil &amp; gas, metals &amp; mining and realty (marked <span class="oe-cyc">CYC</span>): a 5-year average and no growth, since a boom year shouldn't be paid for twice</li>
-    </ul>
-    <h4>Backtest</h4>
-    <p>On 1 July of each year since 2019 (all March results are out by then) it values every stock with only the reports known on that day, buys the ones furthest below value in equal amounts and holds them for a year, against the NIFTY 500. It uses today's index lists and prices only (no dividends, costs or taxes), so treat it as a rough guide. Past results don't promise future ones.</p>
-    <p style="margin:10px 0 0;font-size:11.5px;color:var(--text3)">For information only, not a recommendation to buy or sell.</p>
-  </div>
-</div>
-
 <!-- ── GRADE INFO TOOLTIP (shared) ── -->
 <div class="info-tooltip" id="grade-tooltip">
   <div class="it-title">How stocks are scored</div>
@@ -1494,7 +1349,7 @@ function loadList(k){
     .catch(function(e){ LIST_WAIT[k] = null; throw e; });
 }
 function needLists(u){ return u==='all' ? ['sc250','mc250'] : u==='n500' ? [] : [u]; }
-(function(){ var c = navigator.connection || {}; if (!c.saveData && !/2g/.test(c.effectiveType || '')) setTimeout(function(){ loadList('sc250').catch(function(){}); loadList('mc250').catch(function(){}); }, 3000); })();
+/* the other lists load only when their button is tapped (no background download: keeps every visit small) */
 </script>
 
 <script>
@@ -1531,10 +1386,8 @@ function syncHideNanUI() {
 }
 
 function updateHideNanCount() {
-  var oe = typeof VIEW !== 'undefined' && VIEW === 'oe';               // owner earnings tab: stocks with no owner-earnings value
   var nanCount = rawData.filter(function(r){
-    return oe ? (r.OE_VALUE == null || isNaN(+r.OE_VALUE))
-              : (r.COMPOSITE_FAIR_VALUE == null || r.COMPOSITE_FAIR_VALUE === '' || isNaN(+r.COMPOSITE_FAIR_VALUE));
+    return r.COMPOSITE_FAIR_VALUE == null || r.COMPOSITE_FAIR_VALUE === '' || isNaN(+r.COMPOSITE_FAIR_VALUE);
   }).length;
   var cntEl = document.getElementById('unhealthy-nan-cnt');
   var sheetCntEl = document.getElementById('sheet-hide-nan-count');
@@ -1557,24 +1410,16 @@ function fmtMC(v){ if(!v)return'—'; if(v>=1e5)return(v/1e5).toFixed(1)+'L Cr';
 function piotClass(v){ if(v==null||v==='')return'n-neu'; var n=+v; if(n>=7)return'piot-hi'; if(n>=4)return'piot-mid'; return'piot-lo'; }
 function combinedClass(v){ if(v==null||v==='')return'n-neu'; var n=+v; if(n>=15)return'combined-hi'; if(n>=8)return'combined-mid'; return'combined-lo'; }
 
-/* news lives in news.json (written by build.py, shared with Fundamentals) and loads the first time a stock's news is opened;
-   on a fast connection it also loads quietly a few seconds after the page, so it is usually already there */
-var NEWS_READY = Object.keys(NEWS_DATA).length > 1, NEWS_WAIT = null, _newsSym = null;
-/* news.json = the 3 lists' stocks; other stocks' news is in news_more.json (news.json "m" lists them), fetched only
-   when one of those stocks' news is opened */
-var NEWS_MORE = {}, NEWS_MORE_WAIT = null, NEWS_MORE_DONE = false;
+/* news (build.py): 32 small files news/<n>.json by symbol (newsShard, same hash as build.py): a stock's popup fetches only
+   its own file the first time it is opened. Nothing is fetched until a popup asks. */
+var NEWS_SH = {}, _newsSym = null;                          // shard number → 'wait' | 'done'
+function newsShard(sym){ var h = 0; sym = String(sym); for (var i = 0; i < sym.length; i++) h = (h * 31 + sym.charCodeAt(i)) >>> 0; return h % 32; }
 function newsRepaint(){
   var ns = document.getElementById('dp-news-sym'), sc = document.getElementById('dp-news-scroll');
   if (ns && sc && ns.textContent && ns.textContent !== '—') sc.innerHTML = buildNewsHTML(ns.textContent);
   var sh = document.getElementById('news-sheet-scroll'); if (_newsOpen && _newsSym && sh) sh.innerHTML = buildNewsHTML(_newsSym);
 }
-function loadMoreNews(){
-  if (NEWS_MORE_WAIT) return NEWS_MORE_WAIT;
-  NEWS_MORE_WAIT = fetch('news_more.json', {cache:'no-cache'}).then(function(r){ return r.ok ? r.json() : {}; }).catch(function(){ return {}; })
-    .then(function(j){ Object.assign(NEWS_DATA, unpackNews(j || {})); NEWS_MORE_DONE = true; newsRepaint(); });
-  return NEWS_MORE_WAIT;
-}
-/* news.json (build.py) is compact: each article once [yymmddHHMM, headline, source, link-id] + per-stock indexes */
+/* compact format: each article once [yymmddHHMM, headline, source, link-id] + per-stock indexes */
 function unpackNews(j){
   var out = {}, M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var when = function(t){ var h = +t.slice(6,8), ap = h >= 12 ? 'PM' : 'AM', h12 = (h % 12) || 12;
@@ -1583,19 +1428,14 @@ function unpackNews(j){
     return {headline: a[1], source: a[2], time: when(a[0]), link: a[3].charAt(0) === '!' ? a[3].slice(1) : j.p + a[3] + j.q}; });
   return out;
 }
-function loadNews(){
-  if (NEWS_READY || NEWS_WAIT) return NEWS_WAIT;
-  NEWS_WAIT = fetch('news.json', {cache:'no-cache'}).then(function(r){ return r.ok ? r.json() : {}; }).then(function(j){
-    Object.assign(NEWS_DATA, unpackNews(j || {})); NEWS_READY = true;
-    ((j && j.m) || []).forEach(function(x){ NEWS_MORE[x] = 1; });
-    newsRepaint();
-  }).catch(function(){ NEWS_WAIT = null; });
-  return NEWS_WAIT;
+function loadNewsFor(sym){
+  var n = newsShard(sym); if (NEWS_SH[n]) return;
+  NEWS_SH[n] = 'wait';
+  fetch('news/' + n + '.json', {cache:'no-cache'}).then(function(r){ return r.ok ? r.json() : {}; }).catch(function(){ return null; })
+    .then(function(j){ if (!j) { delete NEWS_SH[n]; return; } Object.assign(NEWS_DATA, unpackNews(j)); NEWS_SH[n] = 'done'; newsRepaint(); });
 }
-(function(){ var c = navigator.connection || {}; if (!c.saveData && !/2g/.test(c.effectiveType || '')) setTimeout(loadNews, 4000); })();
 function buildNewsHTML(sym){
-  if (!NEWS_READY) { loadNews(); return '<div class="news-empty">Loading news…</div>'; }
-  if (!NEWS_MORE_DONE && NEWS_MORE[sym] && !NEWS_DATA[sym]) { loadMoreNews(); return '<div class="news-empty">Loading news…</div>'; }
+  if (NEWS_SH[newsShard(sym)] !== 'done') { loadNewsFor(sym); return '<div class="news-empty">Loading news…</div>'; }
   var items = NEWS_DATA[sym] || NEWS_DATA['__default__'] || [];
   if(!items.length) return '<div class="news-empty">No recent news available.</div>';
   return items.map(function(n){
@@ -1650,7 +1490,6 @@ function switchUniverse(u){
   document.querySelectorAll('.uni-btn').forEach(function(b){ b.classList.toggle('active', b.id==='btn-'+u); });
   searchQ=''; document.getElementById('search-inp').value=''; updateSearchClearBtn();
   buildSidebar(); buildMobileSheet(); updateHideNanCount(); updateFundLink(); run();
-  if(VIEW==='bt') btRun();
 }
 
 function updateSearchClearBtn(){
@@ -1796,7 +1635,9 @@ function clearAll(){
   document.querySelectorAll('.sf-check').forEach(function(cb){ cb.checked=false; });
   updateSelectAllBtn();
   document.getElementById('search-inp').value=''; updateSearchClearBtn();
-  SORTS[VIEW==='oe'?'oe':'model']=null; applySort();
+  sortCol='FINAL_RANK'; sortDir='asc'; clearSortHeaders();
+  var rankTh=document.querySelector('th[data-col="FINAL_RANK"]'); if(rankTh) rankTh.classList.add('sorted-asc');
+  var ml=document.getElementById('mc-sort-label'); if(ml) ml.textContent='Sorted by rank';
   closeDetail(); buildSidebar(); buildMobileSheet(); run();
 }
 
@@ -1806,7 +1647,6 @@ function sortBy(th){
   else{ sortCol=col; sortDir=th.dataset.dir||'asc'; }
   clearSortHeaders();
   th.classList.add(sortDir==='asc'?'sorted-asc':'sorted-desc');
-  SORTS[VIEW==='oe'?'oe':'model']={col:sortCol,dir:sortDir};
   run();
 }
 function clearSortHeaders(){ document.querySelectorAll('th').forEach(function(t){ t.classList.remove('sorted-asc','sorted-desc'); }); }
@@ -1815,9 +1655,9 @@ function run(){
   var d=rawData;
   if(activeGrades.size) d=d.filter(function(r){ return activeGrades.has(r.GRADE); });
   if(activeFVs.size)    d=d.filter(function(r){ return activeFVs.has(r.FV_GRADE); });
-  if(hideNanFV) d=d.filter(VIEW==='oe'
-    ? function(r){ return r.OE_VALUE!=null && !isNaN(+r.OE_VALUE); }             // owner earnings tab: only stocks with a value
-    : function(r){ return r.COMPOSITE_FAIR_VALUE!=null && r.COMPOSITE_FAIR_VALUE!=='' && !isNaN(+r.COMPOSITE_FAIR_VALUE); });
+  if(hideNanFV) d=d.filter(function(r){
+    return r.COMPOSITE_FAIR_VALUE!=null && r.COMPOSITE_FAIR_VALUE!=='' && !isNaN(+r.COMPOSITE_FAIR_VALUE);
+  });
   if(document.getElementById('sf-piotroski')&&document.getElementById('sf-piotroski').checked)
     d=d.filter(function(r){ return r.PIOTROSKI_SCORE!=null&&+r.PIOTROSKI_SCORE>=8; });
   if(document.getElementById('sf-netmargin')&&document.getElementById('sf-netmargin').checked)
@@ -1828,7 +1668,7 @@ function run(){
     d=d.filter(function(r){ return r.REVENUE_CAGR_3YR_PCT!=null&&+r.REVENUE_CAGR_3YR_PCT>10; });
   if(searchQ){ var q=searchQ; d=d.filter(function(r){ return(r.COMPANY_NAME||'').toLowerCase().includes(q)||(r.SYMBOL||'').toLowerCase().includes(q)||(r.INDUSTRY||'').toLowerCase().includes(q); }); }
   var GNUM={A:1,'B+':2,B:3,C:4,D:5,E:6};
-  var isNum=!['COMPANY_NAME','SYMBOL','INDUSTRY','GRADE','FV_GRADE','SCREENER_URL','OE_POS'].includes(sortCol);
+  var isNum=!['COMPANY_NAME','SYMBOL','INDUSTRY','GRADE','FV_GRADE','SCREENER_URL'].includes(sortCol);
   var dir=sortDir==='asc'?1:-1;
   d=[].concat(d).sort(function(a,b){
     var av=a[sortCol], bv=b[sortCol];
@@ -1848,7 +1688,6 @@ function renderTable(data){
   var tbody=document.getElementById('tbody'), empty=document.getElementById('empty-state');
   if(!data.length){ tbody.innerHTML=''; empty.style.display='block'; return; }
   empty.style.display='none';
-  if(VIEW==='oe'){ tbody.innerHTML=data.map(oeRow).join(''); return; }
   var rows=new Array(data.length);
   for(var i=0;i<data.length;i++){
     var s=data[i];
@@ -1929,7 +1768,6 @@ function showDetail(sym){
   document.getElementById('dp-metrics').innerHTML=ms.map(function(m){
     return '<div class="dm"><div class="dm-l">'+m.l+'</div><div class="dm-v '+m.c+'">'+m.v+'</div></div>';
   }).join('');
-  oeDetail(s);
 
   var newsScroll=document.getElementById('dp-news-scroll');
   var newsSym=document.getElementById('dp-news-sym');
@@ -2006,10 +1844,7 @@ document.getElementById('search-clear-btn').addEventListener('click',function(){
 
 document.getElementById('download-csv-btn').addEventListener('click',function(){
   if(!viewData||!viewData.length){ alert('No data to export.'); return; }
-  var cols=VIEW==='oe'
-    ? ['COMPANY_NAME','SYMBOL','INDUSTRY','CMP','OE_VALUE','OE_GAP_PCT','OE_BUY_BELOW','FCF_VALUE','FCF_GAP_PCT','OE_YIELD_PCT',
-       'FCF_YLD_PCT','OE_CR','FCF_CR','OE_G_PCT','OE_POS','OE_NET_DEBT_CR','OE_FY','OE_CYC','ROCE_PCT','GRADE','MARKET_CAP_CR']
-    : ['FINAL_RANK','COMPANY_NAME','SYMBOL','INDUSTRY','GRADE','FV_GRADE','CMP',
+  var cols=['FINAL_RANK','COMPANY_NAME','SYMBOL','INDUSTRY','GRADE','FV_GRADE','CMP',
             'COMPOSITE_FAIR_VALUE','UPSIDE_PCT','MARGIN_OF_SAFETY_PCT','PE',
             'ROE_PCT','ROCE_PCT','DIV_YIELD_PCT','PL_OPM_PCT','NET_MARGIN_CALC_PCT',
             'REVENUE_CAGR_3YR_PCT','PAT_CAGR_3YR_PCT','SH_PROMOTER_PCT_LATEST',
@@ -2024,7 +1859,7 @@ document.getElementById('download-csv-btn').addEventListener('click',function(){
     }).join(','));
   });
   var uMap={n500:'N500',sc250:'SC500',mc250:'MC250',all:'All'};
-  var parts=['HNI',VIEW==='oe'?'OwnerEarnings':'Value',uMap[universe]||universe.toUpperCase()];
+  var parts=['HNI','Value',uMap[universe]||universe.toUpperCase()];
   if(activeGrades.size) parts.push(Array.from(activeGrades).map(function(g){return g.replace('+','plus');}).join('_'));
   if(activeFVs.size){ var fvM={'DEEP VALUE':'DV','UNDERVALUED':'UV','FAIR':'FA','FULLY PRICED':'FP','OVERVALUED':'OV'}; parts.push(Array.from(activeFVs).map(function(f){return fvM[f]||f;}).join('_')); }
   if(searchQ&&searchQ.trim()) parts.push(searchQ.trim().slice(0,12).replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,''));
@@ -2148,194 +1983,8 @@ document.addEventListener('keydown', function(e) {
   if (inp) { inp.focus(); }
 });
 
-
-// ═══════════════════════════════════════════════
-// OWNER EARNINGS (Buffett) tab + its BACKTEST
-//   data: OE_* columns from build.py (fcf.py) · backtest: public/oe_backtest.json, run here in the browser
-// ═══════════════════════════════════════════════
-var VIEW='model', SORTS={model:null, oe:null};
-var SORT_DEF={model:{col:'FINAL_RANK',dir:'asc',lab:'Sorted by rank'}, oe:{col:'OE_GAP_PCT',dir:'desc',lab:'Sorted by gap to owner earnings value'}};
-var OE_NOTES={fin:'Bank / finance company: cash flow is not a fair measure here', short:'Not enough years of cash flow and fixed-asset data',
-  neg:'Owner earnings below zero on average, or debt above the value'};
-function oeNote(s){ return OE_NOTES[s.OE_NOTE]||s.OE_NOTE||''; }
-var OE_HIST=null, OE_HIST_WAIT=null;                             // year-by-year table: oe_hist.json, fetched on the first popup
-function oeHist(){ if(OE_HIST) return Promise.resolve(OE_HIST);
-  if(!OE_HIST_WAIT) OE_HIST_WAIT=fetch('oe_hist.json',{cache:'no-cache'}).then(function(r){ return r.ok?r.json():{}; }).catch(function(){ return {}; }).then(function(j){ OE_HIST=j; return j; });
-  return OE_HIST_WAIT; }
-function rs0(v){ return v==null?'—':'₹'+Math.round(v).toLocaleString('en-IN'); }
-function pctTxt(v){ return v==null?'—':(v>0?'+':'')+Number(v).toFixed(1)+'%'; }
-function crTxt(v){ return v==null?'—':Math.round(v).toLocaleString('en-IN'); }
-function applySort(){
-  var k=VIEW==='oe'?'oe':'model', st=SORTS[k]||SORT_DEF[k];
-  sortCol=st.col; sortDir=st.dir; clearSortHeaders();
-  var th=document.querySelector('#main-table tr.th-'+k+' th[data-col="'+st.col+'"]'); if(th) th.classList.add(st.dir==='asc'?'sorted-asc':'sorted-desc');
-  var ml=document.getElementById('mc-sort-label'); if(ml) ml.textContent=SORTS[k]?'Sorted by '+(th?th.textContent.trim():st.col):SORT_DEF[k].lab;
-}
-function oeRow(s){
-  var g=s.OE_GAP_PCT, fg=s.FCF_GAP_PCT, gc=GC[s.GRADE]||'#888', sel=s.SYMBOL===selectedSym?' row-selected':'';
-  var na=s.OE_VALUE==null, why=na?' title="'+esc(oeNote(s)||'No value')+'"':'';
-  return '<tr class="'+sel+'" data-sym="'+s.SYMBOL+'">'
-    +'<td title="'+esc(s.COMPANY_NAME)+'"><b style="font-size:12.5px">'+esc(s.COMPANY_NAME||'—')+'</b>'+(s.OE_CYC?'<span class="oe-cyc" title="Commodity / property cycle: 5-year average, no growth">CYC</span>':'')
-      +'<br><span style="font-family:var(--mono);font-size:10px;color:var(--text3)">'+s.SYMBOL+'</span></td>'
-    +'<td class="'+(g>0?'n-pos':g<0?'n-neg':'n-neu')+'">'+pctTxt(g)+'</td>'
-    +'<td'+why+' class="'+(na?'oe-na':'oe-v')+'">'+(na?'—':rs0(s.OE_VALUE))+'</td>'
-    +'<td class="n-hi">'+(s.CMP!=null?'₹'+Number(s.CMP).toLocaleString('en-IN'):'—')+'</td>'
-    +'<td class="n-neu">'+rs0(s.OE_BUY_BELOW)+'</td>'
-    +'<td class="n-neu">'+rs0(s.FCF_VALUE)+'</td>'
-    +'<td class="'+(fg>0?'n-pos':fg<0?'n-neg':'n-neu')+'">'+pctTxt(fg)+'</td>'
-    +'<td class="n-neu">'+(s.OE_YIELD_PCT!=null?f1(s.OE_YIELD_PCT)+'%':'—')+'</td>'
-    +'<td class="n-neu">'+(s.FCF_YLD_PCT!=null?f1(s.FCF_YLD_PCT)+'%':'—')+'</td>'
-    +'<td class="n-neu">'+crTxt(s.OE_CR)+'</td>'
-    +'<td class="n-neu">'+(s.OE_G_PCT!=null?f1(s.OE_G_PCT)+'%':'—')+'</td>'
-    +'<td class="n-neu">'+(s.OE_POS||'—')+'</td>'
-    +'<td class="'+(s.OE_NET_DEBT_CR!=null&&s.OE_NET_DEBT_CR<0?'n-pos':'n-neu')+'">'+crTxt(s.OE_NET_DEBT_CR)+'</td>'
-    +'<td class="'+((s.ROCE_PCT||0)>15?'n-pos':'n-neu')+'">'+f1(s.ROCE_PCT)+'%</td>'
-    +'<td style="font-size:11.5px;color:var(--text2)">'+esc(s.INDUSTRY||'—')+'</td>'
-    +'<td><span class="grade-badge" style="color:'+gc+';border-color:'+gc+'">'+(s.GRADE||'—')+'</span></td>'
-    +'</tr>';
-}
-function oeDetail(s){                                           // the owner earnings block in the stock popup
-  var box=document.getElementById('dp-oe'); if(!box) return;
-  if(s.OE_VALUE==null && !s.OE_NOTE){ box.hidden=true; return; }
-  var hist=OE_HIST?OE_HIST[s.SYMBOL]:null;
-  if(!OE_HIST) oeHist().then(function(){ if(selectedSym===s.SYMBOL) oeDetail(s); });
-  var g=s.OE_GAP_PCT, m=function(l,v,c){ return '<div><i>'+l+'</i><b class="'+(c||'')+'">'+v+'</b></div>'; };
-  var h='<div class="dp-oe-h">Owner earnings · Buffett'+(s.OE_FY?'<span>to '+esc(s.OE_FY)+(s.OE_CYC?' · cyclical: 5-yr average, no growth':'')+'</span>':'')+'</div>';
-  if(s.OE_VALUE!=null){
-    h+='<div class="dp-oe-m">'+m('Value / share',rs0(s.OE_VALUE))+m('Gap to CMP',pctTxt(g),g>0?'n-pos':'n-neg')
-      +m('Buy below',rs0(s.OE_BUY_BELOW))+m('Strict FCF value',rs0(s.FCF_VALUE))
-      +m('Owner earnings ₹Cr',crTxt(s.OE_CR))+m('OE yield',s.OE_YIELD_PCT!=null?f1(s.OE_YIELD_PCT)+'%':'—')
-      +m('Growth used',s.OE_G_PCT!=null?f1(s.OE_G_PCT)+'%':'—')+m('Net debt ₹Cr',crTxt(s.OE_NET_DEBT_CR),s.OE_NET_DEBT_CR<0?'n-pos':'')+'</div>';
-  }
-  if(hist&&hist.length){
-    h+='<div class="dp-oe-tw"><table class="dp-oe-t"><thead><tr><th>Year</th><th>Cash from ops</th><th>Capex</th><th>Depreciation</th><th>Owner earnings</th><th>Free cash flow</th></tr></thead><tbody>'
-      +hist.slice().reverse().map(function(r){
-        var c=function(v){ return v==null?'—':Math.round(v).toLocaleString('en-IN'); };
-        return '<tr><td>'+esc(r[0])+'</td><td>'+c(r[1])+'</td><td>'+c(r[2])+'</td><td>'+c(r[3])+'</td><td class="'+(r[4]>0?'n-pos':r[4]<0?'n-neg':'')+'">'+c(r[4])+'</td><td class="'+(r[5]>0?'n-pos':r[5]<0?'n-neg':'')+'">'+c(r[5])+'</td></tr>';
-      }).join('')+'</tbody></table></div><p class="dp-oe-note">₹ Cr. Capex is worked out from the balance sheet (net block + work in progress + depreciation).</p>';
-  }
-  if(s.OE_VALUE==null && s.OE_NOTE) h+='<p class="dp-oe-note">'+esc(oeNote(s))+'</p>';
-  box.innerHTML=h; box.hidden=false;
-}
-function setView(v, quiet){
-  if(['model','oe','bt'].indexOf(v)<0) v='model';
-  VIEW=v;
-  document.body.classList.toggle('v-oe', v==='oe'); document.body.classList.toggle('v-bt', v==='bt');
-  document.querySelectorAll('#view-tabs .vt').forEach(function(b){ var on=b.dataset.v===v; b.classList.toggle('active',on); b.setAttribute('aria-selected',on?'true':'false'); });
-  try{ history.replaceState(null,'',v==='model'?location.pathname+location.search:'#'+(v==='oe'?'owner-earnings':'backtest')); }catch(e){}
-  if(v==='bt'){ closeDetail(); btRun(); return; }
-  applySort(); updateHideNanCount();
-  if(!quiet){ var tw=document.getElementById('table-wrap'); if(tw) tw.scrollTop=0; }
-  run();
-}
-document.getElementById('view-tabs').addEventListener('click',function(e){
-  var b=e.target.closest('.vt'); if(b) setView(b.dataset.v);
-});
-(function(){                                                    // How it works
-  var w=document.getElementById('oe-how-back');
-  document.getElementById('oe-how-btn').addEventListener('click',function(){ w.classList.add('open'); });
-  w.addEventListener('click',function(e){ if(e.target===w||e.target.closest('.oe-how-x')) w.classList.remove('open'); });
-  document.addEventListener('keydown',function(e){ if(e.key==='Escape') w.classList.remove('open'); });
-})();
-
-/* ── backtest: buy the N stocks furthest below their owner-earnings value every 1 July, hold a year ── */
-var BT=null, BT_WAIT=null, BT_OPT={n:20, gap:-999, cyc:true};      // gap: least margin of safety (price under value), -999 = any
-try{ var _bo=JSON.parse(localStorage.getItem('hni_bt_opt')||'null'); if(_bo) BT_OPT=Object.assign(BT_OPT,_bo); }catch(e){}
-function btLoad(){
-  if(BT) return Promise.resolve(BT);
-  if(!BT_WAIT) BT_WAIT=fetch('oe_backtest.json',{cache:'no-cache'}).then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
-    .then(function(j){ BT=j; return j; }).catch(function(e){ BT_WAIT=null; throw e; });
-  return BT_WAIT;
-}
-var UNI_NAME={n500:'Nifty 500', sc250:'Smallcap 500', mc250:'Microcap 250', all:'All stocks (3 lists)'};
-function btCalc(J, opt, uni){
-  var Y=J.years, n=Y.length, out=[], curS=1, curB=1, path=[{s:1,b:1}];
-  var inUni=function(st){ return uni==='all' || st[1].indexOf(uni)>=0; };
-  for(var i=0;i<n;i++){
-    var last=i===n-1, cands=[];
-    J.stocks.forEach(function(st){
-      if(!inUni(st) || (opt.cyc && st[5])) return;
-      var v=st[2][i], p=st[3][i]; if(!v||!p) return;
-      var disc=(1-p/v)*100; if(opt.gap>-100 && (disc<opt.gap || disc<=0)) return;   // how far the price is under the value (margin of safety)
-      cands.push({sym:st[0], gap:disc, p0:p, p1:last?st[4]:st[3][i+1]});
-    });
-    cands.sort(function(a,b){ return b.gap-a.gap; });
-    var picks=cands.slice(0,opt.n);
-    picks.forEach(function(x){ x.ret=x.p1&&x.p0?(x.p1/x.p0-1)*100:null; });
-    var got=picks.filter(function(x){ return x.ret!=null; });
-    var rS=got.length?got.reduce(function(a,x){ return a+x.ret; },0)/got.length:0;   // equal amounts; nothing qualified = cash (0%)
-    var b0=J.bench.px[i], b1=last?J.bench.now:J.bench.px[i+1], rB=b0&&b1?(b1/b0-1)*100:null;
-    curS*=1+rS/100; if(rB!=null) curB*=1+rB/100;
-    path.push({s:curS,b:curB});
-    out.push({y:Y[i], to:last?null:Y[i+1], picks:picks, rS:rS, rB:rB, n:cands.length});
-  }
-  var asof=J.asof?new Date(J.asof):new Date(), start=new Date(Y[0],6,1), yrs=Math.max((asof-start)/31557600000,0.1);
-  return {rows:out, path:path, cagrS:(Math.pow(curS,1/yrs)-1)*100, cagrB:(Math.pow(curB,1/yrs)-1)*100, totS:curS, totB:curB, yrs:yrs};
-}
-function btChart(R, J, W){
-  W=Math.max(300, Math.round(W||760)); var H=Math.round(Math.min(280, Math.max(190, W*0.36))), L=46, Rr=12, T=12, B=26, pts=R.path, n=pts.length;
-  var tm=J.years.map(function(yy){ return Date.UTC(yy,6,1); }).concat([J.asof?Date.parse(J.asof):Date.now()]), t0=tm[0], t1=tm[tm.length-1];
-  var max=Math.max.apply(null,pts.map(function(p){ return Math.max(p.s,p.b); })), min=Math.min.apply(null,pts.map(function(p){ return Math.min(p.s,p.b); }));
-  min=Math.min(min,1)*0.95; max=max*1.04;
-  var x=function(i){ return L+(W-L-Rr)*(tm[i]-t0)/((t1-t0)||1); }, y=function(v){ return T+(H-T-B)*(1-(v-min)/(max-min)); };
-  var line=function(k){ return pts.map(function(p,i){ return (i?'L':'M')+x(i).toFixed(1)+' '+y(p[k]).toFixed(1); }).join(' '); };
-  var ticks=[], step=(max-min)/4; for(var t=0;t<=4;t++){ var v=min+step*t; ticks.push('<line x1="'+L+'" x2="'+(W-Rr)+'" y1="'+y(v).toFixed(1)+'" y2="'+y(v).toFixed(1)+'" stroke="var(--border)" stroke-width="1"/><text x="'+(L-6)+'" y="'+(y(v)+3.5).toFixed(1)+'" text-anchor="end" font-size="10" fill="var(--text3)" font-family="var(--mono)">₹'+Math.round(v*100)+'</text>'); }
-  var skip=W<520?2:1;
-  var labs=J.years.map(function(yy,i){ if(i%skip) return ''; return '<text x="'+x(i).toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle" font-size="10" fill="var(--text3)" font-family="var(--mono)">Jul '+String(yy).slice(2)+'</text>'; }).join('')
-    +((t1-tm[n-2])>120*864e5?'<text x="'+x(n-1).toFixed(1)+'" y="'+(H-8)+'" text-anchor="end" font-size="10" fill="var(--text3)" font-family="var(--mono)">now</text>':'');
-  var dot=function(k,c){ var p=pts[n-1]; return '<circle cx="'+x(n-1).toFixed(1)+'" cy="'+y(p[k]).toFixed(1)+'" r="3.5" fill="'+c+'"/>'; };
-  return '<div class="bt-leg"><span style="color:var(--accent)">Owner earnings picks</span><span style="color:var(--blue)">NIFTY 500</span></div>'
-    +'<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Growth of ₹100">'+ticks.join('')+labs
-    +'<path d="'+line('b')+'" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linejoin="round"/>'
-    +'<path d="'+line('s')+'" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>'+dot('b','var(--blue)')+dot('s','var(--accent)')+'</svg>';
-}
-var BT_OPEN={};
-function btRun(){
-  var P=document.getElementById('bt-panel'); if(!P) return;
-  if(!BT){ P.innerHTML='<div class="bt-msg">Loading the backtest…</div>';
-    btLoad().then(btRun).catch(function(){ P.innerHTML='<div class="bt-msg"><b>The backtest needs one more data run.</b><br>Price history for 1 July of each year since 2019 hasn\'t been fetched yet. It comes from the monthly “Yearly prices” job; once that has run once, this tab fills in by itself.</div>'; });
-    return; }
-  var J=BT, R=btCalc(J, BT_OPT, universe), fmtP=function(v){ return v==null?'—':(v>=0?'+':'')+v.toFixed(1)+'%'; };
-  var sel=function(id,vals,cur,lab){ return '<select id="'+id+'">'+vals.map(function(v){ return '<option value="'+v+'"'+(v==cur?' selected':'')+'>'+lab(v)+'</option>'; }).join('')+'</select>'; };
-  var beat=R.rows.filter(function(r){ return r.rB!=null && r.rS>r.rB; }).length;
-  var best=R.rows.reduce(function(a,r){ return !a||r.rS>a.rS?r:a; },null), worst=R.rows.reduce(function(a,r){ return !a||r.rS<a.rS?r:a; },null);
-  var per=function(r){ return 'Jul '+String(r.y).slice(2)+' → '+(r.to?'Jul '+String(r.to).slice(2):'now'); };
-  var h='<div class="bt-wrap"><div class="bt-ctl">'
-    +'<label>List <span class="bt-uni">'+esc(UNI_NAME[universe]||universe)+'</span></label>'
-    +'<label>Buy '+sel('bt-n',[5,10,15,20,30,50],BT_OPT.n,function(v){ return 'top '+v; })+'</label>'
-    +'<label>Price under value by '+sel('bt-gap',[-999,0,25,50],BT_OPT.gap,function(v){ return v<-100?'any':v?'≥ '+v+'%':'> 0%'; })+'</label>'
-    +'<label><input type="checkbox" id="bt-cyc"'+(BT_OPT.cyc?' checked':'')+'> Leave out cyclicals</label></div>'
-    +'<div class="bt-cards">'
-    +'<div class="bt-card"><i>Owner earnings picks</i><b class="'+(R.cagrS>=0?'n-pos':'n-neg')+'">'+fmtP(R.cagrS)+'</b><small>a year · ₹1 lakh → ₹'+Math.round(R.totS*100000).toLocaleString('en-IN')+'</small></div>'
-    +'<div class="bt-card"><i>NIFTY 500</i><b>'+fmtP(R.cagrB)+'</b><small>a year · ₹1 lakh → ₹'+Math.round(R.totB*100000).toLocaleString('en-IN')+'</small></div>'
-    +'<div class="bt-card"><i>Years ahead of NIFTY 500</i><b>'+beat+' / '+R.rows.length+'</b><small>'+R.yrs.toFixed(1)+' years since Jul '+J.years[0]+'</small></div>'
-    +'<div class="bt-card"><i>Best · worst year</i><b style="font-size:15px">'+fmtP(best&&best.rS)+' · '+fmtP(worst&&worst.rS)+'</b><small>'+(best?per(best):'')+'</small></div></div>'
-    +'<div class="bt-chart" id="bt-chart"></div>'
-    +'<div class="bt-tw"><table class="bt-tbl"><thead><tr><th>Held</th><th>Stocks</th><th>Picks</th><th>NIFTY 500</th><th>Ahead by</th></tr></thead><tbody>'
-    +R.rows.map(function(r,i){
-      var d=r.rB!=null?r.rS-r.rB:null, open=BT_OPEN[r.y];
-      return '<tr class="bt-yr" data-y="'+r.y+'"><td>'+(open?'▾ ':'▸ ')+per(r)+'</td><td>'+r.picks.length+(r.n>r.picks.length?' <span style="color:var(--text3)">of '+r.n+'</span>':'')+'</td>'
-        +'<td class="'+(r.rS>=0?'n-pos':'n-neg')+'">'+fmtP(r.rS)+'</td><td class="'+(r.rB>=0?'n-pos':'n-neg')+'">'+fmtP(r.rB)+'</td><td class="'+(d>=0?'n-pos':'n-neg')+'">'+fmtP(d)+'</td></tr>'
-        +(open?'<tr class="bt-picks"><td colspan="5">'+(r.picks.length?r.picks.map(function(x){
-          return '<span class="bt-pk"><b>'+esc(x.sym)+'</b><em>'+(x.gap>=0?Math.round(x.gap)+'% under value':Math.round(-x.gap)+'% over value')+'</em><span class="'+(x.ret>=0?'n-pos':'n-neg')+'">'+fmtP(x.ret)+'</span></span>';
-        }).join(''):'<span style="color:var(--text3)">Nothing qualified: held as cash.</span>')+'</td></tr>':'');
-    }).join('')+'</tbody></table></div>'
-    +'<p class="bt-note">Each 1 July every stock is valued with only the annual reports out by then, the '+BT_OPT.n+' furthest below value are bought in equal amounts and held a year. '
-    +'Price returns only: no dividends, costs or taxes. Uses today\'s index lists (stocks that left the index are missing) and today\'s share count. Prices to '+esc(J.asof||'—')+'. '
-    +'Past results don\'t promise future ones. Information only, not a recommendation to buy or sell.</p></div>';
-  P.innerHTML=h;
-  var ch=document.getElementById('bt-chart'); ch.innerHTML=btChart(R,J,ch.clientWidth-24);
-  var save=function(){ try{ localStorage.setItem('hni_bt_opt',JSON.stringify(BT_OPT)); }catch(e){} btRun(); };
-  document.getElementById('bt-n').onchange=function(){ BT_OPT.n=+this.value; save(); };
-  document.getElementById('bt-gap').onchange=function(){ BT_OPT.gap=+this.value; save(); };
-  document.getElementById('bt-cyc').onchange=function(){ BT_OPT.cyc=this.checked; save(); };
-  P.querySelectorAll('tr.bt-yr').forEach(function(tr){ tr.onclick=function(){ var y=tr.dataset.y; BT_OPEN[y]=!BT_OPEN[y]; var st=P.scrollTop; btRun(); P.scrollTop=st; }; });
-}
-
 var th=document.querySelector('th[data-col="FINAL_RANK"]'); if(th) th.classList.add('sorted-asc');
-buildSidebar(); buildMobileSheet(); updateFundLink();
-setView(/^#owner/.test(location.hash)?'oe':/^#backtest/.test(location.hash)?'bt':'model', true);   // opens on the tab in the link (#owner-earnings / #backtest)
-if(VIEW==='bt') run();
+buildSidebar(); buildMobileSheet(); updateFundLink(); run();   // updateFundLink sets the initial ?uni= on page load
 
 }); // end DOMContentLoaded
 </script>
