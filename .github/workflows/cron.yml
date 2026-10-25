@@ -1,4 +1,6 @@
 name: Smart Build & Deploy
+# the run's title carries its inputs, so the back-up check (.github/oracle_guard.sh) can tell what the Oracle server started
+run-name: "${{ github.event_name == 'push' && 'News build' || github.event_name == 'schedule' && format('Back-up check {0}', github.event.schedule) || format('Mode {0} part {1} lists {2}', inputs.force_full || '0', inputs.price_part || '1', inputs.lists || 'all') }}"
 
 permissions:
   contents: write
@@ -7,15 +9,25 @@ permissions:
 # The weekly scrape parts and price parts (modes 1 and 2) queue in their own lane, so a news build arriving meanwhile can
 # never knock a waiting scrape / price part out of the queue (GitHub keeps only one waiting run per group).
 concurrency:
-  group: ${{ (github.event.inputs.force_full == '1' || github.event.inputs.force_full == '2') && 'smart-weekly' || 'smart-build' }}
+  group: ${{ (github.event.inputs.force_full == '1' || github.event.inputs.force_full == '2'
+              || github.event.schedule == '30 20 * * 6' || github.event.schedule == '30 16 * * 5'
+              || github.event.schedule == '30 17 * * 5' || github.event.schedule == '30 18 * * 5') && 'smart-weekly' || 'smart-build' }}
   cancel-in-progress: false
 
 on:
-  # Timetable: started by the Oracle server's crontab (oracle/trigger.sh, exact times; GitHub's own schedule ran late
-  # or twice). Saturday 00:00 IST full (1) · Saturday 02:00 / 04:00 / 06:00 prices parts 1-3 (2) · 00:00 every other
-  # night and 09:15 / 10:15 / 13:15 / 13:30 on trading days: build + deploy (3).
-  # 📰 News from the Oracle server (oracle/news.sh, every 2 hours): its push of multi_stock_news.csv → build + deploy only.
-  #    This workflow's own commits never start it again (they use GITHUB_TOKEN and say [skip ci]).
+  # Timetable: started by the Oracle server's crontab (oracle/trigger.sh, exact times). Sunday 00:00 IST full scrape (1) ·
+  # Friday 20:00 / 21:00 / 22:00 prices parts 1-3 (2) · 00:00 Monday-Saturday build + deploy (3).
+  # 📰 News from the Oracle server (oracle/news.sh, every 30 min on weekdays, 2 h at weekends): its push of
+  #    multi_stock_news.csv → build + deploy only. This workflow's own commits never start it again ([skip ci]).
+  # 🛟 BACK-UP (GitHub's own clock, UTC): each time below checks whether the Oracle server started that job; only if it
+  #    didn't (server off, trigger failed) does this run do the job itself. Weekly jobs are checked 2 hours late.
+  schedule:
+    - cron: "15 */2 * * *"     # news: no news build from Oracle in the last 2 h 45 min → fetch news here + build
+    - cron: "30 20 * * 6"      # Sunday 02:00 IST: the 00:00 full scrape (mode 1) not started → full scrape
+    - cron: "30 16 * * 5"      # Friday 22:00 IST: prices part 1 (Oracle 20:00) not started → part 1
+    - cron: "30 17 * * 5"      # Friday 23:00 IST: prices part 2 (Oracle 21:00) not started → part 2
+    - cron: "30 18 * * 5"      # Sat 00:00 IST:    prices part 3 (Oracle 22:00) not started → part 3
+    - cron: "30 20 * * 0-5"    # Mon-Sat 02:00 IST: no build at all since 23:45 → build + deploy (mode 3)
   push:
     branches: [main]
     paths: [multi_stock_news.csv]
@@ -55,7 +67,46 @@ on:
           - "3"
 
 jobs:
+  # 🛟 Back-up check: only scheduled runs ask; Oracle-started / pushed / manual runs go straight through
+  guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      go:   ${{ steps.g.outputs.go || 'true' }}
+      mode: ${{ steps.pick.outputs.mode }}
+      part: ${{ steps.pick.outputs.part }}
+    steps:
+      - name: Which back-up is this
+        if: github.event_name == 'schedule'
+        id: pick
+        run: |
+          case "${{ github.event.schedule }}" in
+            "15 */2 * * *")  echo "mode=newsrun" >> $GITHUB_OUTPUT; echo "min=165" >> $GITHUB_OUTPUT; echo "rx=^News build" >> $GITHUB_OUTPUT ;;
+            "30 20 * * 6")   echo "mode=full"    >> $GITHUB_OUTPUT; echo "min=135" >> $GITHUB_OUTPUT; echo "rx=^Mode 1 " >> $GITHUB_OUTPUT ;;
+            "30 16 * * 5")   echo "mode=prices"  >> $GITHUB_OUTPUT; echo "part=1" >> $GITHUB_OUTPUT; echo "min=135" >> $GITHUB_OUTPUT; echo "rx=^Mode 2 part 1" >> $GITHUB_OUTPUT ;;
+            "30 17 * * 5")   echo "mode=prices"  >> $GITHUB_OUTPUT; echo "part=2" >> $GITHUB_OUTPUT; echo "min=135" >> $GITHUB_OUTPUT; echo "rx=^Mode 2 part 2" >> $GITHUB_OUTPUT ;;
+            "30 18 * * 5")   echo "mode=prices"  >> $GITHUB_OUTPUT; echo "part=3" >> $GITHUB_OUTPUT; echo "min=135" >> $GITHUB_OUTPUT; echo "rx=^Mode 2 part 3" >> $GITHUB_OUTPUT ;;
+            "30 20 * * 0-5") echo "mode=light"   >> $GITHUB_OUTPUT; echo "min=135" >> $GITHUB_OUTPUT; echo "rx=^(Mode (0|1|3|-1) |News build)" >> $GITHUB_OUTPUT ;;
+            *)               echo "mode=light"   >> $GITHUB_OUTPUT; echo "min=135" >> $GITHUB_OUTPUT; echo "rx=^(Mode (0|1|3|-1) |News build)" >> $GITHUB_OUTPUT ;;
+          esac
+      - uses: actions/checkout@v5
+        if: github.event_name == 'schedule'
+        with:
+          sparse-checkout: .github/oracle_guard.sh
+          sparse-checkout-cone-mode: false
+      - name: Did the Oracle server start it?
+        if: github.event_name == 'schedule'
+        id: g
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/oracle_guard.sh cron.yml "${{ steps.pick.outputs.min }}" "${{ steps.pick.outputs.rx }}"
+
   build:
+    needs: guard
+    if: needs.guard.outputs.go == 'true'
     runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to Ubuntu 26 from 19 Oct 2026
     timeout-minutes: 330          # full run ≈ 1–1.5 h (≈1,250 stocks × 2 pages); GitHub max is 360
     env:
@@ -120,24 +171,14 @@ jobs:
 
           PART="${{ github.event.inputs.price_part }}"
 
-          # scheduled price triggers → part chosen from the IST hour (see note above)
-          case "$SCHED" in
-            "30 20 * * 5"|"30 22 * * 5"|"30 0 * * 6")
-              H=$(TZ=Asia/Kolkata date +%-H)
-              if   [ "$H" -ge 1 ] && [ "$H" -le 3 ]; then P=1
-              elif [ "$H" -ge 4 ] && [ "$H" -le 5 ]; then P=2
-              elif [ "$H" -ge 6 ] && [ "$H" -le 9 ]; then P=3
-              else
-                # outside every window: fall back to the cron string
-                case "$SCHED" in
-                  "30 20 * * 5") P=1 ;;
-                  "30 22 * * 5") P=2 ;;
-                  *)             P=3 ;;
-                esac
-              fi
-              echo "PRICE PART chosen: $P  (IST hour $H, cron '$SCHED')"
-              echo "mode=prices" >> $GITHUB_OUTPUT; echo "part=$P" >> $GITHUB_OUTPUT; exit 0 ;;
-          esac
+          # 🛟 a back-up run (GitHub's clock, Oracle didn't start the job): the guard job already picked the mode
+          if [ "$EVENT" = "schedule" ]; then
+            M="${{ needs.guard.outputs.mode }}"; P="${{ needs.guard.outputs.part }}"
+            echo "BACK-UP run: mode=$M part=${P:-1}"
+            if [ "$M" = "newsrun" ]; then echo "mode=light" >> $GITHUB_OUTPUT; echo "news=1" >> $GITHUB_OUTPUT
+            else echo "mode=${M:-light}" >> $GITHUB_OUTPUT; fi
+            echo "part=${P:-1}" >> $GITHUB_OUTPUT; exit 0
+          fi
           echo "part=${PART:-1}" >> $GITHUB_OUTPUT
 
           # the Oracle server pushed fresh news → just build + deploy
@@ -153,10 +194,6 @@ jobs:
               *)  echo "mode=light" >> $GITHUB_OUTPUT ;;
             esac
             exit 0
-          fi
-
-          if [ "$EVENT" = "schedule" ] && [ "$SCHED" = "30 18 * * 5" ]; then
-            echo "mode=full" >> $GITHUB_OUTPUT; exit 0
           fi
 
           echo "mode=light" >> $GITHUB_OUTPUT
@@ -299,7 +336,7 @@ jobs:
       - name: "⚡ Light run — build (0)"
         if: steps.mode.outputs.mode == 'light'
         run: |
-          if [ "${{ github.event.inputs.force_full }}" = "0" ]; then python -u fetch_news.py; fi   # by hand with 0 only
+          if [ "${{ github.event.inputs.force_full }}" = "0" ] || [ "${{ steps.mode.outputs.news }}" = "1" ]; then python -u fetch_news.py; fi   # by hand with 0, or the news back-up
           python build.py
 
       - name: "🔨 Build only (-1 / news from Oracle)"

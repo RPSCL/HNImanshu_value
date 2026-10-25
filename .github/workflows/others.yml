@@ -1,8 +1,8 @@
 # others.yml — fundamentals for every NSE stock outside the 3 lists → Nifty_Others_Fundamentals.csv
 #
 # In two halves, because screener.in slows to minutes per stock after ~1,000 stocks from one machine:
-#   Sunday 00:00 IST → first half (symbols A…, sorted)   Sunday 02:00 IST → second half (2 hours later)
-# (the 3 main lists are scraped by cron.yml's full run, Saturday 00:00 IST). Each half updates only its own rows.
+#   Sunday 02:00 IST → first half (symbols A…, sorted)   Sunday 04:00 IST → second half (2 hours later)
+# (the 3 main lists are scraped by cron.yml's full run, Sunday 00:00 IST). Each half updates only its own rows.
 # Both halves share the concurrency group below, so half 2 waits if half 1 is still running at 02:00.
 # By hand: Actions tab → Run workflow → pick half 1, 2 or all.
 #   others.py: refreshes EQUITY_L.csv (NSE's list of every company), takes the companies in none of the 3 lists,
@@ -11,6 +11,7 @@
 # Then it commits the two CSVs and asks cron.yml for a build + deploy (mode -1), so the site's "Others" list
 # updates without waiting for the next scheduled build.
 name: Others fundamentals
+run-name: "${{ github.event_name == 'schedule' && format('Back-up check {0}', github.event.schedule) || format('Others half {0}', inputs.half || '1') }}"
 
 permissions:
   contents: write
@@ -21,7 +22,11 @@ concurrency:
   cancel-in-progress: false
 
 on:
-  # Sunday 00:00 IST half 1, 02:00 IST half 2: started by the Oracle server's crontab (oracle/trigger.sh)
+  # Sunday 02:00 IST half 1, 04:00 IST half 2: started by the Oracle server's crontab (oracle/trigger.sh)
+  # 🛟 BACK-UP (GitHub's clock, UTC), 2 hours after each Oracle time: runs that half only if Oracle didn't start it
+  schedule:
+    - cron: "30 22 * * 6"      # Sunday 04:00 IST: half 1 (Oracle 02:00) not started → half 1
+    - cron: "30 0 * * 0"       # Sunday 06:00 IST: half 2 (Oracle 04:00) not started → half 2
   workflow_dispatch:
     inputs:
       half:
@@ -36,7 +41,32 @@ on:
         default: ""
 
 jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      go: ${{ steps.g.outputs.go || 'true' }}
+    steps:
+      - uses: actions/checkout@v5
+        if: github.event_name == 'schedule'
+        with:
+          sparse-checkout: .github/oracle_guard.sh
+          sparse-checkout-cone-mode: false
+      - name: Did the Oracle server start it?
+        if: github.event_name == 'schedule'
+        id: g
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          H=1; [ "${{ github.event.schedule }}" = "30 0 * * 0" ] && H=2
+          bash .github/oracle_guard.sh others.yml 135 "^Others half ($H|all)"
+
   others:
+    needs: guard
+    if: needs.guard.outputs.go == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 330
 
@@ -59,8 +89,8 @@ jobs:
         run: |
           SCHED="${{ github.event.schedule }}"
           HALF="${{ github.event.inputs.half }}"
-          if [ "$SCHED" = "30 18 * * 6" ]; then HALF=1; fi
-          if [ "$SCHED" = "30 20 * * 6" ]; then HALF=2; fi
+          if [ "$SCHED" = "30 22 * * 6" ]; then HALF=1; fi     # back-up runs
+          if [ "$SCHED" = "30 0 * * 0" ];  then HALF=2; fi
           ARGS=""
           if [ "$HALF" = "1" ] || [ "$HALF" = "2" ]; then ARGS="--half $HALF"; fi
           LIMIT="${{ github.event.inputs.limit }}"

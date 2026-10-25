@@ -1,4 +1,5 @@
 name: Yearly prices (owner-earnings backtest)
+run-name: "${{ github.event_name == 'schedule' && format('Back-up check {0}', github.event.schedule) || format('Yearly prices part {0}', inputs.part || '0') }}"
 
 # fetch_prices.py --yearly → prices_yearly.csv: the split-adjusted close on 1 July of every year since 2019.
 #   part 0 = the 3 lists (~765 stocks) + NIFTY 500 (~40 min) · parts 1 / 2 / 3 = a third of Others each (~620, ~35 min)
@@ -14,6 +15,13 @@ concurrency:
   cancel-in-progress: false
 
 on:
+  # 🛟 BACK-UP (GitHub's clock, UTC), 2 hours after each Oracle time (1st of the month 03:30 / 04:30 / 05:30 / 06:30 IST):
+  #    runs that part only if Oracle didn't start it
+  schedule:
+    - cron: "0 0 1 * *"        # 05:30 IST: part 0
+    - cron: "0 1 1 * *"        # 06:30 IST: part 1
+    - cron: "0 2 1 * *"        # 07:30 IST: part 2
+    - cron: "0 3 1 * *"        # 08:30 IST: part 3
   workflow_dispatch:
     inputs:
       part:
@@ -26,7 +34,37 @@ on:
         default: ""
 
 jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      go:   ${{ steps.g.outputs.go || 'true' }}
+      part: ${{ steps.p.outputs.part }}
+    steps:
+      - name: Which part
+        if: github.event_name == 'schedule'
+        id: p
+        run: |
+          case "${{ github.event.schedule }}" in "0 0 1 * *") P=0 ;; "0 1 1 * *") P=1 ;; "0 2 1 * *") P=2 ;; *) P=3 ;; esac
+          echo "part=$P" >> $GITHUB_OUTPUT
+      - uses: actions/checkout@v5
+        if: github.event_name == 'schedule'
+        with:
+          sparse-checkout: .github/oracle_guard.sh
+          sparse-checkout-cone-mode: false
+      - name: Did the Oracle server start it?
+        if: github.event_name == 'schedule'
+        id: g
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/oracle_guard.sh fcf_prices.yml 135 "^Yearly prices part ${{ steps.p.outputs.part }}"
+
   yearly:
+    needs: guard
+    if: needs.guard.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -52,7 +90,7 @@ jobs:
           ANGEL_PIN:         ${{ secrets.ANGEL_PIN }}
           ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
           LIMIT:             ${{ github.event.inputs.limit }}
-          PART:              ${{ github.event.inputs.part }}
+          PART:              ${{ github.event.inputs.part || needs.guard.outputs.part }}
         run: |
           P="${PART:-0}"; case "$P" in 0|1|2|3) ;; *) echo "part must be 0-3"; exit 1 ;; esac
           ARGS="--yearly"; [ "$P" != "0" ] && ARGS="$ARGS --part $P"
@@ -67,7 +105,7 @@ jobs:
           git config --global user.email "actions@github.com"
           git add prices_yearly.csv
           git diff --cached --quiet && { echo "Nothing new"; exit 0; }
-          git commit -m "Yearly prices, part ${{ github.event.inputs.part || '0' }} [skip ci]"
+          git commit -m "Yearly prices, part ${{ github.event.inputs.part || needs.guard.outputs.part || '0' }} [skip ci]"
           for i in 1 2 3; do
             if git pull --rebase -X theirs origin main && git push origin main; then echo "Pushed"; exit 0; fi
             git rebase --abort 2>/dev/null || true

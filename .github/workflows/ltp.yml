@@ -14,9 +14,14 @@
 #       downloaded on the first run of the Indian day and kept in .cache/ ; every later run that day restores
 #       them from the GitHub cache in a second instead of downloading again.
 name: Portfolio LTP
+run-name: "${{ github.event_name == 'schedule' && 'Back-up check' || 'LTP' }}"
 
 on:
-  workflow_dispatch:               # Actions tab "Run workflow", and the Worker (timer + website button)
+  # 🛟 BACK-UP (GitHub's clock): every 15 min, 09:00-16:15 IST Mon-Fri. Runs only if NO run (Oracle every 5 min, the
+  #    Worker's timer or the website button) has happened in the last 30 minutes; otherwise it stands down at once.
+  schedule:
+    - cron: "*/15 3-10 * * 1-5"
+  workflow_dispatch:               # Oracle crontab (every 5 min), Actions tab "Run workflow", the Worker (timer + website button)
     inputs:
       any_time:
         description: "Test: fetch even outside 09:00–15:40 IST"
@@ -70,6 +75,17 @@ jobs:
               GO=true; ANYTIME=true; WHY="after 15:40 IST: the day's closing-price run (first one today)"
             else
               WHY="after 15:40 IST: today's closing-price run already happened"
+            fi
+          fi
+          # back-up run from GitHub's own clock: only if nothing has run in the last 30 minutes (Oracle / Worker are down)
+          if [ "$GO" = "true" ] && [ "${{ github.event_name }}" = "schedule" ]; then
+            SINCE30=$(date -u -d "-30 min" +%Y-%m-%dT%H:%M:%SZ)
+            RECENT=$(gh api -X GET "repos/${GITHUB_REPOSITORY}/actions/workflows/ltp.yml/runs" -f created=">=${SINCE30}" -f per_page=50 \
+              --jq "[.workflow_runs[] | select(.id != ${GITHUB_RUN_ID} and .event != \"schedule\" and .conclusion != \"cancelled\")] | length") || RECENT=""
+            if [ -n "$RECENT" ] && [ "$RECENT" -gt 0 ]; then
+              GO=false; WHY="back-up not needed: $RECENT run(s) in the last 30 min"
+            else
+              WHY="BACK-UP: no LTP run in the last 30 min (Oracle / Worker down) → running"
             fi
           fi
           echo "go=$GO"           >> "$GITHUB_OUTPUT"
