@@ -26,4 +26,10 @@ for f in auth.js hdr.js sw.js; do
   else rm -f "$f.min"; bad=$((bad+1)); echo "  kept as is: $f"; fi
 done
 echo "Compressed $ok files for the website ($bad kept as they were)"
+# proof in the run log: code notes left in what is about to be deployed (should be 0 everywhere)
+for f in *.html auth.js hdr.js sw.js; do
+  [ -f "$f" ] || continue
+  n=$(grep -o '<!--' "$f" | wc -l); m=$(grep -oE '/\*[^*]|[;{}(,]\s*// ' "$f" | wc -l)
+  echo "  $f: $(wc -c < "$f") bytes, html notes $n, code notes $m"
+done
 exit 0
