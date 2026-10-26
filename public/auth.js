@@ -872,8 +872,10 @@ const ready = new Promise((resolve) => {
       canRefresh: () => !!LTP_HOOK,                          // every signed-in user
       // start the live-price job (Cloudflare Worker → GitHub ltp.yml) → {ok} | {error, wait} | {error, running}
       // (an Oracle-server version of this lives in oracle/: for later, on a server located in India)
-      refresh: async () => {
-        const r = await fetch(LTP_HOOK, { method: "POST", headers: { Authorization: "Bearer " + await u.getIdToken() } });
+      // symbols (PF Builder, Prime / admin): also price these today, even if nobody holds them
+      refresh: async (symbols) => {
+        const r = await fetch(LTP_HOOK, { method: "POST", headers: { Authorization: "Bearer " + await u.getIdToken(), "Content-Type": "application/json" },
+          body: JSON.stringify(Array.isArray(symbols) && symbols.length ? { symbols } : {}) });
         return r.json().catch(() => ({ error: "HTTP " + r.status }));
       },
     };

@@ -13,6 +13,7 @@
 //         {error: "Prices can be fetched only after 10 minutes (09:40)", wait: true, next: "09:40"}
 //       – Mon–Fri from 09:00 IST. After 15:40 only the day's closing-price run (once; the workflow's gate decides).
 //   • A run already going → {error: "already running", running: true}.
+//   • Body {symbols: [...]} (PF Builder's picks, Prime / admin only): those are priced too, for the rest of the day.
 // POST /builder  {symbols: [...]} → starts .github/workflows/builder_prices.yml (PF Builder's 1-year-back daily prices)
 //   • Admins and Prime members (hni_prime/{uid}, read with the user's own token: the Firestore rules refuse an ended Prime).
 //   • One run at a time → {error: "another chart is being prepared, try again in a few minutes", running: true}.
@@ -65,14 +66,26 @@ export default {
 
 			if (path === "/builder") return await builder(req, env, reply, admin, asUser, user);
 
-			// 2. /run: limits for everyone but admins
+			// 2. PF Builder's picks (Prime / admin): priced today too, though nobody holds them yet
+			const body = await req.json().catch(() => ({}));
+			let want = [];
+			if (Array.isArray(body.symbols) && body.symbols.length) {
+				const prime = admin || (await asUser(`hni_prime/${encodeURIComponent(user.localId)}`)).ok;
+				if (prime) want = [...new Set(body.symbols.map((s) => String(s).toUpperCase().trim()).filter((s) => /^[A-Z0-9&._-]{1,20}$/.test(s)))].slice(0, MAX_SYMBOLS);
+			}
+
+			// 3. /run: limits for everyone but admins
 			const ist = istNow();
+			let late = false;                                   // after the close: Angel's LTP is then the day's closing price
 			if (!admin) {
 				if (ist.dow >= 6) return reply(429, { error: "Market closed today. Live prices run Mon–Fri from 09:00 IST.", wait: true });
 				if (ist.mins < 9 * 60) return reply(429, { error: "Live prices start at 09:00 IST.", wait: true, next: "09:00" });
 				const m = await asUser("hni_market/ltp");
-				const asOf = m.ok ? (((await m.json()).fields || {}).asOf || {}).stringValue : null;   // "YYYY-MM-DD HH:MM" (IST)
-				if (asOf) {
+				const f = m.ok ? ((await m.json()).fields || {}) : {};
+				const asOf = (f.asOf || {}).stringValue || null;       // "YYYY-MM-DD HH:MM" (IST)
+				const have = asOf && asOf.slice(0, 10) === ist.date ? Object.keys(((f.prices || {}).mapValue || {}).fields || {}) : [];
+				const fresh = want.length && want.some((s) => !have.includes(s));   // builder picks not priced today yet: no waiting
+				if (asOf && !fresh) {
 					const last = Date.parse(asOf.replace(" ", "T") + ":00+05:30");
 					const next = last + USER_GAP_MIN * 60000;
 					if (Date.now() < next) {
@@ -82,14 +95,15 @@ export default {
 					if (ist.mins > 15 * 60 + 40 && asOf.slice(0, 10) === ist.date && asOf.slice(11) >= "15:40")
 						return reply(429, { error: `Market closed. Today's closing prices are in (${asOf.slice(11)}).`, wait: true, asOf });
 				}
+				late = !!fresh && ist.mins > 15 * 60 + 40;
 			}
 
-			// 3. one run at a time (GitHub)
+			// 4. one run at a time (GitHub)
 			if (await running(env, LTP_WORKFLOW)) return reply(429, { error: "already running", running: true });
 
-			// 4. start it (admins: any time of day)
+			// 5. start it (admins: any time of day)
 			const go = await gh(env, `/actions/workflows/${LTP_WORKFLOW}/dispatches`, { method: "POST",
-				body: JSON.stringify({ ref: BRANCH, inputs: { any_time: admin ? "true" : "false" } }) });
+				body: JSON.stringify({ ref: BRANCH, inputs: { any_time: admin || late ? "true" : "false", extra: want.join(",") } }) });
 			if (go.status !== 204) return reply(502, { error: `GitHub said ${go.status}` });
 			return reply(200, { ok: true, admin });
 		} catch (e) {

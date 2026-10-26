@@ -8,9 +8,9 @@
 <meta name="description" content="Split a fund into index ETFs, value stocks and momentum stocks by fixed rules, with a backtest over 1 month to 1 year.">
 <style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>
 <script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>
-<link rel="stylesheet" href="auth.css?v=41">
+<link rel="stylesheet" href="auth.css?v=42">
 <style>html:not(.pb-admin) .lead,html:not(.pb-admin) .card,html:not(.pb-admin) .tabs,html:not(.pb-admin) #out,html:not(.pb-admin) .disc{display:none}</style>
-<script type="module" src="auth.js?v=41"></script>
+<script type="module" src="auth.js?v=42"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>
@@ -175,6 +175,12 @@ details.sec>.body{padding:0 14px 14px}
 .pb-none{margin:6px 0 12px;padding:14px;border:1px dashed var(--bad);border-radius:8px;color:var(--bad);font:600 13px var(--mono);text-align:center}
 .pb-err{margin:6px 0 0;font-size:12.5px;color:var(--bad)}
 .pb-err:empty{display:none}
+.lnote{font:11.5px var(--mono);color:var(--faint)}
+.lnote.on{color:var(--good)}
+.lv{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--good);margin-right:5px;vertical-align:middle}
+.pb-warn{margin:0 0 12px;padding:10px 12px;border:1px solid var(--warn);border-radius:8px;background:var(--badbg);font-size:12.5px;line-height:1.5;color:var(--ink,inherit)}
+.pb-warn b{color:var(--warn)}
+.pb-warn .btn{margin-top:8px}
 .pb-tw{max-height:42vh;overflow:auto;border:1px solid var(--line);border-radius:8px;margin:0 0 10px}
 .pb-tw table{width:100%;border-collapse:collapse;font:12.5px var(--mono)}
 .pb-tw th{position:sticky;top:0;background:var(--panel2);color:var(--faint);font:600 10.5px var(--mono);text-transform:uppercase;letter-spacing:.05em;text-align:left;padding:7px 10px;border-bottom:1px solid var(--line)}
@@ -279,7 +285,7 @@ tbody tr.held:hover td{background:var(--heldbg);filter:brightness(1.08)}
     </div>
     </div>
 </header>
-<script src="hdr.js?v=41"></script>
+<script src="hdr.js?v=42"></script>
 <div class="wrap">
 
   <h1>Portfolio Builder</h1>
@@ -765,13 +771,61 @@ function paintSplit() {
 }
 /* the settings card: "Lists & sorting" opens / folds the rest; always folded when the page opens */
 $('#cfgTg').addEventListener('click', () => { const m = $('#cfgMore'), open = m.hidden; m.hidden = !open; $('#cfgTg').setAttribute('aria-expanded', open); });
+/* live prices (hni_market/ltp, the Portfolio's LTP run): used for Today only when they are from the latest market day */
+let LIVE = null, LTP_BUSY = false;
+function sessionDay() {                                          // latest Indian market day: today from 09:00 Mon–Fri, else the weekday before
+  const d = new Date(Date.now() + 5.5 * 3600e3);
+  if (!(d.getUTCDay() >= 1 && d.getUTCDay() <= 5 && d.getUTCHours() >= 9)) do d.setUTCDate(d.getUTCDate() - 1); while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
+  return d.toISOString().slice(0, 10);
+}
+const liveFresh = m => !!(m && m.asOf && m.asOf.slice(0, 10) === sessionDay() && m.asOf.slice(11) >= '09:00');
+const lp = sym => { const x = LIVE && LIVE.prices && LIVE.prices[sym]; return x && num(x.ltp) && x.ltp > 0 ? x.ltp : null; };
+const nowSyms = () => { const L = lists('now'); return [...new Set([...L.index, ...L.value, ...L.mom].map(x => x.sym).filter(Boolean))]; };
+async function loadLive() {
+  try { const m = window.hniStore && window.hniStore.market && await window.hniStore.market(); if (liveFresh(m) && (!LIVE || m.asOf !== LIVE.asOf)) { LIVE = m; if (DATA && TAB === 'now') paint(); } } catch (e) {}
+}
+window.addEventListener('hni-ready', loadLive); if (window.hniStore) loadLive();
+/* "Fetch live prices": the Portfolio's LTP run, asked to price every pick of Today too; then() runs once the new prices are in */
+async function fetchLive(then) {
+  if (LTP_BUSY) { toast('Fetching live prices…'); return true; }
+  if (!(window.hniStore && window.hniStore.refresh)) { toast('Log in first to fetch live prices.'); return false; }
+  const syms = nowSyms();
+  if (!syms.length) return false;
+  let was = null;
+  try { const m = await window.hniStore.market(); was = m && m.asOf; if (liveFresh(m)) LIVE = m; } catch (e) {}
+  LTP_BUSY = true; paint();
+  let r; try { r = await window.hniStore.refresh(syms); } catch (e) { r = {error: 'no connection'}; }
+  if (r.error && !r.running) { LTP_BUSY = false; paint(); toast(r.wait ? r.error : 'Live prices: ' + r.error); return false; }
+  toast(r.running ? 'A price run is already going: waiting for it…' : 'Live prices in about a minute');
+  const t0 = Date.now();
+  const tick = setInterval(async () => {
+    let m = null; try { m = await window.hniStore.market(); } catch (e) {}
+    const got = m && m.asOf && m.asOf !== was;
+    if (!got && Date.now() - t0 < 6 * 60000) return;
+    clearInterval(tick); LTP_BUSY = false;
+    if (got && liveFresh(m)) {
+      LIVE = m;
+      const miss = syms.filter(x => !lp(x)).length;
+      toast(`Live prices · ${m.asOf.slice(11)} IST` + (miss ? ` · ${miss} pick${miss > 1 ? 's' : ''} not priced${r.running ? ': press again' : ''}` : ''));
+    } else toast('No new prices yet. Try again in a few minutes.');
+    paint();
+    if (got && typeof then === 'function') then();
+  }, 15000);
+  return true;
+}
+function liveNote() {
+  if (LTP_BUSY) return '<span class="lnote">Fetching live prices…</span>';
+  const all = nowSyms(), n = all.filter(x => lp(x)).length;
+  if (!n) return `<span class="lnote">Prices: close of ${esc(DATA.now.date || '–')}</span>`;
+  return `<span class="lnote on" title="Live prices from ${esc(LIVE.asOf)} IST; the rest at the close of ${esc(DATA.now.date || '–')}">Live ${n === all.length ? '' : n + ' of ' + all.length + ' '}· ${esc(LIVE.asOf.slice(11))} IST</span>`;
+}
 function lists(when) {
   const D = DATA, E = (D.etf && D.etf.etf) || {}, S = when === 'now' ? D.now : D.back;
   const key = when === 'now' ? 'r3' : 'r3Back', sc = (S && S.etfScore) || {};
   const pk = etfPick(sc);
   const index = pk.rows.map(r => { const e = E[r.sym] || {};
-    return {sym: r.sym, label: r.label, name: ETF_NAME[r.sym] || r.sym, price: e.ltp, r3: e[key], mom: sc[r.sym], ret: when === 'now' || PER === '1Y' ? e.ret1y : null, etf: true}; });
-  const stock = s => ({sym: s.sym, name: s.name, ind: s.ind, price: s.cmp, pe: s.pe, pb: s.pb, mom: s.mom, score: s.score, url: s.url, ret: s.ret,
+    return {sym: r.sym, label: r.label, name: ETF_NAME[r.sym] || r.sym, price: (when === 'now' && lp(r.sym)) || e.ltp, live: when === 'now' && !!lp(r.sym), r3: e[key], mom: sc[r.sym], ret: when === 'now' || PER === '1Y' ? e.ret1y : null, etf: true}; });
+  const stock = s => ({sym: s.sym, name: s.name, ind: s.ind, price: (when === 'now' && lp(s.sym)) || s.cmp, live: when === 'now' && !!lp(s.sym), pe: s.pe, pb: s.pb, mom: s.mom, score: s.score, url: s.url, ret: s.ret,
     mcap: s.mcap, cagr: s.cagr, vs52: num(s.cmp) && num(s.hi52) && s.hi52 > 0 ? (s.cmp / s.hi52 - 1) * 100 : null});
   const from = k => { const P = (S && S.pools) || {}, c = SELC[k]; return choose((P[c.uni] || P.all || {})[k] || [], c, k).map(stock); };
   return {pk, index, value: from('value'), mom: from('mom')};
@@ -955,7 +1009,7 @@ function paint() {
         <div class="kpi"><span>Cash left</span><b>${fund ? rsK(A.cash) : '–'}</b></div>
         <div class="kpi"><span>Holdings</span><b>${A.parts.reduce((n, p) => n + p.rows.length, 0)}</b></div>
         <div class="kpi"><span>Data as of</span><b>${esc(DATA.now.date || '–')}</b></div></div>
-      <div class="bar"><span class="sp"></span><button type="button" class="btn sm" data-all="1">Expand all</button><button type="button" class="btn sm" data-all="0">Collapse all</button></div>`
+      <div class="bar"><span class="sp"></span>${liveNote()}<button type="button" class="btn sm" id="ltpGo" ${LTP_BUSY ? 'disabled' : ''} title="Live prices (LTP) for every ETF and stock below">${LTP_BUSY ? 'Fetching…' : 'Fetch live prices'}</button><button type="button" class="btn sm" data-all="1">Expand all</button><button type="button" class="btn sm" data-all="0">Collapse all</button></div>`
       + A.parts.map(p => {
         const extraH = p.k === 'index' ? '<th class="r">Composite</th><th class="r">3M</th>' : p.k === 'value' ? '<th class="r">Score</th><th class="r">PE</th><th class="r">PB</th><th class="r">Mcap</th><th class="r">EPS CAGR</th><th class="r">Vs 52w high</th>' : '<th class="r">Momentum</th><th class="r">PE</th><th class="r">PB</th><th class="r">Mcap</th><th class="r">EPS CAGR</th><th class="r">Vs 52w high</th>';
         const extra = x => p.k === 'index' ? `<td class="r">${ms(x.mom)}</td><td class="r">${pill(x.r3)}</td>` : p.k === 'value' ? `<td class="r">${fmt(x.score, 0)}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td><td class="r">${crf(x.mcap)}</td><td class="r">${num(x.cagr) ? fmt(x.cagr, 1) + '%' : '–'}</td><td class="r">${num(x.vs52) ? fmt(x.vs52, 1) + '%' : '–'}</td>`
@@ -965,7 +1019,7 @@ function paint() {
           : `<p class="rule">Non-PSU stocks that pass the Momentum screen · ${esc(selText('mom'))} · equal weight.</p>`;
         const hdr = `${pc(p.share)} · ${fund ? rs(p.amt) + ' · ' : ''}${p.rows.length} holdings${fund && p.rows.length ? ' · ' + rs(p.amt / p.rows.length) + ' each' : ''}`;
         const body = rule + `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Price ₹</th>${extraH}<th class="r">Units</th><th class="r">Amount ₹</th></tr></thead><tbody>${
-          p.rows.length ? p.rows.map(x => `<tr${heldTr(x)}><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td><td class="r">${fmt(x.price, 2)}</td>${extra(x)}
+          p.rows.length ? p.rows.map(x => `<tr${heldTr(x)}><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td><td class="r"${x.live ? ' title="Live price"' : ''}>${x.live ? '<i class="lv"></i>' : ''}${fmt(x.price, 2)}</td>${extra(x)}
             <td class="r ${x.qty === 0 ? 'zero' : ''}" ${x.qty === 0 ? 'title="Price is above this holding\'s share of the fund"' : ''}>${fund && x.qty != null ? fmt(x.qty, 0) : '–'}</td><td class="r">${fund && x.invested != null ? fmt(x.invested, 0) : '–'}</td></tr>`).join('')
           : `<tr><td colspan="11" class="empty">Nothing passes this screen today.</td></tr>`}</tbody></table></div>`;
         const add = fund && p.rows.some(x => x.qty > 0) ? `<div class="addpart"><button type="button" class="btn sm addpf" data-addpart="${p.k}">Add these to portfolio</button></div>` : '';
@@ -1087,15 +1141,20 @@ async function addToPortfolio(only) {                        // only = 'index' |
   try { d = await window.hniStore.load() || {}; mkt = await window.hniStore.market().catch(() => null); }
   catch (e) { body.innerHTML = `<p class="pb-err">Could not load your portfolio (${esc(e.code || e.message || e)}).</p>`; return; }
   const txns = Array.isArray(d.txns) ? d.txns : [], rates = Object.assign({}, PF_RATES, d.rates || {}), cash = Math.max(0, cashOf(txns));
-  const live = (mkt && mkt.prices) || {};
+  if (liveFresh(mkt)) LIVE = mkt;
+  const live = (liveFresh(mkt) && mkt.prices) || {};
   items = items.map(x => Object.assign(x, {live: !!(live[x.sym] && live[x.sym].ltp), px: (live[x.sym] && live[x.sym].ltp) || x.px}));
   const fit = planBuys(items, cash, rates), full = planBuys(items, Infinity, rates);
   const buys = fit.rows.filter(r => r.qty > 0), skipped = fit.rows.length - buys.length;
   const short = Math.max(0, Math.ceil(full.tot - cash));
   const row = r => `<tr><td><b>${esc(r.sym)}</b><small>${esc(r.parts.join(' + '))}</small></td><td class="r">${fmt(r.qty, 0)}</td>
     <td class="r">${fmt(r.px, 2)}${r.live ? '<i>live</i>' : ''}</td><td class="r">${fmt(r.amt, 0)}</td></tr>`;
-  body.innerHTML = `<p class="pb-sub">${items.length} picks (${esc(scope)}) · fund ${rs(LAST.fund)}. Bought at the LTP, by weight, within your cash (charges included).</p>
-    ${buys.length ? `<div class="pb-tw"><table><thead><tr><th>Stock</th><th class="r">Qty</th><th class="r">LTP ₹</th><th class="r">Amount ₹</th></tr></thead><tbody>${buys.map(row).join('')}</tbody></table></div>`
+  const nLive = items.filter(x => x.live).length, stale = nLive < items.length;
+  const warn = stale ? `<div class="pb-warn"><b>⚠ Live prices not fetched for today${nLive ? ` for ${items.length - nLive} of ${items.length} picks` : ''}.</b>
+      Quantities below use the close of ${esc((DATA && DATA.now && DATA.now.date) || '–')}. Fetch live prices for all stocks first to calculate the actual qty.
+      <br><button type="button" class="btn sm" data-ltp="1"${LTP_BUSY ? ' disabled' : ''}>${LTP_BUSY ? 'Fetching live prices…' : 'Fetch live prices'}</button></div>` : '';
+  body.innerHTML = warn + `<p class="pb-sub">${items.length} picks (${esc(scope)}) · fund ${rs(LAST.fund)}. Bought at ${stale ? 'these prices' : 'the LTP'}, by weight, within your cash (charges included).</p>
+    ${buys.length ? `<div class="pb-tw"><table><thead><tr><th>Stock</th><th class="r">Qty</th><th class="r">${stale ? 'Price' : 'LTP'} ₹</th><th class="r">Amount ₹</th></tr></thead><tbody>${buys.map(row).join('')}</tbody></table></div>`
       : '<p class="pb-none">Not enough cash to complete all transactions.</p>'}
     ${buys.length && skipped ? `<p class="pb-sub">${skipped} more pick${skipped > 1 ? 's' : ''} left out: not enough cash for one unit.</p>` : ''}
     <div class="pb-sum"><span>Cash available <b>${rs(cash)}</b></span>${buys.length ? `<span>To invest <b>${rs(fit.tot)}</b></span><span>Cash after <b>${rs(cash - fit.tot)}</b></span>` : ''}</div>
@@ -1105,6 +1164,12 @@ async function addToPortfolio(only) {                        // only = 'index' |
       ${buys.length ? `<button type="button" class="btn primary" data-buy="fit">Buy ${buys.length} within cash</button>` : ''}
       ${short > 0 ? `<button type="button" class="btn addpf" data-buy="full">Add ₹${fmt(short, 0)} cash and buy all ${full.rows.filter(r => r.qty > 0).length}</button>` : ''}
     </div>`;
+  const lb = body.querySelector('[data-ltp]');
+  if (lb) lb.addEventListener('click', () => {
+    lb.disabled = true; lb.textContent = 'Fetching live prices…';
+    fetchLive(() => { if (w.classList.contains('open') && !w._busy) addToPortfolio(only); })
+      .then(ok => { if (!ok) { lb.disabled = false; lb.textContent = 'Fetch live prices'; } });
+  });
   body.querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', async () => {
     const plan = b.dataset.buy === 'full' ? full : fit, payIn = b.dataset.buy === 'full' ? short : 0, rows = plan.rows.filter(r => r.qty > 0), dt = todayIso();
     if (!rows.length) return;
@@ -1200,6 +1265,7 @@ document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click
 /* section open / closed (kept across repaints), expand / collapse all, chart legend */
 $('#out').addEventListener('toggle', e => { const d = e.target; if (d.classList && d.classList.contains('sec')) OPEN[TAB + d.dataset.k] = d.open; }, true);
 $('#out').addEventListener('click', async e => {
+  if (e.target.closest('#ltpGo')) { fetchLive(); return; }
   const pb = e.target.closest('[data-per]');
   if (pb) { PER = pb.dataset.per; lsSet('pb_per', PER); if (DATA && !(PER in DATA.backs)) { try { await ensurePeriod(PER); } catch (x) {} } paint(); readyLine(); return; }
   if (e.target.closest('#refreshChart')) { if (e.target.closest('#refreshChart').disabled) return; const L = lists('back'); ensureDaily([...L.value, ...L.mom].map(x => x.sym).filter(Boolean), true); return; }
