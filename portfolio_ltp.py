@@ -144,6 +144,7 @@ def main():
 	ap = argparse.ArgumentParser()
 	ap.add_argument("--dry", action="store_true", help="print, don't write to Firestore")
 	ap.add_argument("--any-time", action="store_true", help="run outside market hours too (testing)")
+	ap.add_argument("--extra", default="", help="PF Builder: more symbols to price today (comma separated); kept for the rest of the day")
 	a = ap.parse_args()
 
 	import firebase_admin
@@ -168,6 +169,21 @@ def main():
 	syms = held_symbols(db)
 	if not syms:
 		log("Nobody holds anything yet; only the indices are priced.")
+	# PF Builder's picks: priced today on top of the held stocks (asked with --extra; remembered in the document's "watch"
+	# for the rest of the Indian day, so the scheduled runs keep them fresh too)
+	today = now.strftime("%Y-%m-%d")
+	try:
+		prev = db.collection(OUT_COLL).document(OUT_DOC).get().to_dict() or {}
+	except Exception:
+		prev = {}
+	w = prev.get("watch") or {}
+	watch = set(w.get("syms") or []) if w.get("day") == today else set()
+	import re
+	watch |= {x for x in (s.strip().upper() for s in a.extra.split(",")) if re.fullmatch(r"[A-Z0-9&._-]{1,20}", x)}
+	watch = set(sorted(watch)[:400])
+	extra = sorted(watch - set(syms))
+	if extra:
+		log(f"PF Builder picks priced too: {len(extra)} (not held)")
 
 	ren_all = nse_renames()
 	renames = {s: ren_all[s] for s in syms if s in ren_all}    # only renames that touch a held stock
@@ -201,6 +217,9 @@ def main():
 			missing.append(s)
 	if missing:
 		log(f"Not on Angel (unlisted / suspended / typo): {', '.join(missing)}")
+	for s in extra:                                        # PF Builder picks: priced, never checked / flagged like holdings
+		if s in tmap:
+			want[tmap[s][1]] = s
 
 	angel = Angel()                                        # logs in (same as fetch_prices.py)
 	prices, idx = {}, {}
@@ -232,10 +251,11 @@ def main():
 	for old, new in renames.items():                       # held under the old name → same price under it too
 		if new in prices:
 			prices[old] = prices[new]
-	log(f"Priced {len(prices)} of {len(syms)} held symbols")
+	log(f"Priced {len(prices)} of {len(syms)} held symbols" + (f" + {len(extra)} PF Builder picks" if extra else ""))
 
 	doc = {"asOf": datetime.now(IST).strftime("%Y-%m-%d %H:%M"), "prices": prices, "idx": idx, "renames": renames, "missing": missing,
-	       "notListed": not_listed, "names": names, "checked": datetime.now(IST).strftime("%Y-%m-%d")}
+	       "notListed": not_listed, "names": names, "checked": datetime.now(IST).strftime("%Y-%m-%d"),
+	       "watch": {"day": today, "syms": sorted(watch)}}
 	if a.dry:
 		print(doc)
 		return 0
