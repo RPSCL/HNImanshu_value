@@ -1472,7 +1472,7 @@ table.chk-t .pf-sym{cursor:pointer;color:var(--ink)}
 .bag.held svg{fill:var(--brassbg)}
 .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);z-index:400;opacity:0;transition:opacity .25s,transform .25s;
   background:var(--ink);color:var(--bg);font:600 12.5px var(--sans);padding:10px 16px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.3);width:max-content;max-width:calc(100vw - 32px);text-align:center;pointer-events:none}   /* sized to its text: one line, centred */
-.toast.on{opacity:1;transform:translate(-50%,0)}
+.toast.on{opacity:.75;transform:translate(-50%,0)}
 /* forms */
 .pf-form{display:flex;flex-direction:column;gap:10px;margin-top:6px}
 .pf-form .fld{display:flex;flex-direction:column;gap:4px;min-width:0}
@@ -5318,10 +5318,10 @@ AUTH_WEB = {
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
                      # signed in and checked within the last hour → page shows at once; auth.js confirms quietly behind it
                      '<script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>\n'
-                     '<link rel="stylesheet" href="auth.css?v=42">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=42"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=43">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=43"></script>\n',
     # straight after the header, not deferred: Navigate + avatar are there from the first paint (no blink)
-    "__AUTH_HDR__": '<script src="hdr.js?v=42"></script>\n',
+    "__AUTH_HDR__": '<script src="hdr.js?v=43"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
