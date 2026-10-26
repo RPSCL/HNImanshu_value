@@ -8,9 +8,9 @@
 <meta name="description" content="Split a fund into index ETFs, value stocks and momentum stocks by fixed rules, with a backtest over 1 month to 1 year.">
 <style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>
 <script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>
-<link rel="stylesheet" href="auth.css?v=42">
+<link rel="stylesheet" href="auth.css?v=43">
 <style>html:not(.pb-admin) .lead,html:not(.pb-admin) .card,html:not(.pb-admin) .tabs,html:not(.pb-admin) #out,html:not(.pb-admin) .disc{display:none}</style>
-<script type="module" src="auth.js?v=42"></script>
+<script type="module" src="auth.js?v=43"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>
@@ -175,7 +175,10 @@ details.sec>.body{padding:0 14px 14px}
 .pb-none{margin:6px 0 12px;padding:14px;border:1px dashed var(--bad);border-radius:8px;color:var(--bad);font:600 13px var(--mono);text-align:center}
 .pb-err{margin:6px 0 0;font-size:12.5px;color:var(--bad)}
 .pb-err:empty{display:none}
-.lnote{font:11.5px var(--mono);color:var(--faint)}
+.lnote{display:block;margin-top:1px;font:10.5px var(--mono);color:var(--faint)}
+.bar.nw{flex-wrap:nowrap}
+.bar.nw .btn.sm{white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:640px){.bar.nw{gap:6px}.bar.nw .btn.sm{height:26px;padding:0 8px;font-size:11px}}
 .lnote.on{color:var(--good)}
 .lv{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--good);margin-right:5px;vertical-align:middle}
 .pb-warn{margin:0 0 12px;padding:10px 12px;border:1px solid var(--warn);border-radius:8px;background:var(--badbg);font-size:12.5px;line-height:1.5;color:var(--ink,inherit)}
@@ -254,8 +257,8 @@ tbody tr.held:hover td{background:var(--heldbg);filter:brightness(1.08)}
 :root[data-theme=day] .eng.show{color-scheme:light}
 .pb-toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,16px);z-index:700;max-width:calc(100vw - 32px);background:var(--panel2);color:var(--ink);
   border:1px solid var(--brass);border-radius:10px;padding:10px 16px;font:600 12.5px/1.45 var(--mono);box-shadow:0 10px 28px rgba(0,0,0,.35);
-  opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
-.pb-toast.on{opacity:1;transform:translate(-50%,0)}
+  opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;width:max-content;text-align:center}
+.pb-toast.on{opacity:.75;transform:translate(-50%,0)}
 @media (max-width:640px){
   .wrap{padding:12px 16px}
     h1{font-size:19px}
@@ -285,7 +288,7 @@ tbody tr.held:hover td{background:var(--heldbg);filter:brightness(1.08)}
     </div>
     </div>
 </header>
-<script src="hdr.js?v=42"></script>
+<script src="hdr.js?v=43"></script>
 <div class="wrap">
 
   <h1>Portfolio Builder</h1>
@@ -814,10 +817,10 @@ async function fetchLive(then) {
   return true;
 }
 function liveNote() {
-  if (LTP_BUSY) return '<span class="lnote">Fetching live prices…</span>';
+  if (LTP_BUSY) return '<small class="lnote">Fetching live prices…</small>';
   const all = nowSyms(), n = all.filter(x => lp(x)).length;
-  if (!n) return `<span class="lnote">Prices: close of ${esc(DATA.now.date || '–')}</span>`;
-  return `<span class="lnote on" title="Live prices from ${esc(LIVE.asOf)} IST; the rest at the close of ${esc(DATA.now.date || '–')}">Live ${n === all.length ? '' : n + ' of ' + all.length + ' '}· ${esc(LIVE.asOf.slice(11))} IST</span>`;
+  if (!n) return '';
+  return `<small class="lnote on" title="Live prices from ${esc(LIVE.asOf)} IST; the rest at the close of ${esc(DATA.now.date || '–')}">Live ${n === all.length ? '' : n + ' of ' + all.length + ' '}· ${esc(LIVE.asOf.slice(11))} IST</small>`;
 }
 function lists(when) {
   const D = DATA, E = (D.etf && D.etf.etf) || {}, S = when === 'now' ? D.now : D.back;
@@ -1008,8 +1011,8 @@ function paint() {
         <div class="kpi"><span>Invested</span><b>${fund ? rsK(A.invested) : '–'}</b></div>
         <div class="kpi"><span>Cash left</span><b>${fund ? rsK(A.cash) : '–'}</b></div>
         <div class="kpi"><span>Holdings</span><b>${A.parts.reduce((n, p) => n + p.rows.length, 0)}</b></div>
-        <div class="kpi"><span>Data as of</span><b>${esc(DATA.now.date || '–')}</b></div></div>
-      <div class="bar"><span class="sp"></span>${liveNote()}<button type="button" class="btn sm" id="ltpGo" ${LTP_BUSY ? 'disabled' : ''} title="Live prices (LTP) for every ETF and stock below">${LTP_BUSY ? 'Fetching…' : 'Fetch live prices'}</button><button type="button" class="btn sm" data-all="1">Expand all</button><button type="button" class="btn sm" data-all="0">Collapse all</button></div>`
+        <div class="kpi"><span>Data as of</span><b>${esc(DATA.now.date || '–')}</b>${liveNote()}</div></div>
+      <div class="bar nw"><span class="sp"></span><button type="button" class="btn sm" id="ltpGo" ${LTP_BUSY ? 'disabled' : ''} title="Get live prices for accurately getting the qty">${LTP_BUSY ? 'Fetching…' : 'Live prices'}</button><button type="button" class="btn sm" data-all="1">Expand all</button><button type="button" class="btn sm" data-all="0">Collapse all</button></div>`
       + A.parts.map(p => {
         const extraH = p.k === 'index' ? '<th class="r">Composite</th><th class="r">3M</th>' : p.k === 'value' ? '<th class="r">Score</th><th class="r">PE</th><th class="r">PB</th><th class="r">Mcap</th><th class="r">EPS CAGR</th><th class="r">Vs 52w high</th>' : '<th class="r">Momentum</th><th class="r">PE</th><th class="r">PB</th><th class="r">Mcap</th><th class="r">EPS CAGR</th><th class="r">Vs 52w high</th>';
         const extra = x => p.k === 'index' ? `<td class="r">${ms(x.mom)}</td><td class="r">${pill(x.r3)}</td>` : p.k === 'value' ? `<td class="r">${fmt(x.score, 0)}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td><td class="r">${crf(x.mcap)}</td><td class="r">${num(x.cagr) ? fmt(x.cagr, 1) + '%' : '–'}</td><td class="r">${num(x.vs52) ? fmt(x.vs52, 1) + '%' : '–'}</td>`

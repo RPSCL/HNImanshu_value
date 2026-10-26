@@ -16,8 +16,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");}catch(e){}})()</script>
-<link rel="stylesheet" href="auth.css?v=42">
-<script type="module" src="auth.js?v=42"></script>
+<link rel="stylesheet" href="auth.css?v=43">
+<script type="module" src="auth.js?v=43"></script>
 <style>
 /* same colours and names as the other pages, so auth.css (popup, avatar, Prime purple) fits without changes */
 :root{--mono:'IBM Plex Mono',ui-monospace,monospace;--sans:'DM Sans',system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -85,6 +85,8 @@ html.hni-plus body.day{--shade:rgba(0,40,32,.30);--tshade:rgba(0,40,32,.26)}
 .card b{display:block;font-size:16px;font-weight:600}
 .card small{display:block;font-size:12.5px;color:var(--faint)}
 .card .chev{color:var(--faint);font-size:20px;line-height:1}
+button.card{font:inherit;color:inherit;text-align:left;cursor:pointer;width:100%}
+.card.game .ic{background:#edc53f;color:#fdf9f0;font:800 11px system-ui,-apple-system,sans-serif;letter-spacing:-.2px}   /* 2048: the game's own tile */
 .card .cr{display:none;flex:none;color:#c9b3f5}
 /* Portfolio Builder: purple + crown until the visitor is Prime (or admin) */
 html:not(.hni-pro) .card.prime{border-color:#5b2d9c;background:linear-gradient(90deg,rgba(46,16,101,.55),rgba(46,16,101,.18))}
@@ -237,6 +239,7 @@ html.lg-lock .main,html.lg-lock .foot,html.lg-lock .top{visibility:hidden}   /* 
 @keyframes in{to{opacity:1;transform:none}}
 .go-anim .card:nth-of-type(1){animation-delay:1.75s}.go-anim .card:nth-of-type(2){animation-delay:1.87s}
 .go-anim .card:nth-of-type(3){animation-delay:1.99s}.go-anim .card:nth-of-type(4){animation-delay:2.11s}
+.go-anim .card.game{animation-delay:2.23s}
 .foot.go-anim{animation:fade .8s 2.3s ease forwards}
 @keyframes fade{to{opacity:1}}
 @media (max-width:760px) and (orientation:portrait){
@@ -285,6 +288,9 @@ html.lg-lock .main,html.lg-lock .foot,html.lg-lock .top{visibility:hidden}   /* 
   .card small,.card .chev{display:none}
   html:not(.hni-pro) .card.prime .cr{position:absolute;top:14px;right:14px}
   .card.prime{position:relative}
+  .card.game{grid-column:1 / -1;flex-direction:row;align-items:center;padding:8px 12px}
+  .card.game .ic{width:30px;height:30px;font-size:9.5px}
+  .card.game small{display:block}
 }
 </style>
 <script>
@@ -364,6 +370,10 @@ html.lg-lock .main,html.lg-lock .foot,html.lg-lock .top{visibility:hidden}   /* 
       <svg class="cr" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-label="Prime"><path d="M3 7.5l4.5 4.5L12 5l4.5 7L21 7.5 19 19H5z"/></svg>
       <span class="chev" aria-hidden="true">›</span>
     </a>
+    <button type="button" class="card game" id="g48go">
+      <span class="ic" aria-hidden="true">2048</span>
+      <span class="tx"><b>2048</b><small>Play 2048</small></span><span class="chev" aria-hidden="true">›</span>
+    </button>
   </nav>
 
 </main>
@@ -598,6 +608,12 @@ document.getElementById('theme-toggle').addEventListener('click', function () {
     else { var n = 0, t = setInterval(function () { if (window.hniPlans || ++n > 40) { clearInterval(t); if (window.hniPlans) go(); } }, 100); }   // login code still loading
   });
 })();
+</script>
+<script>
+/* 2048: open for everyone (logged in or not). The game loads only on this click. */
+document.getElementById('g48go').addEventListener('click', function () {
+  (window.hniGame ? window.hniGame() : import('./game2048.js?v=43').then(function (m) { return m.open(); })).catch(function () {});
+});
 </script>
 </body>
 </html>
