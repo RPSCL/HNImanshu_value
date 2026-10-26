@@ -668,7 +668,6 @@ const NAV_ICON = {
   factor: SVG('<path d="M3 20h18"/><path d="M6 16v-5M11 16V6M16 16v-8M21 16v-3"/>'),
   portfolio: SVG('<path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/>'),
   builder: SVG('<g transform="translate(9.6 6.7) rotate(-38)"><path d="M0 2V15.6" stroke-width="3"/><g fill="currentColor" stroke="none"><rect x="-8.9" y="-2.3" width="2.7" height="4.6" rx="1.2"/><path d="M-6.5 -1.5h1.6v3h-1.6z"/><path d="M-5.2 -2.5Q-4 -3.7 -1.5 -3.7H1.6C5.6 -3.7 8.5 -2.2 9.7 .1 7.7 -1 5.2 -1.3 2.6 -.5L1.9 2.3H-1.9L-3.2 1.9H-5.2z"/></g></g><path d="M3.3 15.6h4.5v6.1H2.1z" stroke-width="1.8"/><path d="M5 15.6v-1.1a1.5 1.5 0 0 1 1.5-1.5h1.3" stroke-width="1.7"/>'),
-  game: '2048',                                                         // the yellow 2048 tile (auth.css)
   weekly: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#29a9eb"/><path d="M5.4 11.6l11.5-4.4c.5-.2 1 .1.8.9l-2 9.3c-.1.6-.5.8-1.1.5l-3-2.2-1.5 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5.1c.2-.2 0-.3-.4-.1l-6.9 4.4-3-.9c-.6-.2-.7-.6.1-1z" fill="#fff"/></svg>',
 };
 const NAV = [
@@ -677,7 +676,6 @@ const NAV = [
   { k: "portfolio", t: "Portfolio", s: "Your holdings and P&L", href: "factor#/portfolio" },
   { k: "builder", t: "Portfolio Builder", s: "ETFs + value + momentum, with a backtest", href: "builder", prime: true },
   { k: "weekly", t: "Telegram alerts", s: "Your portfolio summary every week", prime: true },
-  { k: "game", t: "2048", s: "Play 2048", open: true },
 ];
 function pageNow() {                                                    // which page this is (left out of the list)
   const p = location.pathname.split("/").pop() || "";
@@ -716,7 +714,6 @@ function openNav() {
       if (e.target === navBox || e.target.closest(".au-x")) return closeNav();
       const it = e.target.closest(".hni-nv"); if (!it) return;
       const n = NAV.find((x) => x.k === it.dataset.k);
-      if (n.k === "game") { e.preventDefault(); closeNav(); setTimeout(() => window.hniGame(), 120); return; }   // 2048: open for everyone
       if (!current && !n.open) {                                        // not logged in: log in first, then that page
         e.preventDefault(); closeNav(); setTimeout(() => openPopup(n.href || "factor#/"), 160); return;
       }
@@ -839,7 +836,7 @@ function markDemo(u) {
 const trusted = () => { try { return hinted() && Date.now() - (+localStorage.getItem(AUTH_AT) || 0) < TRUST_MS; } catch (e) { return false; } };
 const stampAuth = (on) => { try { on ? localStorage.setItem(AUTH_AT, String(Date.now())) : localStorage.removeItem(AUTH_AT); } catch (e) {} };
 let current = null;
-// ---------- 2048 (landing card, Navigate → 2048): game2048.js loads only when opened; open for everyone ----------
+// ---------- 2048 (landing page card only): game2048.js loads only when opened; open for everyone ----------
 // hni_game/{uid} = the account's last board + best (owner only) · hni_game_top/{uid} = {best, name} (everyone reads: the Top 10)
 window.hniGameDB = {
   ready: () => ready,

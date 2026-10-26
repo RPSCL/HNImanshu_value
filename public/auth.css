@@ -238,7 +238,6 @@ html.hni-nav .hnav, html.hni-nav #pf-btn, html.hni-nav #fund-btn, html.hni-nav #
 .hni-nv:hover,.hni-nv:focus-visible{border-color:var(--au-acc);outline:none}
 .hni-nv .ic{flex:none;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:var(--au-field);color:var(--au-acc)}
 .hni-nv .ic svg{width:17px;height:17px}
-.hni-nv[data-k=game] .ic{background:#edc53f;color:#fdf9f0;font:800 10px system-ui,-apple-system,sans-serif;letter-spacing:-.2px}   /* 2048: the game's own tile */
 .hni-nv .tx{flex:1;min-width:0}
 .hni-nv b{display:block;font:600 14px var(--au-sans)}
 .hni-nv small{display:block;margin-top:1px;font-size:11.5px;color:var(--au-faint)}

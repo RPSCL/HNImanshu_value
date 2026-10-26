@@ -1,4 +1,4 @@
-// game2048.js — 2048 in an overlay (landing page card, Navigate → 2048 on every other page). Loaded only when opened.
+// game2048.js — 2048 in an overlay (landing page card). Loaded only when opened.
 //
 // Saving:
 //   • guest (not logged in): this browser only (localStorage "hni2048"), after every move.
