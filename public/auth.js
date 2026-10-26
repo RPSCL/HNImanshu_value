@@ -838,15 +838,16 @@ const stampAuth = (on) => { try { on ? localStorage.setItem(AUTH_AT, String(Date
 let current = null;
 // ---------- 2048 (landing page card only): game2048.js loads only when opened; open for everyone ----------
 // hni_game/{uid} = the account's last board + best (owner only) · hni_game_top/{uid} = {best, name} (everyone reads: the Top 10)
+const topName = (n) => (/^admin$/i.test(String(n || "").trim()) ? "Himanshu" : String(n || "Player").slice(0, 40));   // the admin account shows as Himanshu
 window.hniGameDB = {
   ready: () => ready,
   uid: () => (current ? current.uid : null),
   load: async () => { await needFS(); const d = await getDoc(doc(db, "hni_game", current.uid)); return d.exists() ? d.data() : null; },
   save: async (s) => { await needFS(); return setDoc(doc(db, "hni_game", current.uid), { cells: s.cells, score: s.score, best: s.best, keep: !!s.keep, over: !!s.over, at: serverTimestamp() }); },
-  saveTop: async (best) => { await needFS(); return setDoc(doc(db, "hni_game_top", current.uid), { best, name: String(nameOf(current)).slice(0, 40), at: serverTimestamp() }); },
+  saveTop: async (best) => { await needFS(); return setDoc(doc(db, "hni_game_top", current.uid), { best, name: topName(current.email === ADMIN_EMAIL ? "Himanshu" : nameOf(current)), at: serverTimestamp() }); },
   top: async () => { await needFS();
     const q = await getDocs(fsQuery(collection(db, "hni_game_top"), fsOrder("best", "desc"), fsLimit(10)));
-    return q.docs.map((d) => ({ id: d.id, name: d.data().name, best: d.data().best })); },
+    return q.docs.map((d) => ({ id: d.id, name: topName(d.data().name), best: d.data().best })); },
 };
 window.hniGame = () => import("./game2048.js?v=43").then((m) => m.open());
 const ready = new Promise((resolve) => {
