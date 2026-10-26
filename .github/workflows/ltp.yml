@@ -28,6 +28,10 @@ on:
         required: false
         type: boolean
         default: false
+      extra:
+        description: "PF Builder: more symbols to price today (comma separated), on top of everything held"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -149,7 +153,8 @@ jobs:
           ANGEL_CLIENT_CODE: ${{ secrets.ANGEL_CLIENT_CODE }}
           ANGEL_PIN: ${{ secrets.ANGEL_PIN }}
           ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
-        run: python -u portfolio_ltp.py ${{ steps.gate.outputs.anytime == 'true' && '--any-time' || '' }}
+          EXTRA: ${{ github.event.inputs.extra }}
+        run: python -u portfolio_ltp.py ${{ steps.gate.outputs.anytime == 'true' && '--any-time' || '' }} --extra "$EXTRA"
 
       - name: Clean up
         if: always() && steps.gate.outputs.go == 'true'
