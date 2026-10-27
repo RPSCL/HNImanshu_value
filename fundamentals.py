@@ -2056,6 +2056,20 @@ let method = lsGet('pemethod') || 'median';
 /* global PSU filter: applies to every tab (industry benchmarks still use all stocks) */
 const GF = lsJson('gf', {psu:false, semi:false, back:false, backP:'1Y', uni:'all'});
 delete GF.same;                                              // old "Same method" setting from earlier visits: dropped
+/* Your settings (every screen's filters + PSU / Semi PSU): the ACCOUNT's (Firestore hni_settings/{uid}.ff, through auth.js), so they
+   are the same on every device and PF Builder picks with them too. Saved when the Filters window closes (Done) or a Screen is picked;
+   kept until "Reset to default". This browser keeps a copy (hnif_ff) so the page opens with them at once. Only what differs from the
+   default is kept: {<filter key>: {...}, gf: {psu, semi}} */
+const EMBED = /[?&]embed=1\b/.test(location.search);       // PF Builder's hidden copy of this page: reads the settings, never writes them
+const FF = lsJson('ff', {});
+try { const old = JSON.parse(lsGet('vf_saved') || 'null'); if (old && !FF.vf) FF.vf = old; } catch (e) {}   // the Value screen's old "Save"
+if (FF.gf) { GF.psu = !!FF.gf.psu; GF.semi = !!FF.gf.semi; }
+function ffSave(keepAt) {                                   // _at: when they were set, so the newer copy (this browser / account) wins
+  if (EMBED) return;
+  if (!keepAt) FF._at = Date.now();
+  lsSet('ff', JSON.stringify(FF));
+  const st = window.hniStore; if (st && st.saveFF) st.saveFF(JSON.parse(JSON.stringify(FF))).catch(() => {});
+}
 const QP = new URLSearchParams(location.search);
 if (QP.has('uni') && history.replaceState) history.replaceState(null, '', location.pathname + location.hash);   // old ?uni= links: ignored, URL cleaned
 /* "Others" (every NSE stock outside the 3 lists) is its own list: "All lists" = the 3 lists only */
@@ -2761,25 +2775,28 @@ function placeDrop(f) {
     drop.style.top = (sb - fr.top + 6) + 'px'; back.style.top = ''; drop.style.maxHeight = '';
   }
 }
-const closeDrops = () => { document.querySelectorAll('.fbox.dopen').forEach(f => f.classList.remove('dopen')); for (const k in DROP) DROP[k].open = false; document.body.classList.remove('fmodal'); };
-/* memory mode (Value screen): the screen opens on its default (Deep value) unless the user pressed Save;
-   changes work at once but are kept only for this visit until Save; Default (after a warning) forgets them */
-const FMEM = {}, FSESS = {};                               // FSESS: other tabs' filters, kept for this visit only
-function fmem(key, def, base) {
-  if (!FMEM[key]) {
-    let saved = null; try { saved = JSON.parse(lsGet(key + '_saved') || 'null'); } catch (e) {}
-    FMEM[key] = {base, saved, live: Object.assign({}, def, saved || base)};
-  }
-  return FMEM[key];
-}
+const closeDrops = () => {                                 // outside click / Esc: a close like Done, so the filters are saved too
+  document.querySelectorAll('.fbox.dopen').forEach(f => f.classList.remove('dopen'));
+  for (const k in DROP) { if (DROP[k].open && FCOMMIT[k]) FCOMMIT[k](); DROP[k].open = false; }
+  document.body.classList.remove('fmodal');
+};
+/* filter values: FL = what each screen shows now (from your saved settings FF, else the screen's default). Changes work at once;
+   they are saved (FF + the account) when the Filters window closes or a Screen is picked. "Reset to default" forgets them. */
+const FL = {}, FCOMMIT = {};
+const fBase = (def, o) => Object.assign({}, def, (o && o.memory) || {});
 function filterBox(o, rerender) {
   const {key, def} = o;
-  const M = o.memory ? fmem(key, def, Object.assign({}, def, o.memory)) : null;
-  // every filter box opens on its predefined values after a page refresh: changes last only for this visit
-  // (Value screen: unless you pressed Save there)
-  const put = obj => M ? (M.live = Object.assign({}, def, obj)) : (FSESS[key] = Object.assign({}, def, obj));
-  const st = M ? Object.assign({}, M.live) : Object.assign({}, def, FSESS[key] || {});
-  const dirty = M && JSON.stringify(M.live) !== JSON.stringify(Object.assign({}, def, M.saved || M.base));
+  const base = fBase(def, o);
+  if (!FL[key]) FL[key] = Object.assign({}, def, FF[key] || base);
+  const put = obj => { FL[key] = Object.assign({}, def, obj); };
+  const st = Object.assign({}, FL[key]);
+  const commit = () => {
+    if (JSON.stringify(FL[key]) === JSON.stringify(base)) { if (!(key in FF)) return; delete FF[key]; }
+    else { if (JSON.stringify(FF[key]) === JSON.stringify(FL[key])) return; FF[key] = Object.assign({}, FL[key]); }
+    ffSave();
+  };
+  FCOMMIT[key] = commit;
+  const custom = key in FF;
   const presets = (o.presets || []).filter(p => !NOPRICE || !p.price);  // price-based screens need a price for this date
   const unset = v => v === '' || v == null || v === 0;                 // blank box and 0 both mean "no filter"
   const same = (a, b) => (unset(a) && unset(b)) || String(a) === String(b);
@@ -2799,9 +2816,7 @@ function filterBox(o, rerender) {
     + `<div class="fback"></div><div class="fdrop" role="dialog" aria-label="Filters"><div class="fdin">`
     + `<div class="fdhead"><span class="t">Filters</span><span class="fbtns">`
     + (o.extra ? `<button type="button" class="btn ghost" data-tog="extra">${o.extra.label} <span class="car">▾</span></button>` : '')
-    + (M ? `<button type="button" class="btn ghost${dirty ? ' save-on' : ''}" data-save ${dirty ? '' : 'disabled'} title="Remember these filters on this device">Save</button>`
-         + `<button type="button" class="btn ghost" data-reset title="Back to the default screen (Deep value)">Default</button>`
-         : `<button type="button" class="btn ghost" data-reset title="Back to defaults">Reset</button>`)
+    + `<button type="button" class="btn ghost" data-reset title="Back to this screen's default${o.memory ? ' (Deep value)' : ''}; your saved filters are forgotten">Reset to default</button>`
     + `<button type="button" class="btn ghost done" data-close>Done</button></span></div>`
     + (o.extra ? `<div class="fpanel" data-panel="extra"></div>` : '')
     + `<div class="fgrid">${o.main(st)}</div>`
@@ -2811,6 +2826,7 @@ function filterBox(o, rerender) {
   const drop = $('.fdrop', f);
   const setOpen = v => {
     if (v) { closeDrops(); D0.top = null; }                         // opens at half height
+    if (!v && D0.open) commit();                                    // Done (or any close): your filters are saved
     D0.open = v; f.classList.toggle('dopen', v); $('.fbtn', f).setAttribute('aria-expanded', v);
     if (v) { placeDrop(f); sheetScroll(drop, $('.fdin', f), () => setOpen(false), D0); }
     document.body.classList.toggle('fmodal', v && isPhone());   // phone: floating window, page locked
@@ -2834,18 +2850,16 @@ function filterBox(o, rerender) {
   f.querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => {
     const p = presets[+b.dataset.p];
     put(p === active ? {} : Object.assign({}, def, p.st));                // click the active screen again = switch it off
-    rerender();
+    commit(); rerender();
   }));
-  if (M) {
-    const sv = $('[data-save]', f);
-    sv.addEventListener('click', () => { M.saved = Object.assign({}, M.live); lsSet(key + '_saved', JSON.stringify(M.saved)); rerender(); toast('Filters saved. They open like this next time.'); });
-    $('[data-reset]', f).addEventListener('click', () => {
-      const w = modal('Back to default?', `<p>Every filter goes back to the default screen (<b>Deep value</b>) and your saved settings are forgotten.</p>
-        <div class="pf-btns" style="margin-top:14px"><button type="button" class="btn ghost" data-no>Cancel</button><button type="button" class="btn primary danger" data-yes>Set to default</button></div>`);
-      $('[data-no]', w).addEventListener('click', () => w._close());
-      $('[data-yes]', w).addEventListener('click', () => { M.saved = null; lsSet(key + '_saved', ''); M.live = Object.assign({}, M.base); w._close(); rerender(); });
-    });
-  } else $('[data-reset]', f).addEventListener('click', () => { FSESS[key] = {}; rerender(); });
+  $('[data-reset]', f).addEventListener('click', () => {
+    const back0 = () => { FL[key] = Object.assign({}, base); commit(); rerender(); };
+    if (!custom) return back0();                                         // nothing saved yet: no question
+    const w = modal('Back to default?', `<p>Every filter on this screen goes back to its default${o.memory ? ' (<b>Deep value</b>)' : ''} and your saved filters for it are forgotten.${['vf', 'momf'].includes(key) ? ' PF Builder then uses the default too.' : ''}</p>
+      <div class="pf-btns" style="margin-top:14px"><button type="button" class="btn ghost" data-no>Cancel</button><button type="button" class="btn primary danger" data-yes>Reset to default</button></div>`);
+    $('[data-no]', w).addEventListener('click', () => w._close());
+    $('[data-yes]', w).addEventListener('click', () => { w._close(); back0(); });
+  });
   view.appendChild(f);
   const on = $('.preset.on', f), pc = $('.pchips', f);               // phone: swipe row starts at the active screen
   if (on && pc.scrollWidth > pc.clientWidth) pc.scrollLeft = on.offsetLeft - pc.offsetLeft - 8;
@@ -3876,7 +3890,7 @@ const pfActsHtml = () => `<div class="pf-top"><div class="pf-acts">
 /* ---------- (i) PF Builder check: your PF Builder holdings vs the PF Builder lists as they stand today ----------
    Holdings bought from PF Builder carry a Remark ("PF Builder → Value", "→ Momentum", "→ ETF", "→ ETF pair"). The same lists
    are worked out here with the SAME rules and YOUR PF Builder settings (list, sort, top n: this browser's pb_sel), from
-   today's data: Deep value screen / Momentum screen (PSU left out, no recent listings) and the ETF pairs (composite
+   today's data: YOUR Value / Momentum screens and PSU choice (pbCfg; untouched = Deep value / Momentum, PSU left out; no recent listings) and the ETF pairs (composite
    0.5 × 6M + 0.5 × 12M momentum, builder_etf.json). Anything held that is no longer on its list = "no longer on the list";
    anything on the list of a part you hold that you don't hold = "new on the list"; an ETF pair whose slot now picks the
    other ETF shows both. The button turns red with the count. Information only: what to do with it is yours to decide. */
@@ -3895,8 +3909,19 @@ function pfChkBtn() {
   return `<button type="button" class="btn ghost ico pf-chk${n ? ' alert' : ''}" data-open="chk"${off ? ' disabled' : ''} title="${esc(t)}" aria-label="${esc(t)}">${IC_INFO}${n ? `<b>${n}</b>` : ''}</button>`;
 }
 let PB_REMOTE = null;                                          // this account's PF Builder settings (same on every device), auth.js prefs()
+window.FF_READY = false;                                       // PF Builder's copy of this page waits for the account's settings
 window.addEventListener('hni-ready', () => { if (window.hniStore && window.hniStore.prefs) window.hniStore.prefs().then(r => {
-  PB_REMOTE = r && r.pb ? r.pb : null; PF_CHK_SIG = ''; if ((location.hash || '') === '#/portfolio' && PF.txns) pfChkRun(); }).catch(() => {}); });
+  PB_REMOTE = r && r.pb ? r.pb : null; PF_CHK_SIG = '';
+  const ff = r && r.ff && typeof r.ff === 'object' ? r.ff : null;           // the newer copy wins: the account's, or this browser's
+  const la = +FF._at || 0, ra = ff ? +ff._at || 0 : -1;
+  if (ff && ra > la) {
+    Object.keys(FF).forEach(k => delete FF[k]); Object.assign(FF, ff); Object.keys(FL).forEach(k => delete FL[k]);
+    if (FF.gf) { GF.psu = !!FF.gf.psu; GF.semi = !!FF.gf.semi; saveGF(); $('#hidePSU').checked = GF.psu; $('#hideSemi').checked = GF.semi; }
+    if (!EMBED) lsSet('ff', JSON.stringify(FF));
+    if (!document.querySelector('.fbox.dopen')) route();
+  } else if (la > 0 && la > ra && !EMBED) ffSave(true);                              // this browser's are newer (or never uploaded): upload them
+  window.FF_READY = true;
+  if ((location.hash || '') === '#/portfolio' && PF.txns) pfChkRun(); }).catch(() => { window.FF_READY = true; }); else window.FF_READY = true; });
 const pbSel = () => { let v = PB_REMOTE && PB_REMOTE.sel ? PB_REMOTE.sel : null; if (!v) try { v = JSON.parse(localStorage.getItem('pb_sel') || 'null'); } catch (e) {}
   const o = JSON.parse(JSON.stringify(PB_SEL_DEF));
   if (v) ['value', 'mom'].forEach(k => { if (v[k]) Object.assign(o[k], {uni: String(v[k].uni || 'all'), key: PB_KEYS[v[k].key] ? v[k].key : o[k].key,
@@ -3918,20 +3943,31 @@ function pbEtfPick(sc) {                                      // = PF Builder's 
   const notes = PB_PAIRS.map(([c, d]) => { const mc = sc[c], md = sc[d]; return {c, d, mc, md, win: ok(mc) && mc > 0 && (!ok(md) || mc > md) ? c : d}; });
   return {notes, list: [...new Set([...notes.map(n => n.win), ...PB_ALWAYS])]};
 }
+/* PF Builder's Value and Momentum lists use YOUR screens: the Value screen's and the Momentum screen's saved filters and your PSU /
+   Semi PSU choice. Nothing saved = the defaults: Deep value, Momentum (70+), PSU left out. */
+const presetName = (st, def, presets) => { const u = v => v === '' || v == null || v === 0, same = (a, b) => (u(a) && u(b)) || String(a) === String(b);
+  const p = presets.find(x => Object.entries(Object.assign({}, def, x.st)).every(([k, v]) => same(st[k], v))); return p ? p.name : null; };
+function pbCfg() {
+  const vf = Object.assign({}, VF_DEF, FF.vf || fBase(VF_DEF, {memory: (VF_PRESETS.find(p => p.name === 'Deep value') || {}).st}));
+  const mf = Object.assign({}, MOM_DEF, FF.momf || {});
+  return {vf, mf, psu: FF.gf ? !!FF.gf.psu : true, semi: FF.gf ? !!FF.gf.semi : false, custom: !!(FF.vf || FF.momf || FF.gf),
+    vName: presetName(vf, VF_DEF, VF_PRESETS) || 'Custom', mName: FF.momf ? 'Custom' : 'Momentum'};
+}
+const pbMomOk = (s, mf) => passVF(s, mf) && (unsetF(mf.maxMom) || !(+mf.maxMom > 0) || Math.round(s.momS) <= +mf.maxMom);
+window.pbCfg = pbCfg; window.pbMomOk = pbMomOk;
 function pbLists(C0) {                                        // today's PF Builder lists, worked out in this page (view restored after)
-  const C = C0 || pbSel(), keep = {uni: GF.uni, psu: GF.psu, semi: GF.semi};
-  const vf = Object.assign({}, VF_DEF, (VF_PRESETS.find(p => p.name === 'Deep value') || {}).st);
+  const C = C0 || pbSel(), keep = {uni: GF.uni, psu: GF.psu, semi: GF.semi}, P = pbCfg(), vf = P.vf;
   const day = 864e5, cut = new Date(Date.parse(D.asOf) - 365 * day).toISOString().slice(0, 10);
   let first = '9999'; D.stocks.forEach(s => { if (s.lf && s.lf < first) first = s.lf; });
   const start = new Date(Date.parse(first) + 7 * day).toISOString().slice(0, 10);
   const young = s => !!(s.lf && s.lf > cut && s.lf > start);
   const out = {};
   try {
-    GF.psu = true; GF.semi = false;
+    GF.psu = P.psu; GF.semi = P.semi;
     for (const k of ['value', 'mom']) {
       GF.uni = C[k].uni === 'all' || D.lists.includes(C[k].uni) ? C[k].uni : 'all'; setMode(); computeScores.S = null; computeScores();
       const pool = k === 'value' ? V().filter(s => !young(s) && s.score != null && s.cmp != null && passVF(s, vf))
-                                 : V().filter(s => !young(s) && ok(s.momS) && s.cmp != null && passVF(s, MOM_DEF));
+                                 : V().filter(s => !young(s) && ok(s.momS) && s.cmp != null && pbMomOk(s, P.mf));
       out[k] = pbChoose(pool, C[k], k).map(s => s.sym);
     }
   } finally { Object.assign(GF, keep); setMode(); computeScores.S = null; computeScores(); }
@@ -3967,8 +4003,9 @@ async function pfChkCalc() {
     has(t).forEach(r => { if (!on.has(r.sym)) res.out.push({sym: r.sym, part: t, why}); });
     list.forEach(x => { if (!held.has(x)) res.inn.push({sym: x, part: t, why}); });
   };
-  if (parts.includes('Value')) diff('Value', L.value, 'Deep value · ' + pbSelTxt(L.C.value));
-  if (parts.includes('Momentum')) diff('Momentum', L.mom, 'Momentum · ' + pbSelTxt(L.C.mom));
+  const PC = pbCfg(), vN = PC.vName === 'Custom' ? 'Your Value screen' : PC.vName, mN = PC.mName === 'Custom' ? 'Your Momentum screen' : 'Momentum';
+  if (parts.includes('Value')) diff('Value', L.value, vN + ' · ' + pbSelTxt(L.C.value));
+  if (parts.includes('Momentum')) diff('Momentum', L.mom, mN + ' · ' + pbSelTxt(L.C.mom));
   if (parts.includes('ETF') || parts.includes('ETF pair')) {
     try { PB_ETF = PB_ETF || await fetch('builder_etf.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null); } catch (e) { PB_ETF = null; }
     const E = (PB_ETF && PB_ETF.etf) || {}, sc = {};
@@ -5029,7 +5066,7 @@ document.addEventListener('click', e => { const p = $('#backPop'); if (p && !e.t
 const saveGF = () => lsSet('gf', JSON.stringify(GF));
 [['psu','#hidePSU'], ['semi','#hideSemi']].forEach(([k, id]) => {
   const el = $(id); el.checked = !!GF[k];
-  el.addEventListener('change', () => { GF[k] = el.checked; saveGF(); route(); });
+  el.addEventListener('change', () => { GF[k] = el.checked; saveGF(); FF.gf = {psu: !!GF.psu, semi: !!GF.semi}; ffSave(); route(); });   // kept until switched back
 });
 /* Historical: an on / off chip + a period dropdown (3M … 1.5Y). Every page load starts with Historical OFF and 1Y.
    Choosing a period switches Historical on; clicking the chip again switches it off. 1Y is inside the page,
@@ -5318,10 +5355,10 @@ AUTH_WEB = {
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
                      # signed in and checked within the last hour → page shows at once; auth.js confirms quietly behind it
                      '<script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>\n'
-                     '<link rel="stylesheet" href="auth.css?v=43">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=43"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=44">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=44"></script>\n',
     # straight after the header, not deferred: Navigate + avatar are there from the first paint (no blink)
-    "__AUTH_HDR__": '<script src="hdr.js?v=43"></script>\n',
+    "__AUTH_HDR__": '<script src="hdr.js?v=44"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
