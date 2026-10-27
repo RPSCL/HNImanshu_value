@@ -8,9 +8,9 @@
 <meta name="description" content="Split a fund into index ETFs, value stocks and momentum stocks by fixed rules, with a backtest over 1 month to 1 year.">
 <style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>
 <script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>
-<link rel="stylesheet" href="auth.css?v=43">
+<link rel="stylesheet" href="auth.css?v=44">
 <style>html:not(.pb-admin) .lead,html:not(.pb-admin) .card,html:not(.pb-admin) .tabs,html:not(.pb-admin) #out,html:not(.pb-admin) .disc{display:none}</style>
-<script type="module" src="auth.js?v=43"></script>
+<script type="module" src="auth.js?v=44"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>
@@ -288,15 +288,15 @@ tbody tr.held:hover td{background:var(--heldbg);filter:brightness(1.08)}
     </div>
     </div>
 </header>
-<script src="hdr.js?v=43"></script>
+<script src="hdr.js?v=44"></script>
 <div class="wrap">
 
   <h1>Portfolio Builder</h1>
   <p class="lead" id="gate" style="display:block">Opening PF Builder…</p>
   <details class="how lead"><summary>How it works</summary>
-    <p>Enter a fund amount. It is split between <b>index ETFs</b>, <b>value stocks</b> (Deep value screen) and
-    <b>momentum stocks</b> (top 15 of the Momentum screen), equal weight inside each part, using the same data and
-    screens as the Factor Screener. The split is 40 / 40 / 20 by default: type the ETF % and the Value % and Momentum gets the rest. For the Value and Momentum parts you can pick the list (universe), what to sort by (value score, momentum score, PE or PB, either way) and how many stocks to take; the sort always uses the numbers of the date shown (today, or 1 year back in the backtest). <b>PSU stocks are never picked</b> (value or momentum). The index part holds two ETF/Gold slots
+    <p>Enter a fund amount. It is split between <b>index ETFs</b>, <b>value stocks</b> (your Value screen; untouched = Deep value) and
+    <b>momentum stocks</b> (top 15 of your Momentum screen), equal weight inside each part, using the same data and
+    screens as the Factor Screener. The split is 40 / 40 / 20 by default: type the ETF % and the Value % and Momentum gets the rest. For the Value and Momentum parts you can pick the list (universe), what to sort by (value score, momentum score, PE or PB, either way) and how many stocks to take; the sort always uses the numbers of the date shown (today, or 1 year back in the backtest). <b>Your Factor Screener settings are used</b>: the Value screen's and the Momentum screen's filters and the PSU / Semi PSU switches, as you last left them there. Never changed (or Reset to default): Deep value, Momentum 70+ and no PSU stocks. The index part holds two ETF/Gold slots
     (IT/Gold and ALPHA/Gold): a slot holds Gold while its ETF is not stronger, so Gold can be held twice (2× weight).
     The backtest applies the same rules as they stood 1, 3, 6 or 9 months or 1 year ago (you pick), and re-checks the ETF pairs every month.</p></details>
 
@@ -398,15 +398,21 @@ let PER = (v => PERS.some(p => p[0] === v) ? v : '1Y')(lsGet('pb_per'));
 const perM = (k = PER) => (PERS.find(p => p[0] === k) || PERS[4])[2];
 const perName = (k = PER) => (PERS.find(p => p[0] === k) || PERS[4])[1];
 /* ---------- the screens: Fundamentals itself, running hidden inside this page (same login, same engine) ---------- */
+/* which screens made the lists (your Factor Screener settings), for the lines under each part */
+const CFG = () => (DATA && DATA.now && DATA.now.cfg) || {custom: false, vName: 'Deep value', mName: 'Momentum', psu: true, semi: false};
+const psuTxt = c => c.psu && c.semi ? 'Non-PSU, non-semi-PSU stocks' : c.psu ? 'Non-PSU stocks' : c.semi ? 'Non-semi-PSU stocks (PSU included)' : 'Stocks (PSU included)';
+const scrName = k => { const c = CFG(); return k === 'value' ? (c.vName === 'Custom' ? 'your Value screen (custom filters)' : `the ${c.vName} screen`)
+  : (c.mName === 'Custom' ? 'your Momentum screen (custom filters)' : 'the Momentum screen'); };
 /* Code run inside that page: the Deep value list and the Momentum list, today or (BACK) as of the back date */
 const HELPER = () => `window.__pb = function (unisJson, etfJson) {
-  GF.psu = true; GF.semi = false;
+  const P = window.pbCfg();                       // YOUR screens: Value / Momentum filters + PSU choice (defaults: Deep value, Momentum, no PSU)
+  GF.psu = P.psu; GF.semi = P.semi;
   const etfScore = {}, etf = JSON.parse(etfJson || '{}');
   for (const k in etf) { const m = etf[k] || []; etfScore[k] = ok(m[1]) && ok(m[2]) ? ${W6} * m[1] + ${W12} * m[2] : null; }
   const pick = s => ({sym: s.sym, name: s.name, ind: s.ind, cmp: s.cmp, pe: s.pe, pb: s.pb, mom: s.momS, score: s.score, url: s.url,
                       mcap: s.mcap, cagr: s.cagr, hi52: s.hi52,
                       ret: BACK ? sv(s, 'ret') : null});
-  const vf = Object.assign({}, VF_DEF, (VF_PRESETS.find(p => p.name === 'Deep value') || {}).st);
+  const vf = P.vf;
   const day = 864e5, asOfT = Date.parse(D.asOf), judged = BACK ? asOfT - D.then.days * day : asOfT;
   const need = BACK ? Math.max(1, Math.ceil(D.then.days / 365)) : 1;
   const cutISO = new Date(judged - need * 365 * day).toISOString().slice(0, 10);
@@ -418,11 +424,12 @@ const HELPER = () => `window.__pb = function (unisJson, etfJson) {
   JSON.parse(unisJson).forEach(u => {
     GF.uni = u; setMode(); computeScores.S = null; computeScores();
     pools[u] = {value: V().filter(s => !young(s) && s.score != null && s.cmp != null && passVF(s, vf)).map(pick),
-                mom: V().filter(s => !young(s) && ok(s.momS) && s.cmp != null && passVF(s, MOM_DEF)).map(pick)};
+                mom: V().filter(s => !young(s) && ok(s.momS) && s.cmp != null && window.pbMomOk(s, P.mf)).map(pick)};
   });
   GF.uni = 'all'; setMode(); computeScores.S = null; computeScores();
   return JSON.stringify({back: BACK, date: BACK ? D.then.date : D.asOf, hasPrice: BACK ? !!D.then.hasPrice : true,
-    bench: BACK && D.then.bench ? D.then.bench.ret : null, lists: D.lists, pools, etfScore, minHistory: need, cut: cutISO});
+    bench: BACK && D.then.bench ? D.then.bench.ret : null, lists: D.lists, pools, etfScore, minHistory: need, cut: cutISO,
+    cfg: {custom: P.custom, vName: P.vName, mName: P.mName, psu: P.psu, semi: P.semi}});
 };`;
 let ENG = null;
 function engine() {
@@ -435,7 +442,7 @@ function engine() {
     const poll = () => {
       try {
         const w = f.contentWindow;
-        if (w && w.document.documentElement.classList.contains('auth-ok') && w.eval("typeof V === 'function' && typeof D === 'object' && typeof setHistorical === 'function'")) {
+        if (w && w.document.documentElement.classList.contains('auth-ok') && w.eval("typeof V === 'function' && typeof D === 'object' && typeof setHistorical === 'function' && typeof pbCfg === 'function' && FF_READY === true")) {
           w.eval(HELPER());
           return resolve(w);
         }
@@ -502,11 +509,17 @@ async function cacheGet(k) {
   catch (e) { return null; }
 }
 async function cachePut(k, v) { try { const db = await pbDb(); db.transaction('kv', 'readwrite').objectStore('kv').put(v, k); } catch (e) {} }
-let INFO_P = null, INFO = null, CACHE_V = '';
+let INFO_P = null, INFO = null, CACHE_V = '', FFK = '';
+/* your Factor Screener settings (Value / Momentum filters, PSU): the lists depend on them, so a change builds the lists again */
+const ffKey = ff => JSON.stringify({vf: (ff && ff.vf) || null, momf: (ff && ff.momf) || null, gf: (ff && ff.gf) || null});
+function ffNow(remote) {                                         // the newer of the account's copy and this browser's
+  let loc = null; try { loc = JSON.parse(localStorage.getItem('hnif_ff') || 'null'); } catch (e) {}
+  return remote && (+remote._at || 0) >= (+(loc && loc._at) || 0) ? remote : (loc || remote || {});
+}
 function saveScreens() {                                          // today + every period worked out so far
   if (!DATA) return;
   const uid = (window.hniStore && window.hniStore.uid) || '';
-  cachePut('screens', {v: CACHE_V, uid, s: {now: DATA.now, backs: DATA.backs}});
+  cachePut('screens', {v: CACHE_V, uid, ff: FFK, s: {now: DATA.now, backs: DATA.backs}});
 }
 function readyLine() {
   const B = DATA && DATA.backs && DATA.backs[PER];
@@ -968,7 +981,7 @@ function paintBack(fund) {
       + (PF.daily ? `Valued on ${PF.dates.length} trading days.` : `Daily prices are not saved yet: the chart uses ${perM() + 1} monthly points and max drawdown is understated.`)
       + (PF.lines ? ` ${PF.lines} of ${PF.lines + PF.real} value / momentum stocks have no daily prices (yet) and are drawn as a straight line from start to end.` : '')
       + ' Index ETFs are after 15% tax on switches; value and momentum stocks are bought once and held.';
-  let html = perBar() + `<p class="lead2">The same rules applied to the data as it stood on <b>${esc(B.date)}</b>, held until ${esc(DATA.now.date)}: value and momentum stocks (PSU left out) without changes; the index ETFs re-checked every month. Equal weight inside each part; ${SPLIT.map(x => +(x[2] * 100).toFixed(1)).join(' / ')} between parts.</p>
+  let html = perBar() + `<p class="lead2">The same rules applied to the data as it stood on <b>${esc(B.date)}</b>, held until ${esc(DATA.now.date)}: value and momentum stocks (${CFG().psu ? 'PSU left out' : 'PSU included'}) without changes; the index ETFs re-checked every month. Equal weight inside each part; ${SPLIT.map(x => +(x[2] * 100).toFixed(1)).join(' / ')} between parts.</p>
     <div class="kpis">
       <div class="kpi"><span>Mix return</span><b class="${tot >= 0 ? 'pos' : 'neg'}">${pct(tot)}</b></div>
       <div class="kpi"><span>NIFTY 500</span><b class="${(bench || 0) >= 0 ? 'pos' : 'neg'}">${pct(bench)}</b></div>
@@ -1018,8 +1031,8 @@ function paint() {
         const extra = x => p.k === 'index' ? `<td class="r">${ms(x.mom)}</td><td class="r">${pill(x.r3)}</td>` : p.k === 'value' ? `<td class="r">${fmt(x.score, 0)}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td><td class="r">${crf(x.mcap)}</td><td class="r">${num(x.cagr) ? fmt(x.cagr, 1) + '%' : '–'}</td><td class="r">${num(x.vs52) ? fmt(x.vs52, 1) + '%' : '–'}</td>`
           : `<td class="r">${num(x.mom) ? Math.round(x.mom) : '–'}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td><td class="r">${crf(x.mcap)}</td><td class="r">${num(x.cagr) ? fmt(x.cagr, 1) + '%' : '–'}</td><td class="r">${num(x.vs52) ? fmt(x.vs52, 1) + '%' : '–'}</td>`;
         const rule = p.k === 'index' ? pairNotes(L.pk) + (etfMiss ? '<p class="note">ETF prices are not in yet: they come with the next weekly price update (part 1). Amounts are shown; units appear once prices are in.</p>' : '')
-          : p.k === 'value' ? `<p class="rule">Non-PSU stocks that pass the Deep value screen · ${esc(selText('value'))} · equal weight.</p>`
-          : `<p class="rule">Non-PSU stocks that pass the Momentum screen · ${esc(selText('mom'))} · equal weight.</p>`;
+          : p.k === 'value' ? `<p class="rule">${psuTxt(CFG())} that pass ${esc(scrName('value'))} · ${esc(selText('value'))} · equal weight.</p>`
+          : `<p class="rule">${psuTxt(CFG())} that pass ${esc(scrName('mom'))} · ${esc(selText('mom'))} · equal weight.</p>`;
         const hdr = `${pc(p.share)} · ${fund ? rs(p.amt) + ' · ' : ''}${p.rows.length} holdings${fund && p.rows.length ? ' · ' + rs(p.amt / p.rows.length) + ' each' : ''}`;
         const body = rule + `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Price ₹</th>${extraH}<th class="r">Units</th><th class="r">Amount ₹</th></tr></thead><tbody>${
           p.rows.length ? p.rows.map(x => `<tr${heldTr(x)}><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td><td class="r"${x.live ? ' title="Live price"' : ''}>${x.live ? '<i class="lv"></i>' : ''}${fmt(x.price, 2)}</td>${extra(x)}
@@ -1321,7 +1334,7 @@ function paintSel() {
   const lists = ['all'].concat((DATA && DATA.now && DATA.now.lists) || []);
   const row = (k, label) => {
     const c = SELC[k];
-    return `<div class="selrow" data-k="${k}"><div class="sh"><b>${label}</b><span>${k === 'value' ? 'from the Deep value screen' : 'from the Momentum screen'}</span></div>
+    return `<div class="selrow" data-k="${k}"><div class="sh"><b>${label}</b><span>from ${esc(scrName(k))}</span></div>
       <div class="sg">
         <label class="f-list">List<select data-f="uni">${lists.map(u => `<option value="${esc(u)}"${u === c.uni ? ' selected' : ''}>${esc(uniName(u))}</option>`).join('')}</select></label>
         <label class="f-sort">Sort by<select data-f="key">${SORT_KEYS.map(([v, t]) => `<option value="${v}"${v === c.key ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
@@ -1357,8 +1370,9 @@ paintSplit();
   document.documentElement.classList.add('pb-admin'); $('#gate').remove();
   try {                                                             // this account's settings (any device); none yet → this browser's become them
     const r = window.hniStore && window.hniStore.prefs ? await window.hniStore.prefs() : null;
+    FFK = ffKey(ffNow(r && r.ff));
     if (r && r.pb) applyPrefs(r.pb); else if (window.hniStore && window.hniStore.savePrefs) window.hniStore.savePrefs(JSON.parse(JSON.stringify(prefsNow()))).catch(() => {});
-  } catch (e) {}
+  } catch (e) { FFK = ffKey(ffNow(null)); }
   if (REVIEW.includes(((window.hniStore && window.hniStore.email) || '').toLowerCase())) return reviewView();   // review account: portfolio only
   setTab(lsGet(tabKey()) || 'now', false);                         // the tab this user had open last time
   if (TAB === 'back' && pendingReq()) toast('Still preparing the backtest prices: they appear here by themselves, or check back in a few minutes.', 6000);
@@ -1373,7 +1387,7 @@ paintSplit();
     let sc = null;
     const c = await cacheGet('screens');
     const sameSession = (() => { try { return sessionStorage.getItem('pb_built') === uid; } catch (e) { return false; } })();
-    if (c && c.uid === uid && c.s && c.s.now && (sameSession || (info && info.data && c.v === info.data))) {
+    if (c && c.uid === uid && c.s && c.s.now && (c.ff || ffKey(null)) === FFK && (sameSession || (info && info.data && c.v === info.data))) {
       sc = c.s; if (!sc.backs) sc = {now: sc.now, backs: sc.back ? {'1Y': sc.back} : {}};   // older cache: only the 1-year list
     }
     if (!sc) {

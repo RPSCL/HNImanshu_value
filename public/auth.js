@@ -849,7 +849,7 @@ window.hniGameDB = {
     const q = await getDocs(fsQuery(collection(db, "hni_game_top"), fsOrder("best", "desc"), fsLimit(10)));
     return q.docs.map((d) => ({ id: d.id, name: topName(d.data().name), best: d.data().best })); },
 };
-window.hniGame = () => import("./game2048.js?v=43").then((m) => m.open());
+window.hniGame = () => import("./game2048.js?v=44").then((m) => m.open());
 const ready = new Promise((resolve) => {
   onAuthStateChanged(auth, async (u) => {
     if (u && expired(u)) { await clearUserCache(); await signOut(auth); u = null; }   // 7-day session limit
@@ -879,7 +879,9 @@ const ready = new Promise((resolve) => {
       save: async (data) => { await needFS(); return setDoc(doc(db, PORTFOLIO, u.uid), { txns: data.txns || [], rates: data.rates || {}, updated: serverTimestamp() }); },
       // PF Builder settings (fund, split, list / sort / top n, backtest period): one per account, so every device shows the same
       prefs: async () => { await needFS(); const d = await getDoc(doc(db, "hni_settings", u.uid)); return d.exists() ? d.data() : null; },
-      savePrefs: async (pb) => { await needFS(); return setDoc(doc(db, "hni_settings", u.uid), { pb, updated: serverTimestamp() }); },
+      savePrefs: async (pb) => { await needFS(); return setDoc(doc(db, "hni_settings", u.uid), { pb, updated: serverTimestamp() }, { mergeFields: ["pb", "updated"] }); },
+      // Factor Screener settings (every screen's filters + PSU / Semi PSU), kept until "Reset to default"; PF Builder picks with them
+      saveFF: async (ff) => { await needFS(); return setDoc(doc(db, "hni_settings", u.uid), { ff, updated: serverTimestamp() }, { mergeFields: ["ff", "updated"] }); },
       market: async () => { await needFS(); const d = await getDoc(doc(db, ...MARKET)); return d.exists() ? d.data() : null; },
       // live: cb(prices) every time new prices are written (Firestore pushes them, no polling) → returns "stop"
       watchMarket: async (cb) => { await needFS(); return onSnapshot(doc(db, ...MARKET), (d) => cb(d.exists() ? d.data() : null), () => {}); },
