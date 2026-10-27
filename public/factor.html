@@ -3012,6 +3012,7 @@ function route() {
   else if (h === '#/portfolio') portfolioView();
   else homeView();
   meta();
+  if (!EMBED && h !== '#/portfolio') try { sessionStorage.setItem('hnif_last', h); } catch (e) {}   // the screen to come back to (this visit)
   $('#pfBag').classList.toggle('on', h === '#/portfolio');            // header bag lights up on the Portfolio page
   document.body.classList.toggle('pf-mode', h === '#/portfolio');
   if (h !== '#/portfolio' && !HDR_OK) requestAnimationFrame(lockHeader);   // header back from Portfolio: measure it now     // Portfolio: a quiet header (‹ Value, Weekly, Portfolio, avatar, day/night)
@@ -3281,6 +3282,14 @@ $('#weeklyBtn').addEventListener('click', async () => {
   if (window.hniFadeAway) window.hniFadeAway(wk, () => wk._close());   // closes itself after 5 s
 });
 window.addEventListener('hashchange', route);
+/* the last screen of this visit (closing the tab forgets it): opening the Factor Screener again without a screen in the link
+   (header / Navigate / landing page: "factor" or "factor#/") goes straight back to it. Its filters come back from your settings.
+   Portfolio is its own page, so it never counts as the last screen. */
+const LAST_KEY = 'hnif_last';
+if (!EMBED && !isDemo() && (!location.hash || location.hash === '#/')) {
+  let last = ''; try { last = sessionStorage.getItem(LAST_KEY) || ''; } catch (e) {}
+  if (/^#\/(value|momentum|all|compare|method|industry\/.+)$/.test(last)) history.replaceState(null, '', location.pathname + location.search + last);
+}
 if (isPhone() && !location.hash) history.replaceState(null, '', location.pathname + location.search + '#/value');   // phone: opens on Value screen
 (() => {                                                  // this session's last Historical setting
   let hs = null; try { hs = JSON.parse(sessionStorage.getItem(HS_KEY) || 'null'); } catch (e) {}
