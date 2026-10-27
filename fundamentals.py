@@ -3986,8 +3986,10 @@ async function pfChkCalc() {
   if (!res.ok) return res;
   /* what was added, with which settings: each "Add … to portfolio" keeps them on its buys (pbs). Grouped per add, latest first */
   const held0 = new Set(rows.map(r => r.sym)), grp = new Map();
+  const canon = v => v && typeof v === 'object' ? (Array.isArray(v) ? '[' + v.map(canon).join(',') + ']'
+    : '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}') : JSON.stringify(v);   // Firestore returns map keys in any order
   PF.txns.filter(x => x.t === 'buy' && x.pbs && held0.has(x.sym)).forEach(x => {
-    const k = (x.date || '') + '|' + JSON.stringify(x.pbs);
+    const k = (x.date || '') + '|' + canon(x.pbs);                                    // same add = same settings, whatever order the keys come back in
     const g = grp.get(k) || {date: x.date || '', pbs: x.pbs, k: x.pbs.k || 'all', syms: new Set()}; g.syms.add(x.sym); grp.set(k, g);
   });
   res.adds = [...grp.values()].sort((p, q) => String(q.date).localeCompare(String(p.date)));
