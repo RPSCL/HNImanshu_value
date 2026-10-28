@@ -3,7 +3,7 @@ run-name: "${{ github.event_name == 'schedule' && format('Back-up check {0}', gi
 
 # fetch_prices.py --yearly → prices_yearly.csv: the split-adjusted close on 1 July of every year since 2019.
 #   part 0 = the 3 lists (~765 stocks) + NIFTY 500 (~40 min) · parts 1 / 2 / 3 = a third of Others each (~620, ~35 min)
-# Started by the Oracle server's crontab (oracle/crontab.txt, once a month), or by hand: Actions → this workflow → Run
+# Started by the Oracle server's crontab (oracle/crontab.txt, every Sunday 12:00-15:00 IST), or by hand: Actions → this workflow → Run
 # workflow, pick the part. Each part rewrites only its own rows and commits prices_yearly.csv. Nothing on the site reads
 # it yet: it is the price history for a multi-year owner-earnings backtest (the Factor screener's Historical covers 1.5 years).
 
@@ -15,13 +15,13 @@ concurrency:
   cancel-in-progress: false
 
 on:
-  # 🛟 BACK-UP (GitHub's clock, UTC), 2 hours after each Oracle time (1st of the month 03:30 / 04:30 / 05:30 / 06:30 IST):
+  # 🛟 BACK-UP (GitHub's clock, UTC), 2 hours after each Oracle time (Sunday 12:00 / 13:00 / 14:00 / 15:00 IST):
   #    runs that part only if Oracle didn't start it
   schedule:
-    - cron: "0 0 1 * *"        # 05:30 IST: part 0
-    - cron: "0 1 1 * *"        # 06:30 IST: part 1
-    - cron: "0 2 1 * *"        # 07:30 IST: part 2
-    - cron: "0 3 1 * *"        # 08:30 IST: part 3
+    - cron: "30 8 * * 0"       # Sunday 14:00 IST: part 0
+    - cron: "30 9 * * 0"       # Sunday 15:00 IST: part 1
+    - cron: "30 10 * * 0"      # Sunday 16:00 IST: part 2
+    - cron: "30 11 * * 0"      # Sunday 17:00 IST: part 3
   workflow_dispatch:
     inputs:
       part:
@@ -48,7 +48,7 @@ jobs:
         if: github.event_name == 'schedule'
         id: p
         run: |
-          case "${{ github.event.schedule }}" in "0 0 1 * *") P=0 ;; "0 1 1 * *") P=1 ;; "0 2 1 * *") P=2 ;; *) P=3 ;; esac
+          case "${{ github.event.schedule }}" in "30 8 * * 0") P=0 ;; "30 9 * * 0") P=1 ;; "30 10 * * 0") P=2 ;; *) P=3 ;; esac
           echo "part=$P" >> $GITHUB_OUTPUT
       - uses: actions/checkout@v5
         if: github.event_name == 'schedule'
