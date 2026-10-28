@@ -849,7 +849,7 @@ window.hniGameDB = {
     const q = await getDocs(fsQuery(collection(db, "hni_game_top"), fsOrder("best", "desc"), fsLimit(10)));
     return q.docs.map((d) => ({ id: d.id, name: topName(d.data().name), best: d.data().best })); },
 };
-window.hniGame = () => import("./game2048.js?v=44").then((m) => m.open());
+window.hniGame = () => import("./game2048.js?v=45").then((m) => m.open());
 const ready = new Promise((resolve) => {
   onAuthStateChanged(auth, async (u) => {
     if (u && expired(u)) { await clearUserCache(); await signOut(auth); u = null; }   // 7-day session limit
