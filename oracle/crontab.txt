@@ -38,14 +38,19 @@ NL=/home/opc/hni-news.log
 0 2 * * 0                    $T others.yml half=1 >> $TL 2>&1                     # Sunday 02:00 Others, first half, then build
 0 4 * * 0                    $T others.yml half=2 >> $TL 2>&1                     # Sunday 04:00 Others, second half, then build
 
+# Full scrape again: Monday early morning (everything, same order as Sunday)
+0 1 * * 1                    $T cron.yml force_full=1 >> $TL 2>&1                 # Monday 01:00 NIFTY 500 + Smallcap + Microcap, then build
+0 3 * * 1                    $T others.yml half=1 >> $TL 2>&1                     # Monday 03:00 Others, first half, then build
+0 5 * * 1                    $T others.yml half=2 >> $TL 2>&1                     # Monday 05:00 Others, second half, then build
+
 # Safety-net build (mode 3): 00:00 Monday-Saturday
 0 0 * * 1-6                  $T cron.yml force_full=3 >> $TL 2>&1
 
-# Yearly prices (owner-earnings backtest data): 1st of every month
-30 3 1 * *                   $T fcf_prices.yml part=0 >> $TL 2>&1                 # 03:30 the 3 lists + NIFTY 500 (~40 min)
-30 4 1 * *                   $T fcf_prices.yml part=1 >> $TL 2>&1                 # 04:30 Others, first third
-30 5 1 * *                   $T fcf_prices.yml part=2 >> $TL 2>&1                 # 05:30 Others, middle third
-30 6 1 * *                   $T fcf_prices.yml part=3 >> $TL 2>&1                 # 06:30 Others, last third
+# Yearly prices (owner-earnings backtest data): every Sunday from noon, after the Sunday scrape is long done
+0 12 * * 0                   $T fcf_prices.yml part=0 >> $TL 2>&1                 # Sunday 12:00 the 3 lists + NIFTY 500 (~40 min)
+0 13 * * 0                   $T fcf_prices.yml part=1 >> $TL 2>&1                 # Sunday 13:00 Others, first third
+0 14 * * 0                   $T fcf_prices.yml part=2 >> $TL 2>&1                 # Sunday 14:00 Others, middle third
+0 15 * * 0                   $T fcf_prices.yml part=3 >> $TL 2>&1                 # Sunday 15:00 Others, last third
 
 # Log clean-up: Sunday 23:55 last week's logs are kept as *.old (the week before is dropped), new ones start empty
 55 23 * * 0                  for f in $TL $NL; do cp -f "$f" "$f.old" 2>/dev/null; : > "$f"; done
@@ -66,9 +71,9 @@ NL=/home/opc/hni-news.log
 # Full scrape, 3 lists     Sunday 00:00                           NIFTY 500 + Smallcap 500 + Microcap 250, then build
 # Others, first half       Sunday 02:00                           Every other NSE stock, half 1, then build
 # Others, second half      Sunday 04:00                           Half 2, then build
+# Full scrape again        Monday 01:00 / 03:00 / 05:00           3 lists, then Others half 1, then half 2 (each then builds)
 # Safety-net build         Mon-Sat 00:00                          Rebuilds + deploys from whatever data is there
-# Yearly prices            1st of month 03:30 / 04:30 / 05:30 / 06:30
-#                                                                 1 July closes since 2019: 3 lists, then Others in 3 parts
+# Yearly prices            Sunday 12:00 / 13:00 / 14:00 / 15:00   1 July closes since 2019: 3 lists, then Others in 3 parts
 # Log clean-up             Sunday 23:55                           hni-trigger.log + hni-news.log emptied; last
 #                                                                 week's copy kept as .old (never more than 2 weeks)
 # ------------------------------------------------------------------------------------------------------------
@@ -79,7 +84,8 @@ NL=/home/opc/hni-news.log
 # Full scrape, 3 lists     Sunday 02:00                           If the 00:00 scrape wasn't started
 # Others half 1 / 2        Sunday 04:00 / 06:00                   If that half wasn't started 2 hours earlier
 # Safety-net build         Mon-Sat 02:00                          If no build at all since 23:45
-# Yearly prices 0-3        1st of month 05:30 / 06:30 / 07:30 / 08:30   If that part wasn't started 2 hours earlier
+# Yearly prices 0-3        Sunday 14:00 / 15:00 / 16:00 / 17:00   If that part wasn't started 2 hours earlier
+# (the Monday re-scrape has no GitHub back-up: Sunday's covers the week)
 # ------------------------------------------------------------------------------------------------------------
 # Your own jobs            event.sh 00:00, 08:00, 20:00, 23:30, 23:45 · casio_watchfinder every 30 min
 # ============================================================================================================
