@@ -1683,6 +1683,14 @@ table.cmp thead th:first-child{left:0;z-index:3}
 .pf-cg span{font:600 9.5px var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.6px}
 .pf-cg b{font:600 13.5px var(--mono);color:var(--ink)}
 .pf-cg small{font-size:10.5px;color:var(--faint)}
+/* by type: day gain % (overall %) — one quiet line under the tiles; phone: inside Cash, one line that scrolls sideways if long */
+.pf-types{margin:-6px 0 14px;font:500 12px var(--mono);color:var(--faint);display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.pf-types i{font-style:normal;color:var(--mute);font-weight:600}
+.pf-types b{font-weight:600;color:var(--ink)}
+.pf-types .up{color:var(--good)} .pf-types .dn{color:var(--bad)}
+.pf-types em{font-style:normal;opacity:.5}
+.pf-cash .pf-types{margin:0;padding:0 16px 12px;flex-wrap:nowrap;overflow-x:auto;white-space:nowrap;scrollbar-width:none;font-size:11px;gap:8px}
+.pf-cash .pf-types::-webkit-scrollbar{display:none}
 .pf-zs{margin:0 0 16px}
 .pf-zs > .pf-h{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .pf-zs > .pf-h .pf-rm.all{margin:0 0 0 auto}
@@ -2005,6 +2013,11 @@ __AUTH_HDR__<nav id="nav">
 /* Lists: the helper line under the tabs when "All lists" is on */
 .uni-hint{padding:8px 24px 0;font:500 11.5px var(--mono);color:var(--faint);letter-spacing:.02em}
 .uni-hint b{color:var(--mute);font-weight:600}
+.pbv{margin:0 0 12px;font:500 12px var(--mono);color:var(--faint)}
+.pbv label{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pbv select{height:30px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font:600 12px var(--mono);padding:0 8px;cursor:pointer}
+.pbv select:focus{outline:none;border-color:var(--brass)}
+.pbv span{font-size:11px}
 body.pf-mode .uni-hint{display:none!important}
 @media (max-width:700px){.uni-hint{padding:8px 12px 0}}
 /* Prime lists in the List menu: purple; locked (free accounts) open the plans popup */
@@ -2855,7 +2868,7 @@ function filterBox(o, rerender) {
   $('[data-reset]', f).addEventListener('click', () => {
     const back0 = () => { FL[key] = Object.assign({}, base); commit(); rerender(); };
     if (!custom) return back0();                                         // nothing saved yet: no question
-    const w = modal('Back to default?', `<p>Every filter on this screen goes back to its default${o.memory ? ' (<b>Deep value</b>)' : ''} and your saved filters for it are forgotten.${['vf', 'momf'].includes(key) ? ' PF Builder then uses the default too.' : ''}</p>
+    const w = modal('Back to default?', `<p>Every filter on this screen goes back to its default${o.memory ? ' (<b>Deep value</b>)' : ''} and your saved filters for it are forgotten.${key === 'momf' ? ' PF Builder then uses the default too.' : ''}</p>
       <div class="pf-btns" style="margin-top:14px"><button type="button" class="btn ghost" data-no>Cancel</button><button type="button" class="btn primary danger" data-yes>Reset to default</button></div>`);
     $('[data-no]', w).addEventListener('click', () => w._close());
     $('[data-yes]', w).addEventListener('click', () => { w._close(); back0(); });
@@ -3004,8 +3017,24 @@ function passVF(s, f) {
     && safeOk(s, f) && mcapOk(s, f) && (!f.trap || !trapReasons(s).length) && trendOk(s, f.minTrend);
 }
 
+/* which Value screen PF Builder picks its Value stocks with (Prime / admin): one of the screens above, Deep value by default.
+   Kept in your settings (account), like the filters. */
+const pbvName = () => VF_PRESETS.some(p => p.name === FF.pbv) ? FF.pbv : 'Deep value';
+function pbvRow() {
+  if (!PRIMEF || EMBED) return;
+  const d = document.createElement('div'); d.className = 'pbv';
+  d.innerHTML = `<label>Selecting <select aria-label="Value screen for Portfolio Builder">${VF_PRESETS.map(p =>
+    `<option${p.name === pbvName() ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select> for Portfolio Builder <span>(default Deep value)</span></label>`;
+  $('select', d).addEventListener('change', e => {
+    const v = e.target.value;
+    if (v === 'Deep value') delete FF.pbv; else FF.pbv = v;
+    ffSave(); toast(`Portfolio Builder now picks its Value stocks with ${v}`);
+  });
+  view.appendChild(d);
+}
 function valueView() {
   setNav('value'); view.innerHTML = '';
+  pbvRow();
   const vf = filterBox({
     key:'vf', def:VF_DEF, presets:VF_PRESETS, memory: VF_PRESETS.find(p => p.name === 'Deep value').st,   // opens on Deep value unless saved
     main: vfMain, more: vfMore, moreKeys: vfMoreKeys(),
@@ -3657,18 +3686,27 @@ function pfCharges(t, qty, px, r = PF.rates) {
   return Math.round(tot * 100) / 100;
 }
 const pfSorted = txns => txns.map((x, i) => [x, i]).sort((a, b) => (a[0].date || '').localeCompare(b[0].date || '') || a[1] - b[1]).map(p => p[0]);   // by date, then entry order
+/* Remark of a buy: PF Builder's own ("PF Builder → Value", …), anything else = "Self" (picked by you; older remarks too) */
+const pfSrcOf = x => x && x.src && /^PF Builder/.test(x.src) ? x.src : 'Self';
+/* which types a buy counts for: ETF (ETF + ETF pair), Value, Momentum, or Self. "PF Builder → Value + Momentum" = half each */
+const PF_TYPES = ['ETF', 'Value', 'Momentum', 'Self'];
+function pfTypesOf(x) {
+  const sr = pfSrcOf(x); if (sr === 'Self') return ['Self'];
+  const t = [...new Set(sr.replace(/^PF Builder\s*→\s*/, '').split('+').map(y => y.trim()).map(y => /^ETF/.test(y) ? 'ETF' : y).filter(y => PF_TYPES.includes(y)))];
+  return t.length ? t : ['Self'];
+}
 /* replay every transaction: average-cost holdings, realised P&L, charges and cash */
 function pfReplay(txns) {
   const pos = {}, led = [], closed = [], lock = new Set();
   let cash = 0, payIn = 0, payOut = 0, charges = 0, realized = 0, bad = null;
-  const fresh = x => ({sym: x.sym, name: x.name, qty: 0, cost: 0, realized: 0, charges: 0, bQty: 0, bAmt: 0, sQty: 0, sAmt: 0, first: x.date, last: x.date, ids: [], srcs: []});
+  const fresh = x => ({sym: x.sym, name: x.name, qty: 0, cost: 0, realized: 0, charges: 0, bQty: 0, bAmt: 0, sQty: 0, sAmt: 0, first: x.date, last: x.date, ids: [], srcs: [], tq: {}});
   for (const x of pfSorted(txns)) {
     const amt = (x.qty || 0) * (x.px || 0), ch = +x.ch || 0;
     if (x.t === 'in') { cash += x.amt; payIn += x.amt; }
     else if (x.t === 'out') { cash -= x.amt; payOut += x.amt; }
     else {
       const p = pos[x.sym] = pos[x.sym] || fresh(x);
-      p.ids.push(x.id); if (x.name) p.name = x.name; if (x.t === 'buy' && x.src && !p.srcs.includes(x.src)) p.srcs.push(x.src);   // Remark: where its buys came from p.charges += ch; charges += ch; p.last = x.date || p.last;
+      p.ids.push(x.id); if (x.name) p.name = x.name; if (x.t === 'buy') { const sr = pfSrcOf(x), ty = pfTypesOf(x); if (!p.srcs.includes(sr)) p.srcs.push(sr); ty.forEach(k => { p.tq[k] = (p.tq[k] || 0) + (+x.qty || 0) / ty.length; }); }   // Remark: where its buys came from p.charges += ch; charges += ch; p.last = x.date || p.last;
       if (x.t === 'buy') { p.qty += x.qty; p.cost += amt; p.bQty += x.qty; p.bAmt += amt; cash -= amt + ch; }
       else {                                              // sell at average cost; never more than held at that date
         if (x.qty > p.qty + 1e-9) bad = bad || x;
@@ -3709,7 +3747,7 @@ const PFC = {
   score: Object.assign(pfKnown(C.score), {label:'Score'}), mom: Object.assign(pfKnown(C.mom), {label:'Mom.'}), trend: pfKnown(C.trend), flags: pfKnown(C.flags),
   ind: pfKnown(C.ind), name: pfKnown(Object.assign({}, C.name, {f: s => `<span class="co">${esc(s.name)}</span>`})),
   msym: Object.assign({}, C.sym, {f: r => pfSymCell(r) + `<div class="pf-co">${fmt(r.qty, 0)} @ ${fmt(r.avg, 2)}</div>` + (r.remark ? `<div class="pf-src">${esc(r.remark)}</div>` : '')}),
-  rem: {k:'rem', label:'Remark', l:1, tip:'Where the stock was added from (PF Builder part, Factor Screener tab or Portfolio)', v:r => r.remark || '', f:r => r.remark ? `<span class="pf-src">${esc(r.remark)}</span>` : NA},
+  rem: {k:'rem', label:'Remark', l:1, tip:'Where the stock was added from: PF Builder (its part) or Self (picked by you)', v:r => r.remark || '', f:r => r.remark ? `<span class="pf-src">${esc(r.remark)}</span>` : NA},
   /* closed positions */
   csym: Object.assign({}, C.sym, {f: pfSymCell}),
   cqty: {k:'cq', label:'Qty', v:r => r.sQty, f:r => fmt(r.sQty, 0)},
@@ -3721,13 +3759,13 @@ const PFC = {
 };
 const TX_LABEL = {buy:'Buy', sell:'Sell', in:'Pay in', out:'Pay out'};
 const TXC = {
-  src: {k:'src', label:'Remark', l:1, tip:'Where the trade came from', v:r => r.x.src || '', f:r => r.x.src ? `<span class="pf-src">${esc(r.x.src)}</span>` : NA},
+  src: {k:'src', label:'Remark', l:1, tip:'Where the trade came from: PF Builder (its part) or Self', v:r => r.x.t === 'buy' ? pfSrcOf(r.x) : '', f:r => r.x.t === 'buy' ? `<span class="pf-src">${esc(pfSrcOf(r.x))}</span>` : NA},
   date: {k:'date', label:'Date', l:1, v:r => r.x.date || '', f:r => r.x.date ? esc(r.x.date) : NA},
   type: {k:'type', label:'Type', l:1, v:r => r.x.t, f:r => `<span class="pf-t ${r.x.t}">${TX_LABEL[r.x.t]}</span>`},
   mtype: {k:'mtype', label:'Type', l:1, v:r => r.x.date || '', f:r => `<span class="pf-t ${r.x.t}">${TX_LABEL[r.x.t]}</span><div class="pf-co">${r.x.date ? esc(r.x.date.slice(2)) : ''}</div>`},
   what: {k:'what', label:'Detail', l:1, v:r => r.sym, x:r => r.x.sym ? `${r.x.sym} ${r.x.qty} @ ${r.x.px}` : '',
          f:r => r.x.sym ? `<b>${esc(r.x.sym)}</b> <span class="na">${fmt(r.x.qty, 0)} @ ${fmt(r.x.px, 2)}</span>` : NA},
-  mwhat: {k:'what', label:'Detail', l:1, v:r => r.sym, f:r => (r.x.sym ? `<b>${esc(r.x.sym)}</b> <span class="na">${fmt(r.x.qty, 0)} @ ${fmt(r.x.px, 2)}</span>` : NA) + (r.x.src ? `<div class="pf-src">${esc(r.x.src)}</div>` : '')},   // phone: remark under the detail
+  mwhat: {k:'what', label:'Detail', l:1, v:r => r.sym, f:r => (r.x.sym ? `<b>${esc(r.x.sym)}</b> <span class="na">${fmt(r.x.qty, 0)} @ ${fmt(r.x.px, 2)}</span>` : NA) + (r.x.t === 'buy' ? `<div class="pf-src">${esc(pfSrcOf(r.x))}</div>` : '')},   // phone: remark under the detail
   amt: {k:'tamt', label:'Cash ₹', tip:'Effect on cash, charges included', v:r => r.amt,
         f:r => `<span title="${r.x.ch ? 'Charges ₹' + fmt(r.x.ch, 2) + ' · ' : ''}Cash after ₹${fmt(r.cash, 0)}">${signed(r.amt)}</span>`},
   act: {k:'tact', label:'', noCsv:1, v:r => null, f:r => PF_LAST && PF_LAST.lock.has(r.x.id)
@@ -3807,7 +3845,16 @@ function pfSummary(txns, mkt) {
   const dayBase = dayRows.reduce((t, r) => t + r.value - r.day, 0);   // value at yesterday's close (or buy price for today's buys)
   const worth = R.cash + hold, deposits = R.payIn - R.payOut, gain = worth - deposits;
   const gainPct = deposits > 0 ? gain / deposits * 100 : (cost ? gain / cost * 100 : null);
-  const out = {R, open, closed, hold, cost, unreal, day, dayPct: dayBase ? day / dayBase * 100 : null, worth, deposits, gain, gainPct, asOf: PF.mkt && PF.mkt.asOf};
+  /* by type (ETF / Value / Momentum / Self): each holding split by how many of its shares were bought as which type */
+  const T = {}; PF_TYPES.forEach(k => { T[k] = {k, value: 0, cost: 0, pnl: 0, day: 0, dayBase: 0, dayN: 0}; });
+  open.forEach(r => {
+    const tq = r.tq || {}, sum = Object.values(tq).reduce((a, b) => a + b, 0) || 1, ks = Object.keys(tq).length ? Object.keys(tq) : ['Self'];
+    ks.forEach(k => { const w = (tq[k] || sum) / sum, t = T[k] || T.Self;
+      t.value += r.value * w; t.cost += r.cost * w; t.pnl += (r.priced ? r.pnl : 0) * w;
+      if (r.day != null) { t.day += r.day * w; t.dayBase += (r.value - r.day) * w; t.dayN++; } });
+  });
+  const byType = PF_TYPES.map(k => T[k]).filter(t => t.value > 0.5).map(t => Object.assign(t, {dayPct: t.dayN && t.dayBase ? t.day / t.dayBase * 100 : null, allPct: t.cost ? t.pnl / t.cost * 100 : null}));
+  const out = {R, open, closed, hold, cost, unreal, day, dayPct: dayBase ? day / dayBase * 100 : null, worth, deposits, gain, gainPct, asOf: PF.mkt && PF.mkt.asOf, byType};
   PF.mkt = keep;
   return out;
 }
@@ -3816,6 +3863,13 @@ window.hniPf = {
   calc(d, mkt) { const t = pfTxnsOf(d); return {P: pfSummary(t, mkt), txns: pfSorted(t)}; },
   fmt, rs, signed, esc, TX_LABEL,
 };
+/* one line: each type's day gain %, overall gain % in brackets (ETF +0.2% (+0.5%) · Value … · Self …) */
+function pfTypesLine(P) {
+  if (!P.byType || !P.byType.length) return '';
+  const c = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'dn' : '';
+  return `<p class="pf-types" title="By type: day gain %, overall gain % on cost in brackets">${P.byType.map(t =>
+    `<span><i>${esc(t.k)}</i> <b class="${c(t.dayPct)}">${t.dayPct == null ? '–' : pctTxt(t.dayPct, 1)}</b> <small class="${c(t.allPct)}">(${t.allPct == null ? '–' : pctTxt(t.allPct, 1)})</small></span>`).join('<em>·</em>')}</p>`;
+}
 function portfolioView() {
   setNav('portfolio'); view.innerHTML = '';
   if (BACK) {                                             // a portfolio is about today; Historical would mix dates
@@ -3847,6 +3901,7 @@ function portfolioView() {
       ${tile('Realised', plain(R.realized - R.charges), `after ₹${fmt(R.charges, 0)} charges`)}
       ${tile('Money in', rs(deposits), `in ${rs(R.payIn)} · out ${rs(R.payOut)}`)}
     </div>
+    ${pfTypesLine(P)}
     <div class="pf-grid"><div class="pf-left"></div><div class="pf-right"></div></div>`);
   const L = $('.pf-left'), RT = $('.pf-right'), phone = isPhone();
   const hCols = phone ? [PFC.edit, PFC.msym, PFC.val, PFC.pnl]          // phone: qty sits under the symbol, so nothing scrolls sideways
@@ -3945,13 +4000,11 @@ function pbEtfPick(sc) {                                      // = PF Builder's 
 }
 /* PF Builder's Value and Momentum lists use YOUR screens: the Value screen's and the Momentum screen's saved filters and your PSU /
    Semi PSU choice. Nothing saved = the defaults: Deep value, Momentum (70+), PSU left out. */
-const presetName = (st, def, presets) => { const u = v => v === '' || v == null || v === 0, same = (a, b) => (u(a) && u(b)) || String(a) === String(b);
-  const p = presets.find(x => Object.entries(Object.assign({}, def, x.st)).every(([k, v]) => same(st[k], v))); return p ? p.name : null; };
 function pbCfg() {
-  const vf = Object.assign({}, VF_DEF, FF.vf || fBase(VF_DEF, {memory: (VF_PRESETS.find(p => p.name === 'Deep value') || {}).st}));
+  const vf = Object.assign({}, VF_DEF, (VF_PRESETS.find(p => p.name === pbvName()) || {}).st);   // the screen picked for PF Builder
   const mf = Object.assign({}, MOM_DEF, FF.momf || {});
-  return {vf, mf, psu: FF.gf ? !!FF.gf.psu : true, semi: FF.gf ? !!FF.gf.semi : false, custom: !!(FF.vf || FF.momf || FF.gf),
-    vName: presetName(vf, VF_DEF, VF_PRESETS) || 'Custom', mName: FF.momf ? 'Custom' : 'Momentum'};
+  return {vf, mf, psu: FF.gf ? !!FF.gf.psu : true, semi: FF.gf ? !!FF.gf.semi : false, custom: !!(FF.pbv || FF.momf || FF.gf),
+    vName: pbvName(), mName: FF.momf ? 'Custom' : 'Momentum'};
 }
 const pbMomOk = (s, mf) => passVF(s, mf) && (unsetF(mf.maxMom) || !(+mf.maxMom > 0) || Math.round(s.momS) <= +mf.maxMom);
 window.pbCfg = pbCfg; window.pbMomOk = pbMomOk;
@@ -4113,7 +4166,7 @@ function pfPhone(P) {
           ${kv('Cash', rs(R.cash), R.cash < 0 && !R.payIn ? 'add a pay-in' : 'free to invest')}
           ${kv('Realised', plain(R.realized - R.charges), `after ₹${fmt(R.charges, 0)} charges`)}
           ${kv('Money in', rs(P.deposits), `in ${rs(R.payIn)} · out ${rs(R.payOut)}`)}
-        </div>
+        </div>${pfTypesLine(P)}
       </details>
     </section>
     <div class="pf-zp"></div>`);
@@ -4562,11 +4615,7 @@ function symPicker(input, onPick) {
 /* Buy / Sell form (new, or edit an existing trade). Charges fill in by themselves; type over them to override.
    Until you click a box: digits go to Qty, letters to Symbol. Empty price = LTP. */
 /* Remark for a buy made here: the Factor Screener tab it was made from, or Portfolio */
-const PF_SRC_TAB = {'': 'Industries', value: 'Value', momentum: 'Momentum', all: 'All Stocks', method: 'Methodology'};
-function pfSrcHere() {
-  const h = (location.hash || '#/').replace(/^#\/?/, '').split(/[/?]/)[0];
-  return h === 'portfolio' ? pfName() : 'Factor Screener → ' + (PF_SRC_TAB[h] || h || 'Industries');
-}
+function pfSrcHere() { return 'Self'; }                   // picked by the user (any screen, or typed in): Remark "Self"
 function pfTradeForm(x) {
   const edit = !!x.id, held = () => { const R = pfReplay(PF.txns.filter(t => t !== x)); return (R.pos[f.sym.value.trim().toUpperCase()] || {}).qty || 0; };
   const w = modal(edit ? 'Edit trade' : 'Buy / Sell', `<form class="pf-form" autocomplete="off">
@@ -5163,7 +5212,7 @@ async function warmUp() {
 }
 function setPrimeF(p) {
   const was = PRIMEF; PRIMEF = !!p;
-  if (was !== PRIMEF && (location.hash || '') === '#/checklist') route();
+  if (was !== PRIMEF && /^#\/(checklist|value)$/.test(location.hash || '')) route();
 }
 (function () {
   const go = () => {
@@ -5366,10 +5415,10 @@ AUTH_WEB = {
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
                      # signed in and checked within the last hour → page shows at once; auth.js confirms quietly behind it
                      '<script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>\n'
-                     '<link rel="stylesheet" href="auth.css?v=44">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=44"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=45">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=45"></script>\n',
     # straight after the header, not deferred: Navigate + avatar are there from the first paint (no blink)
-    "__AUTH_HDR__": '<script src="hdr.js?v=44"></script>\n',
+    "__AUTH_HDR__": '<script src="hdr.js?v=45"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
