@@ -88,6 +88,10 @@ h1{font:600 22px var(--sans);margin:20px 0 4px}
   appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%23999' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat:no-repeat;background-position:right 11px center}
 .per .chp:focus{border-color:var(--brass)}
+.kpi.vsn i{font-style:normal}
+.kpi.vsn .sh{display:none}
+.kpi small{display:block;margin-top:1px;font:500 10.5px/1.35 var(--mono);color:var(--faint)}
+@media (max-width:640px){.kpi.vsn .lg{display:none}.kpi.vsn .sh{display:inline}}
 .per .seg button:not(.on):hover{color:var(--ink);background:var(--panel2)}
 .fund{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
 .fund label{display:flex;flex-direction:column;gap:6px;font:500 12px var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.06em}
@@ -726,6 +730,24 @@ function portfolio(BT, L, F0, D, bench, part = 'all') {
   const dd = ddSeries(total), mx = maxDD(total), avgDD = dd.reduce((s, v) => s + (v || 0), 0) / dd.length;
   return {dates, total, nifty, dd, mx, avgDD, F, lines, real, daily: !!BT.at, part: one ? part : 'all'};
 }
+/* day by day against NIFTY 500 (the chart's own two lines): a day counts when the portfolio (or the part picked) did better than
+   NIFTY 500 that day: rose more, or fell less. Days when both stood still (holidays filled in) are left out. + the spread (stdev)
+   of the daily % changes of each. Only with daily prices (monthly points say nothing about days). */
+function vsNifty(P) {
+  if (!P || !P.daily || !P.nifty || P.total.length < 3) return null;
+  const rp = [], rn = [];
+  for (let i = 1; i < P.total.length; i++) {
+    const a = P.total[i - 1], b = P.total[i], c = P.nifty[i - 1], d = P.nifty[i];
+    if (!(a > 0 && c > 0 && num(b) && num(d))) continue;
+    const x = (b / a - 1) * 100, y = (d / c - 1) * 100;
+    if (x === 0 && y === 0) continue;
+    rp.push(x); rn.push(y);
+  }
+  if (rp.length < 2) return null;
+  const beat = rp.filter((x, i) => x > rn[i]).length;
+  const sd = a => { const m = a.reduce((s, v) => s + v, 0) / a.length; return Math.sqrt(a.reduce((s, v) => s + (v - m) * (v - m), 0) / (a.length - 1)); };
+  return {beat, n: rp.length, pct: beat / rp.length * 100, sdP: sd(rp), sdN: sd(rn)};
+}
 function pfChart(host, P) {
   const W = Math.max(280, host.clientWidth || 700), m = {l: 58, r: 12, t: 8, b: 22}, H1 = 250, GAP = 34, H2 = 110, H = m.t + H1 + GAP + H2 + m.b, n = P.dates.length;
   if (n < 2) { host.innerHTML = '<p class="empty">No data to draw.</p>'; return; }
@@ -982,6 +1004,7 @@ function paintBack(fund) {
   const F = fund || 100000;
   if (BT) PF = portfolio(BT, L, F, DATA.daily, DATA.etf && DATA.etf.bench, chPart());
   const partName = PF && PF.part !== 'all' ? (SPLIT.find(x => x[0] === PF.part) || [0, ''])[1] : '';
+  const VS = PF ? vsNifty(PF) : null;
   const need = [...L.value, ...L.mom].map(x => x.sym).filter(Boolean);
   const lack = BT && need.length ? missingDaily(DATA.daily, need) : [];
   const needSig = need.slice().sort().join(',');
@@ -1000,6 +1023,9 @@ function paintBack(fund) {
       <div class="kpi"><span>NIFTY 500</span><b class="${(bench || 0) >= 0 ? 'pos' : 'neg'}">${pct(bench)}</b></div>
       ${SPLIT.map(([k, label]) => `<div class="kpi"><span>${label}</span><b class="${(r[k] || 0) >= 0 ? 'pos' : 'neg'}">${pct(r[k])}</b></div>`).join('')}
       ${fund ? `<div class="kpi"><span>${rsK(fund)} would be</span><b>${rsK(fund * (1 + tot / 100))}</b></div>` : ''}
+      ${VS ? `<div class="kpi vsn" title="Days the ${partName ? esc(partName) + ' part' : 'portfolio'} did better than NIFTY 500 that day (rose more, or fell less): ${VS.beat} of ${VS.n} trading days. Stdev = spread of the daily % changes.">
+        <span><i class="lg">Above Nifty daily${partName ? ' · ' + esc(partName) : ''}</i><i class="sh">▲ Nifty</i></span><b class="${VS.pct > 50 ? 'pos' : VS.pct < 50 ? 'neg' : ''}">${fmt(VS.pct, 0)}%</b>
+        <small><i class="lg">${VS.beat} of ${VS.n} days<br></i>Stdev ${fmt(VS.sdP, 2)}% · Nifty ${fmt(VS.sdN, 2)}%</small></div>` : ''}
       ${PF ? `<div class="kpi"><span>Max drawdown${partName ? ' · ' + esc(partName) : ''}</span><b class="neg">${pct(PF.mx.dd)}</b></div><div class="kpi"><span>Avg drawdown${partName ? ' · ' + esc(partName) : ''}</span><b class="neg">${pct(PF.avgDD)}</b></div>` : ''}</div>`;
   if (PF) {
     const end = PF.total[PF.total.length - 1], a = PF.dates[0], z = PF.dates[PF.dates.length - 1];
