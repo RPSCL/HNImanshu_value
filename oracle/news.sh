@@ -9,7 +9,8 @@
 #   Portfolio stocks = everything anyone holds, read LIVE from Firestore (hni_portfolio) at the start of every scan.
 #   "Next 1,000" = the 1,000 stocks asked longest ago (news_state.json remembers when each was asked), so
 #   chunk after chunk walks through the whole list (~2,600 stocks → 3 chunks), then starts over.
-#   Google slows us down 3 times, or the time limit is used up → that scan stops, what was found is pushed + deployed.
+#   Google says "slow down" ONCE, or the time limit is used up → that scan stops at once, what was found is pushed + deployed
+#   (a market scan then skips its second half too). Hard stop: a scan still running 5 min past its limit is killed (lock freed).
 #   Ctrl+C once → stops in a few seconds, saves, pushes what was found.   Ctrl+C twice → quits, nothing pushed.
 #   Folders: repo = <base>/hni, secrets = <base>/hni-secrets (base = /home/opc/newalgo). Log: ~/hni-news.log
 set -uo pipefail
@@ -48,23 +49,30 @@ push() {   # commit the CSV and push; GitHub builds + deploys
   echo "push FAILED (kept here, goes with the next scan)"
 }
 
-scan() {   # scan <label> <fetch_news options…>; returns 130 on Ctrl+C twice
+scan() {   # scan <label> <minutes> <fetch_news options…>; returns 130 on Ctrl+C twice
   local label="$1"; shift
   echo "--- $label"
-  "$PY" -u fetch_news.py "$@" --max-slow 3 --quiet
+  local lim="$1"; shift                            # minutes of fetching allowed
+  # --max-slow 1: the first "slow down" from Google ends the fetch. timeout: never hold the lock for hours (TERM = save + stop, KILL 60 s later)
+  timeout -k 60 $(( lim + 5 ))m "$PY" -u fetch_news.py "$@" --max-min "$lim" --max-slow 1 --quiet
   local rc=$?
+  [ $rc -eq 124 ] && echo "fetch_news.py ran past its time: stopped"
   if [ $rc -eq 130 ]; then echo "stopped by hand (Ctrl+C twice): nothing pushed"; return 130; fi
-  [ $rc -ne 0 ] && echo "fetch_news.py ended with error $rc (whatever it saved is still pushed)"
+  [ $rc -ne 0 ] && [ $rc -ne 75 ] && echo "fetch_news.py ended with error $rc (whatever it saved is still pushed)"
   push "$label"
+  [ $rc -eq 75 ] && return 75                       # Google said "slow down": the caller asks nothing more this time
+  return 0
 }
 
 case "$MODE" in
   market)
-    scan "portfolio" --held-only --max-min 8 || exit $?
-    scan "next $CHUNK" --skip-held --chunk $CHUNK --max-min 15
+    scan "portfolio" 8 --held-only; rc=$?
+    [ $rc -eq 130 ] && exit 130
+    [ $rc -eq 75 ] && { echo "Google is slowing us down: next $CHUNK skipped this time"; exit 0; }
+    scan "next $CHUNK" 15 --skip-held --chunk $CHUNK
     ;;
   chunk)
-    scan "next $CHUNK" --skip-held --chunk $CHUNK --max-min 20
+    scan "next $CHUNK" 20 --skip-held --chunk $CHUNK
     ;;
   *) echo "usage: news.sh market|chunk"; exit 2 ;;
 esac
