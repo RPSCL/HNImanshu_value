@@ -1194,6 +1194,15 @@ body.day{
 .preset:hover{border-color:var(--brass);color:var(--ink)}
 .preset.on{background:var(--brass);border-color:var(--brass);color:var(--bg)}
 .preset-custom{font:600 11px var(--mono);color:var(--faint);line-height:28px;padding:0 4px;font-style:italic}
+.preset.us{border-style:dashed}
+.preset.us::before{content:"★ ";opacity:.7}
+.us-cnt{margin:8px 0 6px;font:500 11.5px var(--mono);color:var(--faint)}
+.us-list{display:flex;flex-direction:column;gap:6px;max-height:40vh;overflow:auto}
+.us-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;cursor:pointer}
+.us-row span{flex:1;min-width:0}
+.us-row b{display:block;font-size:13px}
+.us-row small{font:500 10.5px var(--mono);color:var(--faint)}
+.us-row:has(input:checked){border-color:var(--brass)}
 .btn.fbtn{flex-shrink:0;align-self:flex-start;border-color:var(--brass);color:var(--brass);background:transparent}
 .fbox.dopen .btn.fbtn,.btn.fbtn:hover{background:var(--brass);color:var(--bg)}
 .fbox.dopen .btn.fbtn .cnt{background:var(--bg);color:var(--brass)}
@@ -2069,14 +2078,31 @@ let method = lsGet('pemethod') || 'median';
 /* global PSU filter: applies to every tab (industry benchmarks still use all stocks) */
 const GF = lsJson('gf', {psu:false, semi:false, back:false, backP:'1Y', uni:'all'});
 delete GF.same;                                              // old "Same method" setting from earlier visits: dropped
-/* Your settings (every screen's filters + PSU / Semi PSU): the ACCOUNT's (Firestore hni_settings/{uid}.ff, through auth.js), so they
-   are the same on every device and PF Builder picks with them too. Saved when the Filters window closes (Done) or a Screen is picked;
-   kept until "Reset to default". This browser keeps a copy (hnif_ff) so the page opens with them at once. Only what differs from the
-   default is kept: {<filter key>: {...}, gf: {psu, semi}} */
+/* Your settings, kept in the ACCOUNT (Firestore hni_settings/{uid}.ff, through auth.js; this browser keeps a copy, hnif_ff):
+     us   your saved screens: [{k: <filter key>, n: name, st: {...filters}, at}], 5 at most (Save as new in the Filters window)
+     pbv  / pbm  which screen PF Builder picks its Value / Momentum stocks with (a ready screen, 'u:<your screen>' or 'custom')
+     gf   PSU / Semi PSU switches
+   Filters changed and closed with Done are this visit's only ("Custom screen", FSS below): closing the tab forgets them. */
 const EMBED = /[?&]embed=1\b/.test(location.search);       // PF Builder's hidden copy of this page: reads the settings, never writes them
+const US_MAX = 5;                                           // saved screens per user
+const SCR_NAME = {vf: 'Value screen', momf: 'Momentum', af: 'All Stocks', qv: 'Quality', pr: 'Promoter', pu: 'Public', im: 'Improving'};
 const FF = lsJson('ff', {});
-try { const old = JSON.parse(lsGet('vf_saved') || 'null'); if (old && !FF.vf) FF.vf = old; } catch (e) {}   // the Value screen's old "Save"
+function ffMigrate() {                                      // older versions kept each screen's filters for good (FF.vf, FF.momf, …): → saved screens
+  let moved = false;
+  if (!Array.isArray(FF.us)) FF.us = [];
+  try { const old = JSON.parse(lsGet('vf_saved') || 'null'); if (old && !FF.vf && !FF.us.length) FF.vf = old; lsSet('vf_saved', ''); } catch (e) {}
+  Object.keys(FF).filter(k => k in SCR_NAME).forEach(k => {
+    if (FF[k] && typeof FF[k] === 'object' && FF.us.length < US_MAX && !FF.us.some(u => u.k === k)) FF.us.push({k, n: 'My ' + SCR_NAME[k], st: FF[k], at: Date.now()});
+    delete FF[k]; moved = true;
+  });
+  return moved;
+}
+const FF_MOVED = ffMigrate();
 if (FF.gf) { GF.psu = !!FF.gf.psu; GF.semi = !!FF.gf.semi; }
+/* this visit's filters per screen (Done / a Screen picked): sessionStorage, so PF Builder in the same tab sees them too */
+const ssJson = k => { try { return JSON.parse(sessionStorage.getItem(k) || '{}') || {}; } catch (e) { return {}; } };
+const FSS = ssJson('hnif_fs'), FSN = ssJson('hnif_fsn');   // FSN: the saved screen each one started from (for "Save to …")
+const fssSave = () => { if (EMBED) return; try { sessionStorage.setItem('hnif_fs', JSON.stringify(FSS)); sessionStorage.setItem('hnif_fsn', JSON.stringify(FSN)); } catch (e) {} };
 function ffSave(keepAt) {                                   // _at: when they were set, so the newer copy (this browser / account) wins
   if (EMBED) return;
   if (!keepAt) FF._at = Date.now();
@@ -2093,8 +2119,9 @@ const vis = s => !(GF.psu && s.psu === 'psu') && !(GF.semi && s.psu === 'semi')
 const V = () => S.filter(vis);
 /* per-user settings: kept in this browser (localStorage) so a refresh reopens the same view.
    Every read / write goes through lsGet / lsSet, so a login-backed store can replace it in one place later. */
-const sortState = lsJson('sorts', {}), searchState = lsJson('search', {});
-const saveView = () => { lsSet('sorts', JSON.stringify(sortState)); lsSet('search', JSON.stringify(searchState)); };
+const sortState = lsJson('sorts', {}), searchState = {};          // search: never kept (empty again whenever a screen is opened)
+const saveView = () => { lsSet('sorts', JSON.stringify(sortState)); };
+try { localStorage.removeItem(LSP + 'search'); } catch (e) {}
 
 /* ---------- industry maths ---------- */
 const median = a => { const s=[...a].filter(x=>x!=null&&isFinite(x)).sort((x,y)=>x-y), m=s.length>>1; return s.length? (s.length%2? s[m] : (s[m-1]+s[m])/2) : null; };
@@ -2793,28 +2820,87 @@ const closeDrops = () => {                                 // outside click / Es
   for (const k in DROP) { if (DROP[k].open && FCOMMIT[k]) FCOMMIT[k](); DROP[k].open = false; }
   document.body.classList.remove('fmodal');
 };
-/* filter values: FL = what each screen shows now (from your saved settings FF, else the screen's default). Changes work at once;
-   they are saved (FF + the account) when the Filters window closes or a Screen is picked. "Reset to default" forgets them. */
+/* filter values: FL = what each screen shows now (this visit's filters FSS, else the screen's default). Changes work at once and stay
+   for this visit (Done / any close, or a Screen picked): shown as "Custom". "Save as new" keeps them for good as one of your screens
+   (5 at most, in your account: the Screen bubbles, the phone's Screen list and "Selecting … for Portfolio Builder"). */
 const FL = {}, FCOMMIT = {};
 const fBase = (def, o) => Object.assign({}, def, (o && o.memory) || {});
+const usOf = key => (FF.us || []).filter(u => u.k === key);
+const fUnset = v => v === '' || v == null || v === 0;                    // blank box and 0 both mean "no filter"
+const fSame = (a, b) => (fUnset(a) && fUnset(b)) || String(a) === String(b);
+const fIsOn = (st, def, p) => Object.entries(Object.assign({}, def, p.st)).every(([k, v]) => fSame(st[k], v));
+/* "Save as new": a name, and when all 5 are used, which one to replace. Same name on the same tab = that screen is rewritten. */
+function saveScreenDlg(key, st, rerender) {
+  const all = FF.us || [];
+  const presetNames = new Set(VF_PRESETS.map(p => p.name.toLowerCase()));
+  const listHtml = () => all.length ? `<div class="us-list">${all.map((u, i) => `<label class="us-row"><input type="radio" name="usrep" value="${i}"${all.length < US_MAX ? ' hidden' : ''}>
+      <span><b>${esc(u.n)}</b><small>${esc(SCR_NAME[u.k] || u.k)}</small></span><button type="button" class="btn ghost sm" data-del="${i}">Delete</button></label>`).join('')}</div>` : '';
+  const w = modal('Save as new screen', `<p class="hint" style="margin:0 0 10px">Kept in your account: it shows up with the screens here (phone and PC) and in “Selecting … for Portfolio Builder”. ${US_MAX} screens at most.</p>
+    <label class="fld"><span>Name</span><input name="usn" maxlength="24" spellcheck="false" placeholder="e.g. My value picks"></label>
+    <p class="us-cnt"></p><div class="us-wrap">${listHtml()}</div>
+    <p class="pf-err" aria-live="polite"></p>
+    <div class="pf-btns" style="margin-top:12px"><button type="button" class="btn ghost" data-no>Cancel</button><button type="button" class="btn primary" data-yes>Save</button></div>`);
+  const inp = $('[name=usn]', w), err = $('.pf-err', w);
+  const paint = () => {
+    $('.us-cnt', w).textContent = all.length >= US_MAX ? `All ${US_MAX} slots are used: pick the one to replace (or delete one).` : `${all.length} of ${US_MAX} used.`;
+    $('.us-wrap', w).innerHTML = listHtml();
+    w.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', e => {
+      e.preventDefault();
+      const u = all[+b.dataset.del]; if (!u || !confirm(`Delete your screen “${u.n}”?`)) return;
+      all.splice(+b.dataset.del, 1); FF.us = all;
+      if (FF.pbv === 'u:' + u.n && u.k === 'vf') delete FF.pbv; if (FF.pbm === 'u:' + u.n && u.k === 'momf') delete FF.pbm;
+      if (FSN[u.k] === u.n) delete FSN[u.k];
+      ffSave(); fssSave(); paint(); rerender();
+    }));
+  };
+  paint();
+  setTimeout(() => inp.focus(), 50);
+  $('[data-no]', w).addEventListener('click', () => w._close());
+  $('[data-yes]', w).addEventListener('click', () => {
+    const n = inp.value.trim().replace(/\s+/g, ' ');
+    if (!n) { err.textContent = 'Give it a name.'; return; }
+    if (presetNames.has(n.toLowerCase()) || /^custom/i.test(n)) { err.textContent = 'That name is taken by a ready screen: pick another.'; return; }
+    const rec = {k: key, n, st, at: Date.now()};
+    const same = all.findIndex(u => u.k === key && u.n.toLowerCase() === n.toLowerCase());
+    if (same >= 0) all[same] = rec;                                       // same name on this tab: rewritten
+    else if (all.length >= US_MAX) {
+      const r = w.querySelector('[name=usrep]:checked');
+      if (!r) { err.textContent = `All ${US_MAX} slots are used: pick the one to replace.`; return; }
+      const old = all[+r.value]; all[+r.value] = rec;
+      if (FF.pbv === 'u:' + old.n) delete FF.pbv; if (FF.pbm === 'u:' + old.n) delete FF.pbm;
+    } else all.push(rec);
+    FF.us = all; FSN[key] = n;
+    ffSave(); fssSave(); w._close(); rerender(); toast(`Saved as your screen “${n}”`);
+  });
+}
+/* Users list (admin): open someone's saved screen here, for this visit */
+window.hniOpenScreen = (k, st, label) => {
+  const to = {vf: '#/value', momf: '#/momentum', af: '#/all'}[k];
+  if (!to || !st) return false;
+  FL[k] = Object.assign({}, st); FSS[k] = Object.assign({}, st); delete FSN[k]; fssSave();
+  document.querySelectorAll('.au-back.open').forEach(x => x.classList.remove('open')); document.documentElement.classList.remove('au-lock');
+  if ((location.hash || '') === to) route(); else location.hash = to;
+  setTimeout(() => toast(`${label}: opened for this visit`), 300);
+  return true;
+};
 function filterBox(o, rerender) {
   const {key, def} = o;
   const base = fBase(def, o);
-  if (!FL[key]) FL[key] = Object.assign({}, def, FF[key] || base);
+  if (!FL[key]) FL[key] = Object.assign({}, def, FSS[key] || base);
   const put = obj => { FL[key] = Object.assign({}, def, obj); };
   const st = Object.assign({}, FL[key]);
-  const commit = () => {
-    if (JSON.stringify(FL[key]) === JSON.stringify(base)) { if (!(key in FF)) return; delete FF[key]; }
-    else { if (JSON.stringify(FF[key]) === JSON.stringify(FL[key])) return; FF[key] = Object.assign({}, FL[key]); }
-    ffSave();
+  const commit = () => {                                               // this visit only
+    if (JSON.stringify(FL[key]) === JSON.stringify(base)) delete FSS[key]; else FSS[key] = Object.assign({}, FL[key]);
+    fssSave();
   };
   FCOMMIT[key] = commit;
-  const custom = key in FF;
   const presets = (o.presets || []).filter(p => !NOPRICE || !p.price);  // price-based screens need a price for this date
-  const unset = v => v === '' || v == null || v === 0;                 // blank box and 0 both mean "no filter"
-  const same = (a, b) => (unset(a) && unset(b)) || String(a) === String(b);
-  const isOn = p => Object.entries(Object.assign({}, def, p.st)).every(([k, v]) => same(st[k], v));
-  const active = presets.find(isOn);
+  const same = fSame;
+  const isOn = p => fIsOn(st, def, p);
+  const mine = usOf(key);                                               // your saved screens for this tab
+  const active = presets.find(isOn), activeU = active ? null : mine.find(isOn);
+  const src = FSN[key] ? mine.find(u => u.n === FSN[key]) : null;      // the saved screen these filters started from
+  const custom = !active && !activeU && JSON.stringify(st) !== JSON.stringify(base);
   const moreHtml = o.more ? o.more(st) : '';
   const nOn = Object.keys(def).filter(k => !same(st[k], def[k])).length;  // changes from default, shown on the button
   const D0 = DROP[key] = DROP[key] || {open:false, top:0};
@@ -2822,14 +2908,17 @@ function filterBox(o, rerender) {
   f.innerHTML = `<div class="fbar"><div class="pchips">`
       + presets.map((p, i) =>
         `<button type="button" class="preset${p === active ? ' on' : ''}" data-p="${i}" aria-pressed="${p === active}" title="${esc((p.tip || '') + (p === active ? ' (click again to switch off)' : ''))}">${esc(p.name)}</button>`).join('')
-      + (active || !nOn ? '' : '<span class="preset-custom">Custom</span>') + `</div>`
+      + mine.map((u, i) => `<button type="button" class="preset us${u === activeU ? ' on' : ''}" data-u="${i}" aria-pressed="${u === activeU}" title="${esc('Your screen' + (u.at ? ', saved ' + new Date(u.at).toLocaleDateString('en-IN', {day: 'numeric', month: 'short', year: 'numeric'}) : '') + (u === activeU ? ' (click again to switch off)' : ''))}">${esc(u.n)}</button>`).join('')
+      + (active || activeU || !custom ? '' : '<span class="preset-custom" title="Changed filters: kept for this visit. Save as new (Filters) keeps them for good">Custom</span>') + `</div>`
       + `<button type="button" class="btn fbtn" aria-expanded="${D0.open}" title="All filters, scoring and reset">`
       + `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 3.5h12M4.5 8h7M7 12.5h2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`
       + `Filters${nOn ? ` <b class="cnt">${nOn}</b>` : ''}</button></div>`
     + `<div class="fback"></div><div class="fdrop" role="dialog" aria-label="Filters"><div class="fdin">`
     + `<div class="fdhead"><span class="t">Filters</span><span class="fbtns">`
     + (o.extra ? `<button type="button" class="btn ghost" data-tog="extra">${o.extra.label} <span class="car">▾</span></button>` : '')
-    + `<button type="button" class="btn ghost" data-reset title="Back to this screen's default${o.memory ? ' (Deep value)' : ''}; your saved filters are forgotten">Reset to default</button>`
+    + (custom && src ? `<button type="button" class="btn ghost" data-upd title="Keep these filters in your screen “${esc(src.n)}”">Save to “${esc(src.n)}”</button>` : '')
+    + (custom ? `<button type="button" class="btn ghost save-on" data-saveas title="Keep these filters for good as one of your screens (${US_MAX} at most)">Save as new</button>` : '')
+    + `<button type="button" class="btn ghost" data-reset title="Back to this screen's default${o.memory ? ' (Deep value)' : ''}">Reset to default</button>`
     + `<button type="button" class="btn ghost done" data-close>Done</button></span></div>`
     + (o.extra ? `<div class="fpanel" data-panel="extra"></div>` : '')
     + `<div class="fgrid">${o.main(st)}</div>`
@@ -2839,10 +2928,12 @@ function filterBox(o, rerender) {
   const drop = $('.fdrop', f);
   const setOpen = v => {
     if (v) { closeDrops(); D0.top = null; }                         // opens at half height
-    if (!v && D0.open) commit();                                    // Done (or any close): your filters are saved
+    const closing = !v && D0.open;
+    if (closing) commit();                                          // Done (or any close): kept for this visit
     D0.open = v; f.classList.toggle('dopen', v); $('.fbtn', f).setAttribute('aria-expanded', v);
     if (v) { placeDrop(f); sheetScroll(drop, $('.fdin', f), () => setOpen(false), D0); }
     document.body.classList.toggle('fmodal', v && isPhone());   // phone: floating window, page locked
+    if (closing && view.querySelector('.pbv')) rerender();       // "Selecting … for Portfolio Builder" now offers this visit's Custom screen
   };
   $('.fbtn', f).addEventListener('click', () => setOpen(!D0.open));
   $('[data-close]', f).addEventListener('click', () => setOpen(false));
@@ -2863,15 +2954,17 @@ function filterBox(o, rerender) {
   f.querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => {
     const p = presets[+b.dataset.p];
     put(p === active ? {} : Object.assign({}, def, p.st));                // click the active screen again = switch it off
+    delete FSN[key]; commit(); rerender();
+  }));
+  f.querySelectorAll('[data-u]').forEach(b => b.addEventListener('click', () => {
+    const u = mine[+b.dataset.u];
+    if (u === activeU) { put(base); delete FSN[key]; } else { put(Object.assign({}, def, u.st)); FSN[key] = u.n; }
     commit(); rerender();
   }));
-  $('[data-reset]', f).addEventListener('click', () => {
-    const back0 = () => { FL[key] = Object.assign({}, base); commit(); rerender(); };
-    if (!custom) return back0();                                         // nothing saved yet: no question
-    const w = modal('Back to default?', `<p>Every filter on this screen goes back to its default${o.memory ? ' (<b>Deep value</b>)' : ''} and your saved filters for it are forgotten.${key === 'momf' ? ' PF Builder then uses the default too.' : ''}</p>
-      <div class="pf-btns" style="margin-top:14px"><button type="button" class="btn ghost" data-no>Cancel</button><button type="button" class="btn primary danger" data-yes>Reset to default</button></div>`);
-    $('[data-no]', w).addEventListener('click', () => w._close());
-    $('[data-yes]', w).addEventListener('click', () => { w._close(); back0(); });
+  $('[data-reset]', f).addEventListener('click', () => { FL[key] = Object.assign({}, base); delete FSN[key]; commit(); rerender(); });
+  const sa = $('[data-saveas]', f); if (sa) sa.addEventListener('click', () => saveScreenDlg(key, Object.assign({}, st), rerender));
+  const up = $('[data-upd]', f); if (up) up.addEventListener('click', () => {
+    src.st = Object.assign({}, st); src.at = Date.now(); ffSave(); commit(); rerender(); toast(`Saved to your screen “${src.n}”`);
   });
   view.appendChild(f);
   const on = $('.preset.on', f), pc = $('.pchips', f);               // phone: swipe row starts at the active screen
@@ -3019,16 +3112,32 @@ function passVF(s, f) {
 
 /* which Value screen PF Builder picks its Value stocks with (Prime / admin): one of the screens above, Deep value by default.
    Kept in your settings (account), like the filters. */
-const pbvName = () => VF_PRESETS.some(p => p.name === FF.pbv) ? FF.pbv : 'Deep value';
-function pbvRow() {
+/* which screen PF Builder picks its Value (vf) / Momentum (momf) stocks with: a ready screen, one of your saved screens
+   ('u:<name>') or this visit's custom filters ('custom'; a new visit without them falls back to the default). Kept in your account. */
+function pbPick(key) {
+  const isV = key === 'vf', raw = (isV ? FF.pbv : FF.pbm) || '', def = isV ? VF_DEF : MOM_DEF;
+  if (raw === 'custom' && FSS[key]) return {v: 'custom', name: 'Custom screen', label: 'your custom screen (this visit)', st: Object.assign({}, def, FSS[key])};
+  if (raw.startsWith('u:')) { const u = usOf(key).find(x => x.n === raw.slice(2)); if (u) return {v: raw, name: u.n, label: `your screen “${u.n}”`, st: Object.assign({}, def, u.st)}; }
+  if (isV) {
+    const p = VF_PRESETS.find(x => x.name === raw) || VF_PRESETS.find(x => x.name === 'Deep value');
+    return {v: p.name === 'Deep value' ? '' : p.name, name: p.name, label: `the ${p.name} screen`, st: Object.assign({}, VF_DEF, p.st)};
+  }
+  return {v: '', name: 'Momentum', label: 'the Momentum screen', st: Object.assign({}, MOM_DEF)};
+}
+function pbvRow(key = 'vf') {
   if (!PRIMEF || EMBED) return;
+  const isV = key === 'vf', cur = pbPick(key).v, def = isV ? VF_DEF : MOM_DEF;
+  const opts = (isV ? VF_PRESETS.map(p => [p.name === 'Deep value' ? '' : p.name, p.name]) : [['', 'Momentum (70+)']])
+    .concat(usOf(key).map(u => ['u:' + u.n, '★ ' + u.n]));
+  const sess = FSS[key] && !(isV ? VF_PRESETS : []).some(p => fIsOn(FSS[key], def, p)) && !usOf(key).some(u => fIsOn(FSS[key], def, u));
+  if (sess) opts.push(['custom', 'Custom screen (this visit)']);
   const d = document.createElement('div'); d.className = 'pbv';
-  d.innerHTML = `<label>Selecting <select aria-label="Value screen for Portfolio Builder">${VF_PRESETS.map(p =>
-    `<option${p.name === pbvName() ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select> for Portfolio Builder <span>(default Deep value)</span></label>`;
+  d.innerHTML = `<label>Selecting <select aria-label="${isV ? 'Value' : 'Momentum'} screen for Portfolio Builder">${opts.map(([v, t]) =>
+    `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select> for Portfolio Builder <span>(default ${isV ? 'Deep value' : 'Momentum 70+'})</span></label>`;
   $('select', d).addEventListener('change', e => {
-    const v = e.target.value;
-    if (v === 'Deep value') delete FF.pbv; else FF.pbv = v;
-    ffSave(); toast(`Portfolio Builder now picks its Value stocks with ${v}`);
+    const v = e.target.value, t = e.target.selectedOptions[0].textContent;
+    if (isV) { if (v) FF.pbv = v; else delete FF.pbv; } else { if (v) FF.pbm = v; else delete FF.pbm; }
+    ffSave(); toast(`Portfolio Builder now picks its ${isV ? 'Value' : 'Momentum'} stocks with ${t}` + (v === 'custom' ? ': only for this visit' : ''));
   });
   view.appendChild(d);
 }
@@ -3375,6 +3484,7 @@ const MOM_DEF = Object.assign({}, AF_DEF, {minMom:70, maxMom:''});
 const momMain = st => vfMain(st) + fNum(st,'maxMom','Max momentum',{min:0,max:100,step:5});
 function momentumView() {
   setNav('momentum'); view.innerHTML = '';
+  pbvRow('momf');
   const mf = filterBox({key:'momf', def:MOM_DEF, main: momMain, more: vfMore, moreKeys: vfMoreKeys()}, momentumView);
   const hasMax = !unsetF(mf.maxMom) && +mf.maxMom > 0;
   const rows = V().filter(s => ok(s.momS) && s.cmp != null && passVF(s, mf) && (!hasMax || Math.round(s.momS) <= +mf.maxMom));   // same rounding as the column
@@ -3970,11 +4080,13 @@ window.addEventListener('hni-ready', () => { if (window.hniStore && window.hniSt
   const ff = r && r.ff && typeof r.ff === 'object' ? r.ff : null;           // the newer copy wins: the account's, or this browser's
   const la = +FF._at || 0, ra = ff ? +ff._at || 0 : -1;
   if (ff && ra > la) {
-    Object.keys(FF).forEach(k => delete FF[k]); Object.assign(FF, ff); Object.keys(FL).forEach(k => delete FL[k]);
+    Object.keys(FF).forEach(k => delete FF[k]); Object.assign(FF, ff);
+    if (ffMigrate() && !EMBED) ffSave();
     if (FF.gf) { GF.psu = !!FF.gf.psu; GF.semi = !!FF.gf.semi; saveGF(); $('#hidePSU').checked = GF.psu; $('#hideSemi').checked = GF.semi; }
     if (!EMBED) lsSet('ff', JSON.stringify(FF));
     if (!document.querySelector('.fbox.dopen')) route();
   } else if (la > 0 && la > ra && !EMBED) ffSave(true);                              // this browser's are newer (or never uploaded): upload them
+  else if (FF_MOVED && !EMBED) ffSave();
   window.FF_READY = true;
   if ((location.hash || '') === '#/portfolio' && PF.txns) pfChkRun(); }).catch(() => { window.FF_READY = true; }); else window.FF_READY = true; });
 const pbSel = () => { let v = PB_REMOTE && PB_REMOTE.sel ? PB_REMOTE.sel : null; if (!v) try { v = JSON.parse(localStorage.getItem('pb_sel') || 'null'); } catch (e) {}
@@ -4001,10 +4113,9 @@ function pbEtfPick(sc) {                                      // = PF Builder's 
 /* PF Builder's Value and Momentum lists use YOUR screens: the Value screen's and the Momentum screen's saved filters and your PSU /
    Semi PSU choice. Nothing saved = the defaults: Deep value, Momentum (70+), PSU left out. */
 function pbCfg() {
-  const vf = Object.assign({}, VF_DEF, (VF_PRESETS.find(p => p.name === pbvName()) || {}).st);   // the screen picked for PF Builder
-  const mf = Object.assign({}, MOM_DEF, FF.momf || {});
-  return {vf, mf, psu: FF.gf ? !!FF.gf.psu : true, semi: FF.gf ? !!FF.gf.semi : false, custom: !!(FF.pbv || FF.momf || FF.gf),
-    vName: pbvName(), mName: FF.momf ? 'Custom' : 'Momentum'};
+  const V0 = pbPick('vf'), M0 = pbPick('momf');                       // the screens picked for PF Builder
+  return {vf: V0.st, mf: M0.st, psu: FF.gf ? !!FF.gf.psu : true, semi: FF.gf ? !!FF.gf.semi : false, custom: !!(V0.v || M0.v || FF.gf),
+    vName: V0.name, mName: M0.name, vLabel: V0.label, mLabel: M0.label};
 }
 const pbMomOk = (s, mf) => passVF(s, mf) && (unsetF(mf.maxMom) || !(+mf.maxMom > 0) || Math.round(s.momS) <= +mf.maxMom);
 window.pbCfg = pbCfg; window.pbMomOk = pbMomOk;
@@ -4058,7 +4169,7 @@ async function pfChkCalc() {
     has(t).forEach(r => { if (!on.has(r.sym)) res.out.push({sym: r.sym, part: t, why}); });
     list.forEach(x => { if (!held.has(x)) res.inn.push({sym: x, part: t, why}); });
   };
-  const PC = pbCfg(), vN = PC.vName === 'Custom' ? 'Your Value screen' : PC.vName, mN = PC.mName === 'Custom' ? 'Your Momentum screen' : 'Momentum';
+  const PC = pbCfg(), vN = PC.vName, mN = PC.mName;
   if (parts.includes('Value')) diff('Value', L.value, vN + ' · ' + pbSelTxt(L.C.value));
   if (parts.includes('Momentum')) diff('Momentum', L.mom, mN + ' · ' + pbSelTxt(L.C.mom));
   if (parts.includes('ETF') || parts.includes('ETF pair')) {
@@ -5072,6 +5183,7 @@ const DEMO_HINT = (() => { try { return localStorage.getItem('hni_demo') === '1'
 const isDemo = () => window.hniDemo != null ? !!window.hniDemo : DEMO_HINT;
 if (DEMO_HINT) document.documentElement.classList.add('hni-demo');
 window.addEventListener('hni-ready', () => { if (isDemo() && !/^#\/(all|portfolio)$/.test(location.hash || '')) route(); });
+let ROUTE_LAST = null;
 function route() {
   if (isDemo() && !/^#\/(all|portfolio)$/.test(location.hash || '')) history.replaceState(null, '', location.pathname + location.search + '#/all');
   const pb = $('#pfBackV'); if (pb) pb.href = isDemo() ? '#/all' : '#/value';
@@ -5083,6 +5195,7 @@ function route() {
   C.roce.label = C.q.label = SAME && S.some(s => s.roceSrc === 'ta') ? 'ROCE % (proxy)' : 'ROCE %';   // EBIT ÷ total assets until Borrowings are scraped
   computeScores();
   const h = location.hash || '#/';
+  if (h !== ROUTE_LAST) { Object.keys(searchState).forEach(k => delete searchState[k]); ROUTE_LAST = h; }   // another screen: search box empty
   if (h.startsWith('#/industry/')) industryView(decodeURIComponent(h.slice(11)));
   else if (h === '#/value') valueView();
   else if (h === '#/method') methodView();
@@ -5371,10 +5484,21 @@ if (!EMBED && !isDemo() && (!location.hash || location.hash === '#/')) {
   if (/^#\/(value|momentum|all|compare|method|industry\/.+)$/.test(last)) history.replaceState(null, '', location.pathname + location.search + last);
 }
 if (isPhone() && !location.hash) history.replaceState(null, '', location.pathname + location.search + '#/value');   // phone: opens on Value screen
-(() => {                                                  // this session's last Historical setting
-  let hs = null; try { hs = JSON.parse(sessionStorage.getItem(HS_KEY) || 'null'); } catch (e) {}
-  if (hs && (hs.on || (hs.key && hs.key !== GF.backP))) setHistorical(hs.on, hs.key, true); else route();
+/* Historical is never brought back: a page load (refresh, revisit) always opens on today. Left idle (tab in the background) for
+   30 minutes or more: switched off when you come back. */
+try { sessionStorage.removeItem(HS_KEY); } catch (e) {}
+(() => {                                                  // an admin opened someone's saved screen from the Users list on another page
+  let op = null; try { op = JSON.parse(sessionStorage.getItem('hnif_open') || 'null'); sessionStorage.removeItem('hnif_open'); } catch (e) {}
+  if (op && op.k && op.st && !EMBED) { const to = {vf: '#/value', momf: '#/momentum', af: '#/all'}[op.k];
+    if (to) { FL[op.k] = Object.assign({}, op.st); FSS[op.k] = Object.assign({}, op.st); fssSave(); history.replaceState(null, '', location.pathname + location.search + to); setTimeout(() => toast(`${op.label || 'Screen'}: opened for this visit`), 800); } }
 })();
+route();
+let HIDDEN_AT = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { HIDDEN_AT = Date.now(); return; }
+  if (HIDDEN_AT && Date.now() - HIDDEN_AT >= 30 * 60000 && GF.back && !EMBED) { PF_RESUME = null; setHistorical(false); }
+  HIDDEN_AT = 0;
+});
 </script>
 <script>
 /* offline cache (sw.js): pages open at once from the phone's cache while sw.js quietly downloads the fresh copy.
@@ -5415,10 +5539,10 @@ AUTH_WEB = {
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
                      # signed in and checked within the last hour → page shows at once; auth.js confirms quietly behind it
                      '<script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>\n'
-                     '<link rel="stylesheet" href="auth.css?v=45">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=45"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=46">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=46"></script>\n',
     # straight after the header, not deferred: Navigate + avatar are there from the first paint (no blink)
-    "__AUTH_HDR__": '<script src="hdr.js?v=45"></script>\n',
+    "__AUTH_HDR__": '<script src="hdr.js?v=46"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
