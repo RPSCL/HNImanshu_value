@@ -8,9 +8,9 @@
 <meta name="description" content="Split a fund into index ETFs, value stocks and momentum stocks by fixed rules, with a backtest over 1 month to 1 year.">
 <style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>
 <script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>
-<link rel="stylesheet" href="auth.css?v=45">
+<link rel="stylesheet" href="auth.css?v=46">
 <style>html:not(.pb-admin) .lead,html:not(.pb-admin) .card,html:not(.pb-admin) .tabs,html:not(.pb-admin) #out,html:not(.pb-admin) .disc{display:none}</style>
-<script type="module" src="auth.js?v=45"></script>
+<script type="module" src="auth.js?v=46"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>
@@ -296,15 +296,15 @@ tbody tr.held:hover td{background:var(--heldbg);filter:brightness(1.08)}
     </div>
     </div>
 </header>
-<script src="hdr.js?v=45"></script>
+<script src="hdr.js?v=46"></script>
 <div class="wrap">
 
   <h1>Portfolio Builder</h1>
   <p class="lead" id="gate" style="display:block">Opening PF Builder…</p>
   <details class="how lead"><summary>How it works</summary>
     <p>Enter a fund amount. It is split between <b>index ETFs</b>, <b>value stocks</b> (the screen you pick for PF Builder on the Value screen; default Deep value) and
-    <b>momentum stocks</b> (top 15 of your Momentum screen), equal weight inside each part, using the same data and
-    screens as the Factor Screener. The split is 40 / 40 / 20 by default: type the ETF % and the Value % and Momentum gets the rest. For the Value and Momentum parts you can pick the list (universe), what to sort by (value score, momentum score, PE or PB, either way) and how many stocks to take; the sort always uses the numbers of the date shown (today, or 1 year back in the backtest). <b>Your Factor Screener settings are used</b>: the screen picked for PF Builder on the Value screen, the Momentum screen's filters and the PSU / Semi PSU switches, as you last left them there. Never changed (or Reset to default): Deep value, Momentum 70+ and no PSU stocks. The index part holds two ETF/Gold slots
+    <b>momentum stocks</b> (top 15 of the screen picked on the Momentum tab; default Momentum 70+), equal weight inside each part, using the same data and
+    screens as the Factor Screener. The split is 40 / 40 / 20 by default: type the ETF % and the Value % and Momentum gets the rest. For the Value and Momentum parts you can pick the list (universe), what to sort by (value score, momentum score, PE or PB, either way) and how many stocks to take; the sort always uses the numbers of the date shown (today, or 1 year back in the backtest). <b>Your Factor Screener settings are used</b>: the screens picked for PF Builder (“Selecting … for Portfolio Builder” on the Value screen and the Momentum tab: a ready screen, one of your saved screens, or this visit's custom filters) and the PSU / Semi PSU switches. Never changed (or Reset to default): Deep value, Momentum 70+ and no PSU stocks. The index part holds two ETF/Gold slots
     (IT/Gold and ALPHA/Gold): a slot holds Gold while its ETF is not stronger, so Gold can be held twice (2× weight).
     The backtest applies the same rules as they stood 1, 3, 6 or 9 months or 1 year ago (you pick), and re-checks the ETF pairs every month.</p></details>
 
@@ -409,8 +409,7 @@ const perName = (k = PER) => (PERS.find(p => p[0] === k) || PERS[4])[1];
 /* which screens made the lists (your Factor Screener settings), for the lines under each part */
 const CFG = () => (DATA && DATA.now && DATA.now.cfg) || {custom: false, vName: 'Deep value', mName: 'Momentum', psu: true, semi: false};
 const psuTxt = c => c.psu && c.semi ? 'Non-PSU, non-semi-PSU stocks' : c.psu ? 'Non-PSU stocks' : c.semi ? 'Non-semi-PSU stocks (PSU included)' : 'Stocks (PSU included)';
-const scrName = k => { const c = CFG(); return k === 'value' ? (c.vName === 'Custom' ? 'your Value screen (custom filters)' : `the ${c.vName} screen`)
-  : (c.mName === 'Custom' ? 'your Momentum screen (custom filters)' : 'the Momentum screen'); };
+const scrName = k => { const c = CFG(); return k === 'value' ? (c.vLabel || `the ${c.vName} screen`) : (c.mLabel || 'the Momentum screen'); };
 /* Code run inside that page: the Deep value list and the Momentum list, today or (BACK) as of the back date */
 const HELPER = () => `window.__pb = function (unisJson, etfJson) {
   const P = window.pbCfg();                       // YOUR screens: Value / Momentum filters + PSU choice (defaults: Deep value, Momentum, no PSU)
@@ -437,7 +436,7 @@ const HELPER = () => `window.__pb = function (unisJson, etfJson) {
   GF.uni = 'all'; setMode(); computeScores.S = null; computeScores();
   return JSON.stringify({back: BACK, date: BACK ? D.then.date : D.asOf, hasPrice: BACK ? !!D.then.hasPrice : true,
     bench: BACK && D.then.bench ? D.then.bench.ret : null, lists: D.lists, pools, etfScore, minHistory: need, cut: cutISO,
-    cfg: {custom: P.custom, vName: P.vName, mName: P.mName, psu: P.psu, semi: P.semi}});
+    cfg: {custom: P.custom, vName: P.vName, mName: P.mName, vLabel: P.vLabel, mLabel: P.mLabel, psu: P.psu, semi: P.semi}});
 };`;
 let ENG = null;
 function engine() {
@@ -519,7 +518,9 @@ async function cacheGet(k) {
 async function cachePut(k, v) { try { const db = await pbDb(); db.transaction('kv', 'readwrite').objectStore('kv').put(v, k); } catch (e) {} }
 let INFO_P = null, INFO = null, CACHE_V = '', FFK = '';
 /* your Factor Screener settings (Value / Momentum filters, PSU): the lists depend on them, so a change builds the lists again */
-const ffKey = ff => JSON.stringify({pbv: (ff && ff.pbv) || null, momf: (ff && ff.momf) || null, gf: (ff && ff.gf) || null});
+const ffKey = ff => { let fs = {}; try { fs = JSON.parse(sessionStorage.getItem('hnif_fs') || '{}') || {}; } catch (e) {}   // this visit's custom filters
+  const pbv = (ff && ff.pbv) || null, pbm = (ff && ff.pbm) || null;
+  return JSON.stringify({pbv, pbm, us: (ff && ff.us) || null, gf: (ff && ff.gf) || null, fsv: pbv === 'custom' ? fs.vf || null : null, fsm: pbm === 'custom' ? fs.momf || null : null}); };
 function ffNow(remote) {                                         // the newer of the account's copy and this browser's
   let loc = null; try { loc = JSON.parse(localStorage.getItem('hnif_ff') || 'null'); } catch (e) {}
   return remote && (+remote._at || 0) >= (+(loc && loc._at) || 0) ? remote : (loc || remote || {});
