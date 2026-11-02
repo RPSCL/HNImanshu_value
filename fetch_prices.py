@@ -36,6 +36,7 @@ Credentials come from creds.py (repo secrets on GitHub, .env locally). Nothing s
     python fetch_prices.py --map-only    # check symbol → Angel token mapping, no login, no candles
     python fetch_prices.py --is-due      # exit 0 if a fetch is due (prices.csv ≥ MIN_AGE_DAYS old), else 1
     python fetch_prices.py --force       # fetch even if prices.csv is recent
+    python fetch_prices.py --part 1      # weekly part 1 = the 3 lists (+ NIFTY 500 + ETFs) · --part 2 / 3 / 4 = Others in thirds
     python fetch_prices.py --history --symbols A,B,C   # wipe etf_prices/, then ETFs + NIFTY 500 + these stocks, day by day (PF Builder chart)
     python fetch_prices.py --yearly            # prices_yearly.csv: split-adjusted close on 1 July of every year since 2019:
                                                # the 3 lists (~765) + NIFTY 500, ~40 min
@@ -133,6 +134,19 @@ def load_symbols():
 				asof = dt
 	asof = (asof.date() if asof is not None else datetime.now(IST).date())
 	return list(dict.fromkeys(syms)), asof
+
+
+def n_list_symbols(syms):
+	"""How many of load_symbols()'s list (3 lists first, then Others) belong to NIFTY 500 / Smallcap 500 / Microcap 250."""
+	lists = set()
+	for f in CSV_FILES:
+		p = BASE / f
+		if p.exists() and "others" not in f.lower():
+			lists |= {str(s).strip().upper() for s in pd.read_csv(p, usecols=["SYMBOL"])["SYMBOL"].dropna()}
+	n = 0
+	while n < len(syms) and syms[n] in lists:
+		n += 1
+	return n
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -698,9 +712,10 @@ def main():
 	                help="PF Builder chart (builder_prices.yml): wipe etf_prices/, download the ETFs + NIFTY 500 + --symbols day by day, "
 	                     "save them there. prices.csv is not touched")
 	ap.add_argument("--symbols", default="", help="with --history: comma separated stock symbols (the page's 1-year-back value + momentum picks)")
-	ap.add_argument("--part", type=int, choices=(1, 2, 3), default=None,
-	                help="fetch only this third of the symbols (cron.yml: Saturday 02:00 / 04:00 / 06:00 IST); "
-	                     "the other thirds' rows in prices.csv stay as they are")
+	ap.add_argument("--part", type=int, choices=(1, 2, 3, 4), default=None,
+	                help="weekly prices in 4 parts (cron.yml, Friday 20:00 / 21:00 / 22:00 / 23:00 IST): 1 = the 3 lists "
+	                     "(+ NIFTY 500 + PF Builder ETFs), 2 / 3 / 4 = Others in thirds; the other parts' rows stay as they are. "
+	                     "With --yearly: 1 / 2 / 3 = Others in thirds (no part = the 3 lists)"),
 	ap.add_argument("--yearly", action="store_true",
 	                help="prices_yearly.csv: split-adjusted close on 1 July of each year since 2019 (3 lists + NIFTY 500), "
 	                     "for the Valuation page's owner-earnings backtest. --limit / --symbols for a partial run")
@@ -732,11 +747,14 @@ def main():
 		todo = [BENCH_SYM] + list(ETF_SYMS)
 		log(f"ETF-only: {len(todo)} symbols ({', '.join(todo)})")
 	else:
-		if a.part:                                                       # thirds in list order (3 lists first, then Others)
-			n = len(syms)
+		if a.part:                                                       # part 1 = the 3 lists (NIFTY 500 + Smallcap 500 + Microcap 250);
+			nl = n_list_symbols(syms)                                    # parts 2 / 3 / 4 = Others in thirds
+			oth = syms[nl:]
+			n = len(oth)
 			b = [0, -(-n // 3), -(-2 * n // 3), n]
-			part_syms = syms[b[a.part - 1]:b[a.part]]
-			log(f"Part {a.part} of 3: {len(part_syms)} symbols ({part_syms[0] if part_syms else '-'} … {part_syms[-1] if part_syms else '-'})")
+			part_syms = syms[:nl] if a.part == 1 else oth[b[a.part - 2]:b[a.part - 1]]
+			log(f"Part {a.part} of 4 ({'the 3 lists' if a.part == 1 else 'Others, ' + ['first', 'middle', 'last'][a.part - 2] + ' third'}): "
+			    f"{len(part_syms)} symbols ({part_syms[0] if part_syms else '-'} … {part_syms[-1] if part_syms else '-'})")
 		else:
 			part_syms = syms
 		todo = part_syms[:a.limit] if a.limit else part_syms
