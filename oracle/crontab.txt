@@ -26,7 +26,8 @@ NL=/home/opc/hni-news.log
 0 */2 * * 0,6                $N chunk  >> $NL 2>&1
 
 # Live prices (Portfolio LTP): every 5 min, 09:00-15:55 Mon-Fri (skipped while the last run is still going)
-4 9-15 * * 1-5 sleep 30; $T ltp.yml --if-idle >> $TL 2>&1
+*/5 9-15 * * 1-5             $T ltp.yml --if-idle >> $TL 2>&1
+4-59/5 9-15 * * 1-5 sleep 30; $T ltp.yml --if-idle >> $TL 2>&1
 
 # Angel prices: Friday night, after the week's last close
 0 20 * * 5                   $T cron.yml force_full=2 price_part=1 >> $TL 2>&1    # Friday 20:00 part 1
