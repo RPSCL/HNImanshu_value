@@ -8,9 +8,9 @@
 <meta name="description" content="Split a fund into index ETFs, value stocks and momentum stocks by fixed rules, with a backtest over 1 month to 1 year.">
 <style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>
 <script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>
-<link rel="stylesheet" href="auth.css?v=46">
+<link rel="stylesheet" href="auth.css?v=47">
 <style>html:not(.pb-admin) .lead,html:not(.pb-admin) .card,html:not(.pb-admin) .tabs,html:not(.pb-admin) #out,html:not(.pb-admin) .disc{display:none}</style>
-<script type="module" src="auth.js?v=46"></script>
+<script type="module" src="auth.js?v=47"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap">
 <script>
@@ -296,7 +296,7 @@ tbody tr.held:hover td{background:var(--heldbg);filter:brightness(1.08)}
     </div>
     </div>
 </header>
-<script src="hdr.js?v=46"></script>
+<script src="hdr.js?v=47"></script>
 <div class="wrap">
 
   <h1>Portfolio Builder</h1>
@@ -417,7 +417,7 @@ const HELPER = () => `window.__pb = function (unisJson, etfJson) {
   const etfScore = {}, etf = JSON.parse(etfJson || '{}');
   for (const k in etf) { const m = etf[k] || []; etfScore[k] = ok(m[1]) && ok(m[2]) ? ${W6} * m[1] + ${W12} * m[2] : null; }
   const pick = s => ({sym: s.sym, name: s.name, ind: s.ind, cmp: s.cmp, pe: s.pe, pb: s.pb, mom: s.momS, score: s.score, url: s.url,
-                      mcap: s.mcap, cagr: s.cagr, hi52: s.hi52,
+                      mcap: s.mcap, cagr: s.cagr, hi52: s.hi52, circ: s.circ,
                       ret: BACK ? sv(s, 'ret') : null});
   const vf = P.vf;
   const day = 864e5, asOfT = Date.parse(D.asOf), judged = BACK ? asOfT - D.then.days * day : asOfT;
@@ -871,7 +871,7 @@ function lists(when) {
   const index = pk.rows.map(r => { const e = E[r.sym] || {};
     return {sym: r.sym, label: r.label, name: ETF_NAME[r.sym] || r.sym, price: (when === 'now' && lp(r.sym)) || e.ltp, live: when === 'now' && !!lp(r.sym), r3: e[key], mom: sc[r.sym], ret: when === 'now' || PER === '1Y' ? e.ret1y : null, etf: true}; });
   const stock = s => ({sym: s.sym, name: s.name, ind: s.ind, price: (when === 'now' && lp(s.sym)) || s.cmp, live: when === 'now' && !!lp(s.sym), pe: s.pe, pb: s.pb, mom: s.mom, score: s.score, url: s.url, ret: s.ret,
-    mcap: s.mcap, cagr: s.cagr, vs52: num(s.cmp) && num(s.hi52) && s.hi52 > 0 ? (s.cmp / s.hi52 - 1) * 100 : null});
+    mcap: s.mcap, cagr: s.cagr, circ: s.circ, vs52: num(s.cmp) && num(s.hi52) && s.hi52 > 0 ? (s.cmp / s.hi52 - 1) * 100 : null});
   const from = k => { const P = (S && S.pools) || {}, c = SELC[k]; return choose((P[c.uni] || P.all || {})[k] || [], c, k).map(stock); };
   return {pk, index, value: from('value'), mom: from('mom')};
 }
@@ -993,6 +993,7 @@ const perBar = () => `<div class="per"><span>Backtest from</span><div class="seg
   `<button type="button" data-per="${k}" role="tab" class="${k === PER ? 'on' : ''}" title="${n} ago">${k}</button>`).join('')}</div>`
   + `<select class="chp" id="chPart" aria-label="Chart: which part" title="Chart: all parts together, or one part on its own">${chParts().map(([k, t]) =>
     `<option value="${k}"${k === chPart() ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></div>`;
+const circTd = x => `<td class="r${num(x.circ) && x.circ > 5 ? ' neg' : ''}">${num(x.circ) ? x.circ : '–'}</td>`;   // circuit-locked days (250 sessions)
 function paintBack(fund) {
   const out = $('#out'), B = DATA.back = DATA.backs ? DATA.backs[PER] : null;
   PF = null;
@@ -1041,10 +1042,10 @@ function paintBack(fund) {
       : `${pc(sh)} · ${L[k].length} holdings then · average ${pct(r[k])}`;
     if (k === 'index' && BT) return section(k, label, hdr, indexBack(BT, sh), false);
     const rows = L[k];
-    const body = (k === 'index' ? pairNotes(L.pk) : `<p class="rule">${esc(selText(k))} · all figures as they stood on ${esc(B.date)}.</p>`) + `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Value score then</th><th class="r">Momentum then</th><th class="r">PE then</th><th class="r">PB then</th><th class="r">Mcap then</th><th class="r">EPS CAGR then</th><th class="r">Vs 52w high then</th><th class="r">Return since</th></tr></thead><tbody>${
+    const body = (k === 'index' ? pairNotes(L.pk) : `<p class="rule">${esc(selText(k))} · all figures as they stood on ${esc(B.date)}.</p>`) + `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Value score then</th><th class="r">Momentum then</th><th class="r">PE then</th><th class="r">PB then</th><th class="r">Mcap then</th><th class="r">EPS CAGR then</th><th class="r">Vs 52w high then</th><th class="r" title="Days in the 250 sessions before the back date locked at a circuit">Circuit days then</th><th class="r">Return since</th></tr></thead><tbody>${
       rows.length ? rows.map(x => `<tr${heldTr(x)}><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td>
-        <td class="r">${num(x.score) ? fmt(x.score, 0) : '–'}</td><td class="r">${num(x.mom) ? Math.round(x.mom) : '–'}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td><td class="r">${crf(x.mcap)}</td><td class="r">${num(x.cagr) ? fmt(x.cagr, 1) + '%' : '–'}</td><td class="r">${num(x.vs52) ? fmt(x.vs52, 1) + '%' : '–'}</td><td class="r">${pill(x.ret)}</td></tr>`).join('')
-      : '<tr><td colspan="10" class="empty">Nothing passed this screen then.</td></tr>'}</tbody></table></div>`;
+        <td class="r">${num(x.score) ? fmt(x.score, 0) : '–'}</td><td class="r">${num(x.mom) ? Math.round(x.mom) : '–'}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td><td class="r">${crf(x.mcap)}</td><td class="r">${num(x.cagr) ? fmt(x.cagr, 1) + '%' : '–'}</td><td class="r">${num(x.vs52) ? fmt(x.vs52, 1) + '%' : '–'}</td>${circTd(x)}<td class="r">${pill(x.ret)}</td></tr>`).join('')
+      : '<tr><td colspan="11" class="empty">Nothing passed this screen then.</td></tr>'}</tbody></table></div>`;
     return section(k, label, hdr, body, false);
   }).join('') + (L.index.some(x => !num(x.ret)) ? '<p class="note">ETFs without prices count as 0% inside the index part.</p>' : '');
   out.innerHTML = html;
@@ -1067,9 +1068,9 @@ function paint() {
         <div class="kpi"><span>Data as of</span><b>${esc(DATA.now.date || '–')}</b>${liveNote()}</div></div>
       <div class="bar nw"><span class="sp"></span><button type="button" class="btn sm" id="ltpGo" ${LTP_BUSY ? 'disabled' : ''} title="Get live prices for accurately getting the qty">${LTP_BUSY ? 'Fetching…' : 'Live prices'}</button><button type="button" class="btn sm" data-all="1">Expand all</button><button type="button" class="btn sm" data-all="0">Collapse all</button></div>`
       + A.parts.map(p => {
-        const extraH = p.k === 'index' ? '<th class="r">Composite</th><th class="r">3M</th>' : p.k === 'value' ? '<th class="r">Score</th><th class="r">PE</th><th class="r">PB</th><th class="r">Mcap</th><th class="r">EPS CAGR</th><th class="r">Vs 52w high</th>' : '<th class="r">Momentum</th><th class="r">PE</th><th class="r">PB</th><th class="r">Mcap</th><th class="r">EPS CAGR</th><th class="r">Vs 52w high</th>';
-        const extra = x => p.k === 'index' ? `<td class="r">${ms(x.mom)}</td><td class="r">${pill(x.r3)}</td>` : p.k === 'value' ? `<td class="r">${fmt(x.score, 0)}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td><td class="r">${crf(x.mcap)}</td><td class="r">${num(x.cagr) ? fmt(x.cagr, 1) + '%' : '–'}</td><td class="r">${num(x.vs52) ? fmt(x.vs52, 1) + '%' : '–'}</td>`
-          : `<td class="r">${num(x.mom) ? Math.round(x.mom) : '–'}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td><td class="r">${crf(x.mcap)}</td><td class="r">${num(x.cagr) ? fmt(x.cagr, 1) + '%' : '–'}</td><td class="r">${num(x.vs52) ? fmt(x.vs52, 1) + '%' : '–'}</td>`;
+        const extraH = p.k === 'index' ? '<th class="r">Composite</th><th class="r">3M</th>' : p.k === 'value' ? '<th class="r">Score</th><th class="r">PE</th><th class="r">PB</th><th class="r">Mcap</th><th class="r">EPS CAGR</th><th class="r">Vs 52w high</th><th class="r" title="Days in the last 250 sessions locked at a circuit (open = high = low = close)">Circuit days</th>' : '<th class="r">Momentum</th><th class="r">PE</th><th class="r">PB</th><th class="r">Mcap</th><th class="r">EPS CAGR</th><th class="r">Vs 52w high</th><th class="r" title="Days in the last 250 sessions locked at a circuit (open = high = low = close)">Circuit days</th>';
+        const extra = x => p.k === 'index' ? `<td class="r">${ms(x.mom)}</td><td class="r">${pill(x.r3)}</td>` : p.k === 'value' ? `<td class="r">${fmt(x.score, 0)}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td><td class="r">${crf(x.mcap)}</td><td class="r">${num(x.cagr) ? fmt(x.cagr, 1) + '%' : '–'}</td><td class="r">${num(x.vs52) ? fmt(x.vs52, 1) + '%' : '–'}</td>${circTd(x)}`
+          : `<td class="r">${num(x.mom) ? Math.round(x.mom) : '–'}</td><td class="r">${fmt(x.pe, 1)}</td><td class="r">${fmt(x.pb, 2)}</td><td class="r">${crf(x.mcap)}</td><td class="r">${num(x.cagr) ? fmt(x.cagr, 1) + '%' : '–'}</td><td class="r">${num(x.vs52) ? fmt(x.vs52, 1) + '%' : '–'}</td>${circTd(x)}`;
         const rule = p.k === 'index' ? pairNotes(L.pk) + (etfMiss ? '<p class="note">ETF prices are not in yet: they come with the next weekly price update (part 1). Amounts are shown; units appear once prices are in.</p>' : '')
           : p.k === 'value' ? `<p class="rule">${psuTxt(CFG())} that pass ${esc(scrName('value'))} · ${esc(selText('value'))} · equal weight.</p>`
           : `<p class="rule">${psuTxt(CFG())} that pass ${esc(scrName('mom'))} · ${esc(selText('mom'))} · equal weight.</p>`;
@@ -1077,7 +1078,7 @@ function paint() {
         const body = rule + `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Price ₹</th>${extraH}<th class="r">Units</th><th class="r">Amount ₹</th></tr></thead><tbody>${
           p.rows.length ? p.rows.map(x => `<tr${heldTr(x)}><td>${symCell(x)}</td><td class="nm" title="${esc(x.name)}">${esc(x.name)}</td><td class="r"${x.live ? ' title="Live price"' : ''}>${x.live ? '<i class="lv"></i>' : ''}${fmt(x.price, 2)}</td>${extra(x)}
             <td class="r ${x.qty === 0 ? 'zero' : ''}" ${x.qty === 0 ? 'title="Price is above this holding\'s share of the fund"' : ''}>${fund && x.qty != null ? fmt(x.qty, 0) : '–'}</td><td class="r">${fund && x.invested != null ? fmt(x.invested, 0) : '–'}</td></tr>`).join('')
-          : `<tr><td colspan="11" class="empty">Nothing passes this screen today.</td></tr>`}</tbody></table></div>`;
+          : `<tr><td colspan="12" class="empty">Nothing passes this screen today.</td></tr>`}</tbody></table></div>`;
         const add = fund && p.rows.some(x => x.qty > 0) ? `<div class="addpart"><button type="button" class="btn sm addpf" data-addpart="${p.k}">Add these to portfolio</button></div>` : '';
         return section(p.k, p.label, hdr, add + body, true);
       }).join('');
