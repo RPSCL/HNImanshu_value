@@ -1495,6 +1495,9 @@ table.chk-t .pf-sym{cursor:pointer;color:var(--ink)}
 .pf-form .fld span i{font-style:normal;color:var(--brass)}
 .pf-form input{height:36px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:14px var(--sans);width:100%;box-sizing:border-box}
 .pf-form input[name=sym]{text-transform:uppercase}
+.pf-form select[name=typ]{height:36px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:14px var(--sans);width:100%;box-sizing:border-box}
+.pf-form select[name=typ]:focus{outline:none;border-color:var(--brass)}
+.pf-type[hidden]{display:none}
 .pf-form input::placeholder{text-transform:none;color:var(--faint)}
 .pf-form input:focus{outline:none;border-color:var(--brass)}
 .pf-form input.bad,.pf-form input.bad:focus{border-color:var(--bad);background:var(--badbg);color:var(--bad)}
@@ -3808,7 +3811,7 @@ function pfCharges(t, qty, px, r = PF.rates) {
 }
 const pfSorted = txns => txns.map((x, i) => [x, i]).sort((a, b) => (a[0].date || '').localeCompare(b[0].date || '') || a[1] - b[1]).map(p => p[0]);   // by date, then entry order
 /* Remark of a buy: PF Builder's own ("PF Builder → Value", …), anything else = "Self" (picked by you; older remarks too) */
-const pfSrcOf = x => x && x.src && /^PF Builder/.test(x.src) ? x.src : 'Self';
+const pfSrcOf = x => x && x.src && (/^PF Builder/.test(x.src) || /^(Value|Momentum|ETF|ETF pair)$/.test(x.src)) ? x.src : 'Self';   // a type you picked yourself: Value / Momentum / ETF
 /* which types a buy counts for: ETF (ETF + ETF pair), Value, Momentum, or Self. "PF Builder → Value + Momentum" = half each */
 const PF_TYPES = ['ETF', 'Value', 'Momentum', 'Self'];
 function pfTypesOf(x) {
@@ -4152,11 +4155,11 @@ const PB_SCOPE = {all: 'All parts', index: 'Index ETFs only', value: 'Value only
 async function pfChkCalc() {
   if (BACK || !PF.txns) return null;
   const P = pfSummary(PF.txns), srcsOf = r => (r.srcs || String(r.remark || '').split(' · ')).filter(Boolean);
-  const part = (r, t) => srcsOf(r).some(x => /^PF Builder/.test(x) && x.split(/→|\+/).map(y => y.trim()).includes(t));
+  const part = (r, t) => srcsOf(r).some(x => x !== 'Self' && x.replace(/^PF Builder\s*→\s*/, '').split('+').map(y => y.trim()).includes(t));   // PF Builder's, or a type you picked
   const rows = P.open.map(r => ({sym: r.sym, remark: r.remark || '', srcs: r.srcs}));
   const has = t => rows.filter(r => part(r, t)), parts = ['Value', 'Momentum', 'ETF', 'ETF pair'].filter(t => has(t).length);
   /* on only when EVERY holding came from PF Builder: one bought any other way (screens, by hand) and the check is off */
-  const other = rows.filter(r => { const a = srcsOf(r); return !a.length || a.some(x => !/^PF Builder/.test(x)); }).map(r => r.sym);
+  const other = rows.filter(r => { const a = srcsOf(r); return !a.length || a.some(x => x === 'Self'); }).map(r => r.sym);
   const res = {parts, other, ok: parts.length > 0 && !other.length, out: [], inn: [], pairs: [], C: null, adds: []};
   if (!res.ok) return res;
   /* what was added, with which settings: each "Add … to portfolio" keeps them on its buys (pbs). Grouped per add, latest first */
@@ -4750,13 +4753,18 @@ function pfTradeForm(x) {
     <label class="fld"><span>Price ₹ <i class="ltp"></i></span><input name="px" type="number" inputmode="decimal" min="0" step="any"></label></div>
     <div class="row2"><label class="fld"><span>Date</span><input name="date" type="date"></label>
     <label class="fld"><span>Charges ₹ <i>auto</i></span><input name="ch" type="number" inputmode="decimal" min="0" step="any"></label></div>
+    <label class="fld pf-type"><span>Type <i>Remark: counts in the by-type gains and the PF Builder check</i></span><select name="typ"></select></label>
     <p class="pf-calc"></p><p class="pf-err"></p>
     <div class="pf-fix" hidden><span>No price for this symbol. Renamed or wrong?</span><button type="button" class="btn ghost" data-fix>Update symbol / name</button></div>
     <button type="submit" class="btn primary">Save</button></form>`, {noFocus: true, ov: true});   // no box chosen yet: typing is routed below
   const f = $('form', w); let t = x.t || 'buy', chTyped = edit && x.ch != null, touched = false, autoQ = '';
   f.sym.value = x.sym || ''; f.qty.value = x.qty || ''; f.px.value = x.px || ''; f.date.value = x.date || today(); f.ch.value = edit ? (x.ch || 0) : '';
   f.nm.value = x.name || '';
-  const seg = () => w.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  /* Type (buys): Self, or put it under Value / Momentum / ETF yourself; a PF Builder buy keeps its own remark unless you change it */
+  const src0 = edit ? pfSrcOf(x) : 'Self', typs = [['Self', 'Self (my own pick)'], ['Value', 'Value'], ['Momentum', 'Momentum'], ['ETF', 'ETF']];
+  if (!typs.some(o => o[0] === src0)) typs.unshift([src0, src0]);
+  f.typ.innerHTML = typs.map(([v, l]) => `<option value="${esc(v)}"${v === src0 ? ' selected' : ''}>${esc(l)}</option>`).join('');
+  const seg = () => { w.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', b.dataset.t === t)); $('.pf-type', w).hidden = t !== 'buy'; };
   const ltp = () => pfLtp(f.sym.value.trim().toUpperCase());
   const calc = () => {
     const sym = f.sym.value.trim().toUpperCase(), L = ltp(), q = +f.qty.value, p = +f.px.value || L || 0;   // empty price → LTP
@@ -4816,7 +4824,10 @@ function pfTradeForm(x) {
       if (pe != null) rec.pe = pe; if (sc != null) rec.sc = sc;
     }
     if (!TODAY.has(sym) && f.nm.value.trim()) rec.name = f.nm.value.trim().slice(0, 80);
-    if (t === 'buy') { const sr = x.src || (edit ? '' : pfSrcHere()); if (sr) rec.src = sr; }   // Remark (kept when the trade is edited)
+    if (t === 'buy') {                                     // Remark = the Type picked (Self unless you choose Value / Momentum / ETF)
+      rec.src = f.typ.value || pfSrcHere();
+      if (x.pbs && rec.src === x.src) rec.pbs = x.pbs;      // PF Builder's settings stay with its own buys
+    }
     const next = edit ? PF.txns.map(o => o === x ? rec : o) : PF.txns.concat(rec);
     const bad = pfReplay(next).bad;                         // a sale can't exceed what was held on its date, now or after this change
     if (bad) return err(`That would make the sale of ${bad.sym}${bad.date ? ' on ' + bad.date : ''} larger than the shares held then. Check the date and quantity.`);
