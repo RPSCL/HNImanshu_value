@@ -25,14 +25,14 @@ NL=/home/opc/hni-news.log
 # News, Saturday + Sunday every 2 hours
 0 */2 * * 0,6                $N chunk  >> $NL 2>&1
 
-# Live prices (Portfolio LTP): every 5 min, 09:00-15:55 Mon-Fri (skipped while the last run is still going)
-#*/5 9-15 * * 1-5             $T ltp.yml --if-idle >> $TL 2>&1
-4-59/5 9-15 * * 1-5 sleep 30; $T ltp.yml --if-idle >> $TL 2>&1
+# Live prices (Portfolio LTP): every 5 min at :04:30, :09:30 … 15:59:30 Mon-Fri (skipped while the last run is still going)
+4-59/5 9-15 * * 1-5          sleep 30; $T ltp.yml --if-idle >> $TL 2>&1
 
 # Angel prices: Friday night, after the week's last close
 0 20 * * 5                   $T cron.yml force_full=2 price_part=1 >> $TL 2>&1    # Friday 20:00 part 1
 0 21 * * 5                   $T cron.yml force_full=2 price_part=2 >> $TL 2>&1    # Friday 21:00 part 2
 0 22 * * 5                   $T cron.yml force_full=2 price_part=3 >> $TL 2>&1    # Friday 22:00 part 3
+0 23 * * 5                   $T cron.yml force_full=2 price_part=4 >> $TL 2>&1    # Friday 23:00 part 4
 
 # Full scrape: Sunday from midnight
 0 0 * * 0                    $T cron.yml force_full=1 >> $TL 2>&1                 # Sunday 00:00 NIFTY 500 + Smallcap + Microcap, then build
@@ -65,10 +65,12 @@ NL=/home/opc/hni-news.log
 # News (weekdays)          Mon-Fri every 30 min, all day          9:00-15:30 portfolio + next 1,000 stocks,
 #                                                                 other hours next 1,000; each push rebuilds the site
 # News (weekend)           Sat + Sun every 2 hours                Next 1,000 stocks; each push rebuilds the site
-# Live prices (LTP)        Mon-Fri every 5 min, 09:00-15:55       Portfolio live prices into Firestore
-# Angel prices part 1      Friday 20:00                           First third of stocks (+ NIFTY 500 + ETFs)
-# Angel prices part 2      Friday 21:00                           Middle third
-# Angel prices part 3      Friday 22:00                           Last third; the next news build puts them live
+# Live prices (LTP)        Mon-Fri every 5 min, 09:04:30-15:59:30 Portfolio live prices into Firestore
+# Angel prices part 1      Friday 20:00                           NIFTY 500 + Smallcap 500 + Microcap 250 (+ NIFTY 500 index + ETFs)
+# Angel prices part 2      Friday 21:00                           Others, first third
+# Angel prices part 3      Friday 22:00                           Others, middle third
+# Angel prices part 4      Friday 23:00                           Others, last third; the next news build puts them live
+#                                                                 (each part also counts circuit days: last 250 sessions)
 # Full scrape, 3 lists     Sunday 00:00                           NIFTY 500 + Smallcap 500 + Microcap 250, then build
 # Others, first half       Sunday 02:00                           Every other NSE stock, half 1, then build
 # Others, second half      Sunday 04:00                           Half 2, then build
@@ -81,7 +83,7 @@ NL=/home/opc/hni-news.log
 # GITHUB BACK-UPS (run on GitHub's own clock only when the jobs above did NOT start, e.g. this server is off)
 # LTP                      Mon-Fri every 15 min, 09:00-16:15      If no LTP run in the last 30 min
 # News + build             Every 2 hours, all week                If no news build from here in the last 2 h 45 min
-# Angel prices 1 / 2 / 3   Friday 22:00 / 23:00 / Sat 00:00       If that part wasn't started 2 hours earlier
+# Angel prices 1 / 2 / 3 / 4  Friday 22:00 / 23:00 / Sat 00:00 / 01:00   If that part wasn't started 2 hours earlier
 # Full scrape, 3 lists     Sunday 02:00                           If the 00:00 scrape wasn't started
 # Others half 1 / 2        Sunday 04:00 / 06:00                   If that half wasn't started 2 hours earlier
 # Safety-net build         Mon-Sat 02:00                          If no build at all since 23:45
