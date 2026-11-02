@@ -339,9 +339,15 @@ def corporate_actions(c):
 
 CIRCUIT_DAYS = 250                                                   # trading sessions looked at for circuit days (≈ 1 year)
 
-def circuit_days(raw):
+def circuit_days(raw, upto=None):
 	"""Days in the last CIRCUIT_DAYS sessions when the price was locked all day: open = high = low = close (stuck at the upper or
-	lower circuit, nothing traded at any other price). raw = Angel's candles (date, open, high, low, close, volume), oldest first."""
+	lower circuit, nothing traded at any other price). raw = Angel's candles (date, open, high, low, close, volume), oldest first.
+	upto (a date): the 250 sessions up to that day (a back date: circuit days as known then), else up to the latest."""
+	if upto is not None:
+		u = f"{upto:%Y-%m-%d}"
+		raw = [x for x in raw if str(x[0])[:10] <= u]
+		if not raw:
+			return None                                              # not listed yet then
 	n = 0
 	for _, o, h, l, c, _v in raw[-CIRCUIT_DAYS:]:
 		try:
@@ -807,6 +813,10 @@ def main():
 				etf_raw[s], etf_close[s] = raw, [(d, v) for d, v in adjusted_closes(c) if d >= keep_from]
 			row = summarise(c, asof, with_px=(s in ETF_SYMS or s == BENCH_SYM))
 			row["CIRCUIT_250"] = circ                                # weekly (Friday price parts): circuit-locked days in the last 250 sessions
+			for k, days in PERIODS.items():                          # … and in the 250 sessions before each back date (backtests: "then")
+				cb = circuit_days(raw, asof - timedelta(days=days))
+				if cb is not None:
+					row[f"CIRCUIT_250_{k}"] = cb
 			p1 = f"1Y {row['PRICE_1Y']:>10,.2f} ({row['PRICE_1Y_DATE']})" if row.get("PRICE_1Y") is not None else "1Y        n/a"
 			ca = f"  split/bonus: {row['CORP_ACTIONS']}" if row.get("CORP_ACTIONS") else ""
 			return ({**base, **row},
@@ -867,7 +877,7 @@ def main():
 		cols += [f"MOM_{k}_R3", f"MOM_{k}_R6", f"MOM_{k}_R12"]
 	for k in range(1, 13):
 		cols += [f"MOM_M{k}_R3", f"MOM_M{k}_R6", f"MOM_M{k}_R12"]
-	cols += ["PX_MONTHLY", "ADJ_FACTOR", "CORP_ACTIONS", "CIRCUIT_250", "BACK_DATE", "STATUS", "FETCHED_AT"]
+	cols += ["PX_MONTHLY", "ADJ_FACTOR", "CORP_ACTIONS", "CIRCUIT_250"] + [f"CIRCUIT_250_{k}" for k in PERIODS] + ["BACK_DATE", "STATUS", "FETCHED_AT"]
 	out = pd.DataFrame(rows).reindex(columns=cols)
 	out.to_csv(OUT_CSV, index=False)
 	if etf_close:                                                    # raw candles + 365 days of adjusted closes (ETFs + benchmark) → the repo

@@ -1096,6 +1096,9 @@ def build_back(df, F, asof, key, prices, bench, ltps, OE=None):
         rec["mom"] = momentum(px, key) if (p1 and history_ok(px, back, yrs, win_b)) else None   # momentum as of the back date (prices up to then only); recent IPOs get none
         if lf is not None and pd.notna(lf):
             rec["lf"] = lf.strftime("%Y-%m-%d")
+        cb = g("CIRCUIT_250_%s" % key)                    # circuit-locked days in the 250 sessions before the back date
+        if cb is not None:
+            rec["circ"] = int(cb)
         rec.update(quality_extras(r, F, back))             # profit gate + growth checks, as known on that date
         rec.update(oe_fields(OE or {}, sym, back))         # owner-earnings value as known on that date
         a, b = inputs_fund(r, F, back, fin, with_trend=False)["fund"], inputs_fund(r, F, asof, fin, with_trend=False)["fund"]
@@ -2553,7 +2556,8 @@ const C = {
   roe: {k:'roe', label:'ROE %', v:s=>s.roe, f:s=>fmt(s.roe)},
   roce: {k:'roce', label:'ROCE %', v:s=>s.roce, f:s=>fmt(s.roce)},
   q: {k:'q', label:'ROCE %', tip:'ROE used for financials', v:qual, f:s=>fmt(qual(s))+(s.fin?' <span class="na">ROE</span>':'')},
-  circ: {k:'circ', label:'Circuit days', tip:'Days in the last 250 sessions (≈ 1 year) when the price was locked all day at a circuit: open = high = low = close. Checked weekly with the Friday prices. Many circuit days = hard to buy or sell at a fair price',
+  circ: {k:'circ', get label() { return BACK ? 'Circuit days (then)' : 'Circuit days'; },
+         get tip() { return (BACK ? 'Days in the 250 sessions before the back date' : 'Days in the last 250 sessions (≈ 1 year)') + ' when the price was locked all day at a circuit: open = high = low = close. Checked weekly with the Friday prices. Many circuit days = hard to buy or sell at a fair price'; },
          v:s=>s.circ == null ? null : s.circ, f:s=>s.circ == null ? NA : `<span class="${s.circ > 5 ? 'circ-hi' : s.circ ? '' : 'na'}">${s.circ}</span>`},
   from52: {k:'from52', label:'vs 52W high', v:s=>pctFrom(s.cmp,s.hi52), f:s=>{const p=pctFrom(s.cmp,s.hi52); return p==null?NA:fmt(p)+'%';}},
   score: {k:'score', label:'Value score', v:s=>s.score, f:scoreCell},
@@ -2802,7 +2806,7 @@ function industryView(name) {
   else stats([['Industry PE (selected)', fmt(g.pe[method])], ['Median PE', fmt(g.pe.median)], ['Average PE', fmt(g.pe.mean)],
          ['Cap-weighted PE', fmt(g.pe.weighted)], ['Median PB', fmt(g.medPB,2)], ['Stocks', g.n]], g.stocks.filter(vis), yoyTiles(g.stocks.filter(vis)));
   view.appendChild(pePicker());
-  view.appendChild(makeTable('ind', [C.sym, C.nameBag, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...assetCols(), C.score, C.q, C.cagr, C.fcfy, C.dy, C.proChg, C.mcap, C.from52],
+  view.appendChild(makeTable('ind', [C.sym, C.nameBag, C.cmp, C.circ, C.pe, C.cpe, C.prem, C.pb, ...assetCols(), C.score, C.q, C.cagr, C.fcfy, C.dy, C.proChg, C.mcap, C.from52],
     g.stocks.filter(vis), {sortKey:'pe', sortDir:1, search:true, csv:() => csvName('Industry_' + g.name, {}, {}, [])}));
   hint('Sorted by PE, lowest first. Green = PE below industry PE (discount), red = above (premium).');
 }
@@ -3087,7 +3091,7 @@ const VF_PRESETS = [
 const vfMain = st => (NOPRICE ? '' : fNum(st,'maxPE','Max PE',{min:0})) + fNum(st,'minQ','Min ROCE / ROE %')
   + fNum(st,'minScore','Min score',{min:0,max:100,step:5}) + fNum(st,'minTrend','Min Trend %',{min:0,max:100,step:10})
   + (NOPRICE ? '' : fNum(st,'minMom','Min momentum',{min:0,max:100,step:5}))
-  + (NOPRICE ? '' : fNum(st,'maxCirc','Max circuit days (1Y)',{min:0,step:1}))
+  + (NOPRICE ? '' : fNum(st,'maxCirc',BACK ? 'Max circuit days (1Y then)' : 'Max circuit days (1Y)',{min:0,step:1}))
   + fChk(st,'trap','Hide value traps');
 const vfMore = st => (NOPRICE ? '' : fNum(st,'maxPB','Max PB',{min:0,step:0.5}) + fNum(st,'maxPrem','Max vs industry PE %',{step:5})
   + fNum(st,'maxPeg','Max PEG',{min:0,step:0.25}) + fNum(st,'minFcf','Min FCF yield %',{step:0.5})
@@ -3487,7 +3491,7 @@ function allView() {
          ['Median PE', fmt(median(rows.map(s => s.pe)))], ['Median PB', fmt(median(rows.map(s => s.pb)), 2)],
          ['Median ROE %', fmt(median(rows.map(s => s.roe)))]], rows);
   view.appendChild(makeTable('all',
-    [C.sym, C.ind, C.score, C.name, C.mom, C.trend, C.cmp, C.pe, C.cpe, C.prem, C.pb, ...safeCols(), ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.dy, C.proChg, C.mcap, C.from52, C.flags],
+    [C.sym, C.ind, C.score, C.name, C.mom, C.trend, C.cmp, C.circ, C.pe, C.cpe, C.prem, C.pb, ...safeCols(), ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.dy, C.proChg, C.mcap, C.from52, C.flags],
     rows, {sortKey:'mcap', sortDir:-1, search:true, csv:() => csvName('All_stocks', af, AF_DEF, VF_CSV_KEYS())}));
   if (!priced.length) view.insertAdjacentHTML('beforeend', '<p class="hint">No prices for this date yet (prices.csv has no price for it), so nothing to list.</p>');
 }
@@ -5563,10 +5567,10 @@ AUTH_WEB = {
     "__AUTH_HEAD__": '<style>html[data-auth="required"]:not(.auth-ok) body>*:not(.au-wait):not(.au-back){filter:blur(8px);pointer-events:none}</style>\n'
                      # signed in and checked within the last hour → page shows at once; auth.js confirms quietly behind it
                      '<script>(function(){try{var d=document.documentElement,L=localStorage,p=L.getItem("hni_pro");if(d.dataset.page!=="home"&&L.getItem("hni_signed")==="1")d.classList.add("hni-nav");if(p==="1")d.classList.add("hni-pro");else if(p==="0"){d.classList.add("hni-free");if(L.getItem("hni_plus")==="1")d.classList.add("hni-plus")}if(L.getItem("hni_demo")==="1")d.classList.add("hni-demo");if(L.getItem("hni_signed")==="1"&&Date.now()-(+L.getItem("hni_auth_at")||0)<36e5)d.classList.add("auth-ok")}catch(e){}})()</script>\n'
-                     '<link rel="stylesheet" href="auth.css?v=46">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
-                     '<script type="module" src="auth.js?v=46"></script>\n',
+                     '<link rel="stylesheet" href="auth.css?v=47">\n'          # ?v=: bump with every auth.js / auth.css change (sw.js cache)
+                     '<script type="module" src="auth.js?v=47"></script>\n',
     # straight after the header, not deferred: Navigate + avatar are there from the first paint (no blink)
-    "__AUTH_HDR__": '<script src="hdr.js?v=46"></script>\n',
+    "__AUTH_HDR__": '<script src="hdr.js?v=47"></script>\n',
     "__AUTH_BODY__": '<div class="au-wait"><div class="au-chkbox" id="auWait" role="status"><i class="au-spin"></i><span>Checking login…</span></div></div>\n'
                      # safety net: if auth.js never answers (missing file, blocked script, offline), don't hang forever
                      '<script>setTimeout(function(){if(!document.documentElement.classList.contains("auth-ok")){'
