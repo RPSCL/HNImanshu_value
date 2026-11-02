@@ -323,6 +323,22 @@ def corporate_actions(c):
 	return ev
 
 
+CIRCUIT_DAYS = 250                                                   # trading sessions looked at for circuit days (≈ 1 year)
+
+def circuit_days(raw):
+	"""Days in the last CIRCUIT_DAYS sessions when the price was locked all day: open = high = low = close (stuck at the upper or
+	lower circuit, nothing traded at any other price). raw = Angel's candles (date, open, high, low, close, volume), oldest first."""
+	n = 0
+	for _, o, h, l, c, _v in raw[-CIRCUIT_DAYS:]:
+		try:
+			o, h, l, c = float(o), float(h), float(l), float(c)
+		except (TypeError, ValueError):
+			continue
+		if o > 0 and o == h == l == c:
+			n += 1
+	return n
+
+
 def summarise(c, asof: date, with_px=False):
 	"""Numbers for one symbol from its candles (oldest → newest): latest close + one price per back period."""
 	ev = corporate_actions(c)
@@ -764,17 +780,19 @@ def main():
 		tag = f"  [{i:>4}/{n_all}] {s:<14} {asym:<18} token {tok:<8}"
 		try:
 			keep = s in ETF_SYMS or s == BENCH_SYM
-			raw = [] if keep else None
+			raw = []                                                 # every symbol: its raw candles give the circuit days
 			c = api.candles(tok, start, end, raw)
 			if not c:
 				raise RuntimeError("no candles")
+			circ = circuit_days(raw)
 			if keep:                                                 # ETFs + benchmark: raw candles + last 365 days of closes → etf_prices/
 				etf_raw[s], etf_close[s] = raw, [(d, v) for d, v in adjusted_closes(c) if d >= keep_from]
 			row = summarise(c, asof, with_px=(s in ETF_SYMS or s == BENCH_SYM))
+			row["CIRCUIT_250"] = circ                                # weekly (Friday price parts): circuit-locked days in the last 250 sessions
 			p1 = f"1Y {row['PRICE_1Y']:>10,.2f} ({row['PRICE_1Y_DATE']})" if row.get("PRICE_1Y") is not None else "1Y        n/a"
 			ca = f"  split/bonus: {row['CORP_ACTIONS']}" if row.get("CORP_ACTIONS") else ""
 			return ({**base, **row},
-			        f"{tag} LTP {row['LTP']:>10,.2f} ({row['LTP_DATE']})  {p1}  {len(c)} candles  {row['STATUS']}{ca}", True)
+			        f"{tag} LTP {row['LTP']:>10,.2f} ({row['LTP_DATE']})  {p1}  {len(c)} candles  circuit {circ}d  {row['STATUS']}{ca}", True)
 		except Exception as ex:
 			return ({**base, "STATUS": f"FAILED: {str(ex)[:80]}"}, f"{tag} FAILED  {str(ex)[:100]}", False)
 
@@ -831,7 +849,7 @@ def main():
 		cols += [f"MOM_{k}_R3", f"MOM_{k}_R6", f"MOM_{k}_R12"]
 	for k in range(1, 13):
 		cols += [f"MOM_M{k}_R3", f"MOM_M{k}_R6", f"MOM_M{k}_R12"]
-	cols += ["PX_MONTHLY", "ADJ_FACTOR", "CORP_ACTIONS", "BACK_DATE", "STATUS", "FETCHED_AT"]
+	cols += ["PX_MONTHLY", "ADJ_FACTOR", "CORP_ACTIONS", "CIRCUIT_250", "BACK_DATE", "STATUS", "FETCHED_AT"]
 	out = pd.DataFrame(rows).reindex(columns=cols)
 	out.to_csv(OUT_CSV, index=False)
 	if etf_close:                                                    # raw candles + 365 days of adjusted closes (ETFs + benchmark) → the repo

@@ -1000,6 +1000,9 @@ def build_all(df, asof, prices=None, bench=None):
         lf0 = lf_t.strftime("%Y-%m-%d") if pd.notna(lf_t) else ""     # first price day we have (the PF Builder leaves out recent IPOs with it)
         if lf0:
             rec0["lf"] = lf0
+        circ = g("CIRCUIT_250")                             # circuit-locked days in the last 250 sessions (weekly price fetch)
+        if circ is not None:
+            rec0["circ"] = int(circ)
         qx = quality_extras(r, F, asof)
         qx.update(oe_fields(OE, sym, asof))                   # owner-earnings value (same for both of today's records)
         rec0.update(qx)
@@ -1015,6 +1018,8 @@ def build_all(df, asof, prices=None, bench=None):
             rec_n["mom1"] = m1
         if lf0:
             rec_n["lf"] = lf0
+        if circ is not None:
+            rec_n["circ"] = int(circ)
         rec_n.update(qx)
         smnow.append(rec_n)
         ltps[sym] = (ltp, ltp_src)
@@ -1195,6 +1200,7 @@ body.day{
 .preset.on{background:var(--brass);border-color:var(--brass);color:var(--bg)}
 .preset-custom{font:600 11px var(--mono);color:var(--faint);line-height:28px;padding:0 4px;font-style:italic}
 .preset.us{border-style:dashed}
+.circ-hi{color:var(--bad);font-weight:700}
 .preset.us::before{content:"★ ";opacity:.7}
 .us-cnt{margin:8px 0 6px;font:500 11.5px var(--mono);color:var(--faint)}
 .us-list{display:flex;flex-direction:column;gap:6px;max-height:40vh;overflow:auto}
@@ -1718,6 +1724,7 @@ table.cmp thead th:first-child{left:0;z-index:3}
 .pf-zh .up,.pf-zh .up b{color:var(--good)} .pf-zh .dn,.pf-zh .dn b{color:var(--bad)}
 .pf-zh .b b.up{color:var(--good)} .pf-zh .b b.dn{color:var(--bad)}
 .pf-zh em.dn{font-style:normal;font-size:12px}
+.pf-zh .pf-zday{margin:-3px 0 4px;font-size:11.5px}
 .pf-zt .a{font:500 12px var(--mono);color:var(--faint)}
 .pf-zt .b{margin-top:5px;font-size:13.5px;color:var(--mute)}
 .pf-zt .b b{color:var(--ink)}
@@ -2543,6 +2550,8 @@ const C = {
   roe: {k:'roe', label:'ROE %', v:s=>s.roe, f:s=>fmt(s.roe)},
   roce: {k:'roce', label:'ROCE %', v:s=>s.roce, f:s=>fmt(s.roce)},
   q: {k:'q', label:'ROCE %', tip:'ROE used for financials', v:qual, f:s=>fmt(qual(s))+(s.fin?' <span class="na">ROE</span>':'')},
+  circ: {k:'circ', label:'Circuit days', tip:'Days in the last 250 sessions (≈ 1 year) when the price was locked all day at a circuit: open = high = low = close. Checked weekly with the Friday prices. Many circuit days = hard to buy or sell at a fair price',
+         v:s=>s.circ == null ? null : s.circ, f:s=>s.circ == null ? NA : `<span class="${s.circ > 5 ? 'circ-hi' : s.circ ? '' : 'na'}">${s.circ}</span>`},
   from52: {k:'from52', label:'vs 52W high', v:s=>pctFrom(s.cmp,s.hi52), f:s=>{const p=pctFrom(s.cmp,s.hi52); return p==null?NA:fmt(p)+'%';}},
   score: {k:'score', label:'Value score', v:s=>s.score, f:scoreCell},
   mom: {k:'mom', label:'Momentum', tip:'Price momentum 0–100: percentile of the 1M, 3M, 6M and 12-minus-1-month returns vs every stock on screen, averaged, plus up to +10 when the returns step up (1M > 3M > 6M > 12M). Hover a value for the returns.',
@@ -3061,7 +3070,7 @@ function safeOk(s, f) {
   }
   return true;
 }
-const VF_DEF = {maxPE:'', maxPB:'', minQ:12, minScore:0, minFcf:'', minMcap:0, maxMcap:'', trap:true, graham:false, minTrend:'',
+const VF_DEF = {maxCirc:5, maxPE:'', maxPB:'', minQ:12, minScore:0, minFcf:'', minMcap:0, maxMcap:'', trap:true, graham:false, minTrend:'',
                 maxPrem:'', maxPeg:'', minDy:0.01, minCc:'', maxPta:'', maxPfa:'', minInv:'', maxDe:'', minUp:'', maxNpa:'', minRoa:'', minQ5:'', maxDebitda:'', maxNnpa:'', minPcr:'', minCfo:'', minMom:40, minOe:''};
 const GRAHAM_SAFE = {minQ5:12, minUp:7, maxDe:1, maxDebitda:2.5, minRoa:1.5, maxNpa:2.5, maxNnpa:1, minPcr:70};   // Graham's safety tests, used by both Graham screens
 const VF_PRESETS = [
@@ -3075,6 +3084,7 @@ const VF_PRESETS = [
 const vfMain = st => (NOPRICE ? '' : fNum(st,'maxPE','Max PE',{min:0})) + fNum(st,'minQ','Min ROCE / ROE %')
   + fNum(st,'minScore','Min score',{min:0,max:100,step:5}) + fNum(st,'minTrend','Min Trend %',{min:0,max:100,step:10})
   + (NOPRICE ? '' : fNum(st,'minMom','Min momentum',{min:0,max:100,step:5}))
+  + (NOPRICE ? '' : fNum(st,'maxCirc','Max circuit days (1Y)',{min:0,step:1}))
   + fChk(st,'trap','Hide value traps');
 const vfMore = st => (NOPRICE ? '' : fNum(st,'maxPB','Max PB',{min:0,step:0.5}) + fNum(st,'maxPrem','Max vs industry PE %',{step:5})
   + fNum(st,'maxPeg','Max PEG',{min:0,step:0.25}) + fNum(st,'minFcf','Min FCF yield %',{step:0.5})
@@ -3096,16 +3106,17 @@ const vfMore = st => (NOPRICE ? '' : fNum(st,'maxPB','Max PB',{min:0,step:0.5}) 
 const vfMoreKeys = () => NOPRICE ? ['minCc','minQ5','minUp','minCfo','maxDe','maxDebitda','minRoa','maxNpa','maxNnpa','minPcr','minMcap','maxMcap']
   : ['maxPB','maxPrem','maxPeg','minFcf','minOe','minDy','minCc','minQ5','minUp','minCfo','maxDe','maxDebitda','minRoa','maxNpa','maxNnpa','minPcr','maxPta','maxPfa','minInv','minMcap','maxMcap','graham'];
 const VF_CSV_KEYS = () => NOPRICE ? ['minMcap','maxMcap','minQ','minScore','minTrend','minCc','minQ5','minUp','minCfo','maxDe','maxDebitda','minRoa','maxNpa','maxNnpa','minPcr','trap']
-  : ['minMcap','maxMcap','maxPE','minQ','minScore','minTrend','minMom','maxPB','maxPrem','maxPeg','minFcf','minOe','minDy','minCc','minQ5','minUp','minCfo','maxDe','maxDebitda','minRoa','maxNpa','maxNnpa','minPcr','maxPta','maxPfa','minInv','trap','graham'];
+  : ['minMcap','maxMcap','maxPE','minQ','minScore','minTrend','minMom','maxCirc','maxPB','maxPrem','maxPeg','minFcf','minOe','minDy','minCc','minQ5','minUp','minCfo','maxDe','maxDebitda','minRoa','maxNpa','maxNnpa','minPcr','maxPta','maxPfa','minInv','trap','graham'];
 /* one stock against one filter set; a blank box = no filter, and a missing value fails a set filter */
 function passVF(s, f) {
-  const on = k => !unsetF(f[k]) && !(typeof f[k] === 'number' && f[k] === 0 && k !== 'maxPE');
+  const on = k => !unsetF(f[k]) && !(typeof f[k] === 'number' && f[k] === 0 && k !== 'maxPE' && k !== 'maxCirc');   // max circuit days 0 = none allowed
   const max = (k, v) => !on(k) || (v != null && isFinite(v) && v <= f[k]);
   const min = (k, v) => !on(k) || (v != null && isFinite(v) && v >= f[k]);
   return (NOPRICE || (max('maxPE', s.pe) && max('maxPB', s.pb) && max('maxPrem', prem(s)) && max('maxPeg', peg(s))
           && min('minDy', s.dy) && (s.fin || min('minFcf', s.fcfy)) && min('minOe', oem(s)) && max('maxPta', s.pta)
           && (!has('pfa') || max('maxPfa', s.pfa)) && (!has('invp') || min('minInv', s.invp))
-          && (!HAS_MOM || min('minMom', s.momS)) && (!f.graham || grahamPass(s))))   // a momentum filter set: no momentum ("–") never passes
+          && (!HAS_MOM || min('minMom', s.momS)) && (!f.graham || grahamPass(s))
+          && (s.circ == null || max('maxCirc', s.circ))))   // no circuit count yet (not in the weekly price fetch): not judged   // a momentum filter set: no momentum ("–") never passes
     && min('minQ', qual(s)) && (s.fin || min('minCc', s.cc)) && min('minScore', s.score)
     && safeOk(s, f) && mcapOk(s, f) && (!f.trap || !trapReasons(s).length) && trendOk(s, f.minTrend);
 }
@@ -3167,7 +3178,7 @@ function valueView() {
          ['Median PE', fmt(median(rows.map(s=>s.pe)))], ['Median PB', fmt(median(rows.map(s=>s.pb)),2)],
          ['Graham pass', rows.filter(grahamPass).length]], rows);
   view.appendChild(makeTable(OE_ON ? 'value_oe' : 'value',
-    [C.sym, C.ind, C.score, C.name, C.mom, C.trend, C.cmp, ...(OE_ON ? [C.oem, C.oev] : []), C.pe, C.cpe, C.prem, C.pb, ...safeCols(), ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
+    [C.sym, C.ind, C.score, C.name, C.mom, C.trend, C.cmp, C.circ, ...(OE_ON ? [C.oem, C.oev] : []), C.pe, C.cpe, C.prem, C.pb, ...safeCols(), ...assetCols(), C.q, C.cagr, C.peg, C.fcfy, C.cc, C.opmT, C.gup, C.dy, C.proChg, C.mcap, C.flags, C.spark],
     rows, {sortKey: OE_ON ? 'oem' : 'score', sortDir:-1, search:true, csv:() => csvName('Value_screen', vf, VF_DEF,
       VF_CSV_KEYS())}));
   if (NOPRICE) hint('1 year back (no prices.csv yet) the score uses only the quality metrics as they stood then (ROCE / ROE, EPS growth, cash conversion), ranked within each industry. Green / red "since" columns show what the business did after that. Mcap filter uses today\'s market cap.');
@@ -3464,7 +3475,7 @@ const btOf = k => {
 };
 const BT_ROUTE = h => h.startsWith('#/industry/') || h === '#/' || h === '' ? 'home' : h.slice(2);
 /* ---------- ALL STOCKS: no screen, no filter; every stock in the chosen list that has a price on the date shown ---------- */
-const AF_DEF = Object.assign({}, VF_DEF, {minQ:'', minDy:'', trap:false, minMom:''});   // All Stocks: every filter off by default
+const AF_DEF = Object.assign({}, VF_DEF, {minQ:'', minDy:'', trap:false, minMom:'', maxCirc:''});   // All Stocks: every filter off by default
 function allView() {
   setNav('all'); view.innerHTML = '';
   const af = filterBox({key:'af', def:AF_DEF, main: vfMain, more: vfMore, moreKeys: vfMoreKeys()}, allView);
@@ -3480,7 +3491,7 @@ function allView() {
 
 /* ---------- MOMENTUM: stocks by price momentum, strongest first. Default: momentum 70+ and nothing else;
    the Filters button has every Value-screen filter (off) plus Max momentum. ---------- */
-const MOM_DEF = Object.assign({}, AF_DEF, {minMom:70, maxMom:''});
+const MOM_DEF = Object.assign({}, AF_DEF, {minMom:70, maxMom:'', maxCirc:5});
 const momMain = st => vfMain(st) + fNum(st,'maxMom','Max momentum',{min:0,max:100,step:5});
 function momentumView() {
   setNav('momentum'); view.innerHTML = '';
@@ -3492,7 +3503,7 @@ function momentumView() {
   stats([['Showing', rows.length], ['Momentum', hasMax ? lo + ' – ' + mf.maxMom : '≥ ' + lo], ['Median momentum', fmt(median(rows.map(s => s.momS)), 0)],
          ['Median PE', fmt(median(rows.map(s => s.pe)))], ['Median vs 52W high', fmt(median(rows.map(s => pctFrom(s.cmp, s.hi52)))) + '%']], rows);
   view.appendChild(makeTable('mom',
-    [C.sym, C.ind, C.mom, C.name, C.score, C.trend, C.cmp, C.from52, C.pe, C.pb, C.q, C.cagr, C.dy, C.mcap, C.flags],
+    [C.sym, C.ind, C.mom, C.name, C.score, C.trend, C.cmp, C.circ, C.from52, C.pe, C.pb, C.q, C.cagr, C.dy, C.mcap, C.flags],
     rows, {sortKey:'mom', sortDir:-1, search:true, csv:() => csvName('Momentum', mf, MOM_DEF, VF_CSV_KEYS().concat('maxMom'))}));
   if (!V().some(s => ok(s.momS))) view.insertAdjacentHTML('beforeend', GF.uni === OTH
     ? '<p class="hint">No momentum for the Others list yet: it needs their prices, which the next weekly price update (Saturday) adds.</p>'
@@ -4293,6 +4304,7 @@ function pfPhone(P) {
     return `<div class="pf-zh" data-news="${esc(r.sym)}" role="button" tabindex="0">
       <div class="a"><span>Qty. ${fmt(r.qty, 0)} <i>•</i> Avg. ${f2(r.avg)}</span><span class="${c}">${r.priced ? pctTxt(r.pnlPct) : ''}</span></div>
       <div class="b"><b>${esc(r.sym)}${nl.has(r.sym) ? ' <em class="dn">⚠</em>' : ''} ${(v => v ? vdChip(v) : pfIsEtf(r.sym, r.name) ? etfChip() : '')(r.vd || verdict(r.sym, P))}</b><b class="${c}">${r.priced ? (r.pnl > 0 ? '+' : r.pnl < 0 ? '−' : '') + f2(Math.abs(r.pnl)) : '–'}</b></div>
+      ${r.day != null ? `<div class="a pf-zday"><span></span><span class="${r.day >= 0 ? 'up' : 'dn'}">Day ${r.day > 0 ? '+' : r.day < 0 ? '−' : ''}₹${f2(Math.abs(r.day))}</span></div>` : ''}
       <div class="a"><span>Invested ${f2(r.qty * r.avg)}</span><span>LTP ${r.ltp == null ? '–' : f2(r.ltp)}${r.dayPct != null ? ` <em class="${r.day >= 0 ? 'up' : 'dn'}">(${pctTxt(r.dayPct)})</em>` : ''}</span></div>
       ${r.remark ? `<div class="a pf-zsrc"><span class="pf-src">${esc(r.remark)}</span></div>` : ''}
     </div>`; }).join('')
@@ -4322,6 +4334,7 @@ function pfPhone(P) {
 const PF_ZSORT = {
   name:  {label: 'Stock name',  up: 1, v: r => r.sym},
   day:   {label: "Day's P&L %", v: r => r.dayPct},
+  dayr:  {label: "Day's P&L ₹", v: r => r.day},
   pnl:   {label: 'Overall P&L %', v: r => r.priced ? r.pnlPct : null},
   value: {label: 'Current value', v: r => r.value},
   remark:{label: 'Remark',      up: 1, v: r => r.remark || ''},
