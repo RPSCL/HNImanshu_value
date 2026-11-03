@@ -4037,7 +4037,7 @@ function pfTypesLine(P) {
   return `<p class="pf-types" title="By type: day gain %, overall gain % on cost in brackets">${P.byType.map(t =>
     `<span><i>${esc(t.k)}</i> <b class="${c(t.dayPct)}">${t.dayPct == null ? '–' : pctTxt(t.dayPct, 1)}</b> <small class="${c(t.allPct)}">(${t.allPct == null ? '–' : pctTxt(t.allPct, 1)})</small></span>`).join('<em>·</em>')}</p>`;
 }
-const hLoad = t => `<div class="hload" role="status"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--panel2)"/><text x="16" y="16.5" dominant-baseline="central" font-family="Georgia,serif" font-size="18" font-weight="bold" fill="var(--brass)" text-anchor="middle">H</text></svg><span class="hl-t">${t}</span></div>`;
+const hLoad = t => `<div class="hload" role="status"><svg viewBox="0 0 32 32" aria-hidden="true"><text x="16" y="16.5" dominant-baseline="central" font-family="Georgia,serif" font-size="30" font-weight="bold" fill="var(--brass)" text-anchor="middle">H</text></svg><span class="hl-t">${t}</span></div>`;
 function portfolioView() {
   setNav('portfolio'); view.innerHTML = '';
   if (BACK) {                                             // a portfolio is about today; Historical would mix dates
