@@ -1446,6 +1446,10 @@ table.chk-t td small{display:block;color:var(--faint);font-size:11.5px}
 table.chk-t td:last-child,table.chk-t th:last-child{white-space:nowrap;width:1%}
 table.chk-t .pf-sym{cursor:pointer;color:var(--ink)}
 .chk-note{margin:12px 0 0;font-size:11.5px;color:var(--faint)}
+.chk-h.sell{color:var(--bad)} .chk-h.watch{color:var(--warn,#e0b840)} .chk-h.hold{color:var(--mute)}
+table.chk-t td small.chk-why{white-space:normal;line-height:1.35;margin-top:3px;color:var(--mute)}
+.chk-sb{margin:12px 0 2px;font-size:12px;color:var(--mute);line-height:1.8}
+.chk-box .chk-sb input{width:58px!important;display:inline-block;height:26px;margin:0 3px;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:600 12px var(--mono);text-align:right}
 .chk-h .chk-cp{margin-left:auto;height:24px;padding:0 9px;font-size:11px;text-transform:none;letter-spacing:0}
 table.chk-t td.r,table.chk-t th.r{text-align:right;white-space:nowrap}
 table.chk-t .up{color:var(--good)} table.chk-t .dn{color:var(--bad)}
@@ -4124,7 +4128,7 @@ const PB_KEYS = {score: 'Value score', mom: 'Momentum score', pe: 'PE', pb: 'PB'
 let PF_CHK = null, PF_CHK_SIG = '', PF_CHK_P = null, PB_ETF = null;
 const IC_INFO = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r=".6" fill="currentColor"/></svg>';
 function pfChkBtn() {
-  const c = PF_CHK, n = c && c.ok ? c.out.length + c.inn.length : 0;
+  const c = PF_CHK, n = c && c.ok ? (c.sell ? c.sell.length + c.watch.length : c.out.length) + c.inn.length : 0;
   const off = !c || !c.ok;                                     // only when every holding came from PF Builder ("Add … to portfolio")
   const t = !c ? 'PF Builder check: compares your PF Builder holdings with the PF Builder lists of today'
     : !c.parts.length ? 'PF Builder check: no holdings from PF Builder yet. Add stocks with “Add all stocks to portfolio” in PF Builder'
@@ -4178,6 +4182,47 @@ function pbCfg() {
 }
 const pbMomOk = (s, mf) => passVF(s, mf) && (unsetF(mf.maxMom) || !(+mf.maxMom > 0) || Math.round(s.momS) <= +mf.maxMom);
 window.pbCfg = pbCfg; window.pbMomOk = pbMomOk;
+/* ---------- sell signals (PF Builder check) ----------
+   A holding that left its list is not sold at once:
+     Hold   still inside the buffer: passes the screen with every limit loosened by SB.buf % (PE 15 → 18, PB 2 → 2.4, ROCE 10 → 8,
+            momentum 70 → 56 …) and, for a top-N list, ranks within the top N × SB.band
+     Watch  outside the buffer this week (first weekly data date seen there)
+     Sell   outside the buffer for 2 weekly data dates in a row, or a hard exit at once: value-trap flag, too many circuit days,
+            dividend stopped, a Graham test failed. ETF / ETF pair: the index part no longer holds it.
+   SB = {buf, band} in your settings (account); the first week each holding was seen outside: FF.sz {"SYM|Part": data date} */
+const SB = () => Object.assign({buf: 20, band: 2}, FF.sb || {});
+const PB_BUF_MAX = ['maxPE', 'maxPB', 'maxPeg', 'maxPta', 'maxPfa', 'maxDe', 'maxDebitda', 'maxNpa', 'maxNnpa', 'maxMom'];
+const PB_BUF_MIN = ['minQ', 'minScore', 'minTrend', 'minMom', 'minFcf', 'minOe', 'minCc', 'minQ5', 'minUp', 'minCfo', 'minRoa', 'minPcr', 'minInv'];
+const PB_HARD = ['trap', 'maxCirc', 'minDy', 'graham'];
+function pbBuffer(f, b) {
+  const g = Object.assign({}, f);
+  PB_BUF_MAX.forEach(k => { if (!unsetF(g[k]) && +g[k] > 0) g[k] = +(+g[k] * (1 + b)).toFixed(3); });
+  PB_BUF_MIN.forEach(k => { if (!unsetF(g[k]) && +g[k] > 0) g[k] = +(+g[k] * (1 - b)).toFixed(3); });
+  return g;
+}
+const PB_LAB = {maxPE: 'PE', maxPB: 'PB', maxPeg: 'PEG', maxPta: 'Mcap ÷ Assets', maxPfa: 'Mcap ÷ Fixed assets', maxDe: 'Debt ÷ equity', maxDebitda: 'Debt ÷ EBITDA',
+  maxNpa: 'Gross NPA', maxNnpa: 'Net NPA', maxMom: 'Momentum', minQ: 'ROCE', minScore: 'Score', minTrend: 'Trend', minMom: 'Momentum', minFcf: 'FCF yield', minOe: '% under owner-earnings value',
+  minCc: 'Cash conv.', minQ5: 'ROCE 5Y median', minUp: 'Profit-up yrs', minCfo: 'CFO+ yrs', minRoa: 'ROA', minPcr: 'PCR', minInv: 'Investments % Mcap', maxCirc: 'Circuit days', minDy: 'Dividend yield'};
+const PB_VAL = {maxPE: s => s.pe, maxPB: s => s.pb, maxMom: s => s.momS, minMom: s => s.momS, minQ: s => qual(s), minScore: s => s.score, minDy: s => s.dy, maxCirc: s => s.circ,
+  minTrend: s => s.tr ? s.tr.pct : null, minFcf: s => s.fcfy, minCc: s => s.cc, minQ5: s => s.q5, minRoa: s => s.roa, maxDe: s => s.de, maxDebitda: s => s.debitda, maxPta: s => s.pta, maxPfa: s => s.pfa};
+/* why a stock fails a screen: each limit it misses (with the sell limit), hard exits first → {hard, why: [...]} */
+function pbWhy(s, F) {
+  if (!s) return {hard: false, why: ['not in today\'s data']};
+  const {f, fb} = F, off = {}, why = [], hardW = [];
+  Object.keys(f).forEach(k => { off[k] = typeof f[k] === 'boolean' ? false : ''; });
+  const one = k => k === 'maxMom' ? (unsetF(f.maxMom) || !(+f.maxMom > 0) || Math.round(s.momS) <= +f.maxMom) : passVF(s, Object.assign({}, off, {[k]: f[k]}));
+  Object.keys(f).forEach(k => {
+    if (typeof f[k] === 'boolean' ? !f[k] : unsetF(f[k]) || (+f[k] === 0 && k !== 'maxCirc')) return;
+    if (one(k)) return;
+    const v = PB_VAL[k] ? PB_VAL[k](s) : null, lab = PB_LAB[k] || k, mx = k.startsWith('max');
+    if (k === 'trap') hardW.push('value-trap flag: ' + (trapReasons(s)[0] || 'yes'));
+    else if (k === 'graham') hardW.push('Graham PE × PB test failed');
+    else if (k === 'minDy') hardW.push(v == null || v <= 0 ? 'no dividend' : `dividend yield ${fmt(v, 2)}% < ${f[k]}%`);
+    else if (k === 'maxCirc') hardW.push(`circuit days ${v} > ${f[k]}`);
+    else why.push(`${lab} ${v == null ? '–' : fmt(+v, k === 'maxPB' || k === 'maxDe' ? 2 : 1)} ${mx ? '>' : '<'} ${f[k]}` + (fb && fb[k] !== f[k] ? ` (sell ${mx ? 'above' : 'below'} ${fb[k]})` : ''));
+  });
+  return {hard: hardW.length > 0, why: hardW.concat(why)};
+}
 function pbLists(C0) {                                        // today's PF Builder lists, worked out in this page (view restored after)
   const C = C0 || pbSel(), keep = {uni: GF.uni, psu: GF.psu, semi: GF.semi}, P = pbCfg(), vf = P.vf;
   const day = 864e5, cut = new Date(Date.parse(D.asOf) - 365 * day).toISOString().slice(0, 10);
@@ -4192,9 +4237,18 @@ function pbLists(C0) {                                        // today's PF Buil
       const pool = k === 'value' ? V().filter(s => !young(s) && s.score != null && s.cmp != null && passVF(s, vf))
                                  : V().filter(s => !young(s) && ok(s.momS) && s.cmp != null && pbMomOk(s, P.mf));
       out[k] = pbChoose(pool, C[k], k).map(s => s.sym);
+      /* sell signals: a holding is kept while it still passes the screen with the buffer (limits loosened by SB.buf) and, when the
+         list takes the top N, ranks within the top N × SB.band */
+      const fb = pbBuffer(k === 'value' ? vf : P.mf, SB().buf / 100);
+      const bpool = k === 'value' ? V().filter(s => !young(s) && s.score != null && s.cmp != null && passVF(s, fb))
+                                  : V().filter(s => !young(s) && ok(s.momS) && s.cmp != null && pbMomOk(s, fb));
+      out[k + 'Keep'] = new Set(pbChoose(bpool, Object.assign({}, C[k], {n: C[k].n > 0 ? Math.ceil(C[k].n * SB().band) : 0}), k).map(s => s.sym));
+      out[k + 'Rank'] = new Map(pbChoose(bpool, Object.assign({}, C[k], {n: 0}), k).map((s, i) => [s.sym, i + 1]));
+      out[k + 'F'] = {f: k === 'value' ? vf : P.mf, fb};
     }
   } finally { Object.assign(GF, keep); setMode(); computeScores.S = null; computeScores(); }
-  return {C, value: out.value, mom: out.mom};
+  return {C, value: out.value, mom: out.mom, keep: {Value: out.valueKeep, Momentum: out.momKeep}, rank: {Value: out.valueRank, Momentum: out.momRank},
+    F: {Value: out.valueF, Momentum: out.momF}};
 }
 const PB_SCOPE = {all: 'All parts', index: 'Index ETFs only', value: 'Value only', mom: 'Momentum only'};
 async function pfChkCalc() {
@@ -4246,6 +4300,24 @@ async function pfChkCalc() {
     }
   }
   const byName = new Map(); res.inn.forEach(x => byName.set(x.part + x.sym, x)); res.inn = [...byName.values()];
+  /* sell signals for what left its list: Hold (inside the buffer) / Watch (first week outside) / Sell (2nd week, or a hard exit) */
+  const sz = Object.assign({}, FF.sz || {}), seen = new Set(), wk = D.asOf, B = SB();
+  res.out.forEach(x => {
+    if (x.part === 'ETF' || x.part === 'ETF pair') { x.stage = 'sell'; x.why = x.part === 'ETF pair' ? 'the slot now holds the other ETF' : 'no longer in the index part'; return; }
+    const s0 = TODAY.get(x.sym), W = L.F && L.F[x.part] ? pbWhy(s0, L.F[x.part]) : {hard: false, why: []};
+    const rank = L.rank && L.rank[x.part] ? L.rank[x.part].get(x.sym) : null, n = (L.C[x.part === 'Value' ? 'value' : 'mom'] || {}).n || 0;
+    if (!W.why.length) W.why.push(rank ? `ranks ${rank}: outside the top ${n}` + (n ? ` (sell outside the top ${Math.ceil(n * B.band)})` : '') : 'not in the list (list / PSU / recent listing)');
+    x.why = W.why.join(' · ');
+    if (W.hard) { x.stage = 'sell'; x.hardExit = true; return; }
+    if (L.keep && L.keep[x.part] && L.keep[x.part].has(x.sym)) { x.stage = 'hold'; return; }
+    const key = x.sym + '|' + x.part; seen.add(key);
+    if (!sz[key]) sz[key] = wk;
+    x.stage = sz[key] === wk ? 'watch' : 'sell';
+    x.since = sz[key];
+  });
+  Object.keys(sz).forEach(k => { if (!seen.has(k)) delete sz[k]; });
+  if (JSON.stringify(sz) !== JSON.stringify(FF.sz || {}) && !EMBED) { FF.sz = sz; ffSave(); }
+  res.sell = res.out.filter(x => x.stage === 'sell'); res.watch = res.out.filter(x => x.stage === 'watch'); res.hold = res.out.filter(x => x.stage === 'hold');
   return res;
 }
 const pbSelTxt = c => `${c.uni === 'all' ? 'All lists' : c.uni} · by ${PB_KEYS[c.key] || c.key}, ${c.dir === 'asc' ? 'low → high' : 'high → low'} · ${c.n > 0 ? 'top ' + c.n : 'all that pass'}`;
@@ -4277,19 +4349,21 @@ async function pfChkOpen() {
   const pc = v => v == null ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + fmt(Math.abs(v), 2) + '%';
   const ud = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'dn' : '';
   const rowOut = x => { const r = H.get(x.sym) || {};
-    return `<tr>${nm(x)}<td>${esc(x.part)}</td><td class="r">${r.qty != null ? fmt(r.qty, 0) : '–'}</td><td class="r ${ud(r.dayPct)}">${pc(r.dayPct)}</td>
+    return `<tr>${nm(x).replace('</small></td>', `</small>${x.why ? `<small class="chk-why">${esc(x.why)}${x.stage === 'sell' && x.since ? ' · outside since ' + esc(x.since) : ''}</small>` : ''}</td>`)}<td>${esc(x.part)}</td><td class="r">${r.qty != null ? fmt(r.qty, 0) : '–'}</td><td class="r ${ud(r.dayPct)}">${pc(r.dayPct)}</td>
       <td class="r ${ud(r.pnl)}">${r.priced ? (r.pnl > 0 ? '+' : r.pnl < 0 ? '−' : '') + '₹' + fmt(Math.abs(r.pnl), 0) : '–'}</td><td class="r ${ud(r.pnlPct)}">${r.priced ? pc(r.pnlPct) : '–'}</td></tr>`; };
   const rowIn = x => { const q = tent(x), px = pfLtp(x.sym);
     return `<tr>${nm(x)}<td>${esc(x.part)}</td><td class="r">${px > 0 ? fmt(px, 2) : '–'}</td><td class="r"><b>${q != null ? fmt(q, 0) : '–'}</b></td></tr>`; };
-  const tbl = (t, a, cls) => `<h4 class="chk-h ${cls}">${t} <span>${a.length}</span>${a.length ? `<button type="button" class="btn ghost chk-cp" data-cp="${cls}" title="Copy as a table: paste in Google Sheets">Copy</button>` : ''}</h4>` + (a.length
-    ? `<div class="chk-tw"><table class="chk-t"><thead><tr>${cls === 'out'
+  const tbl = (t, a, cls, tip = '') => { const kind = cls === 'in' ? 'in' : 'out';
+    return `<h4 class="chk-h ${cls}"${tip ? ` title="${esc(tip)}"` : ''}>${t} <span>${a.length}</span>${a.length ? `<button type="button" class="btn ghost chk-cp" data-cp="${cls}" title="Copy as a table: paste in Google Sheets">Copy</button>` : ''}</h4>` + (a.length
+    ? `<div class="chk-tw"><table class="chk-t"><thead><tr>${kind === 'out'
         ? '<th>Stock</th><th>Part</th><th class="r">Qty</th><th class="r">Day %</th><th class="r">P&amp;L ₹</th><th class="r">P&amp;L %</th>'
-        : '<th>Stock</th><th>Part</th><th class="r">LTP ₹</th><th class="r" title="Average current value of your holdings in that part ÷ its price">Tentative qty</th>'}</tr></thead><tbody>${a.map(cls === 'out' ? rowOut : rowIn).join('')}</tbody></table></div>`
-    : '<p class="na">None.</p>');
+        : '<th>Stock</th><th>Part</th><th class="r">LTP ₹</th><th class="r" title="Average current value of your holdings in that part ÷ its price">Tentative qty</th>'}</tr></thead><tbody>${a.map(kind === 'out' ? rowOut : rowIn).join('')}</tbody></table></div>`
+    : '<p class="na">None.</p>'); };
   const n2 = v => v == null || !isFinite(v) ? '' : String(Math.round(v * 100) / 100);
-  const tsv = cls => cls === 'out'
-    ? ['Stock\tQty\tDay %\tP&L ₹\tP&L %'].concat(c.out.map(x => { const r = H.get(x.sym) || {};
-        return ['NSE:' + x.sym, r.qty != null ? n2(r.qty) : '', r.dayPct != null ? n2(r.dayPct) + '%' : '', r.priced ? n2(r.pnl) : '', r.priced ? n2(r.pnlPct) + '%' : ''].join('\t'); })).join('\n')
+  const LIST = {sell: c.sell || c.out, watch: c.watch || [], hold: c.hold || [], out: c.out};
+  const tsv = cls => cls !== 'in'
+    ? ['Stock\tQty\tDay %\tP&L ₹\tP&L %\tWhy'].concat(LIST[cls].map(x => { const r = H.get(x.sym) || {};
+        return ['NSE:' + x.sym, r.qty != null ? n2(r.qty) : '', r.dayPct != null ? n2(r.dayPct) + '%' : '', r.priced ? n2(r.pnl) : '', r.priced ? n2(r.pnlPct) + '%' : '', String(x.why || '').replace(/\t/g, ' ')].join('\t'); })).join('\n')
     : ['Stock\tTentative qty'].concat(c.inn.map(x => { const q = tent(x); return 'NSE:' + x.sym + '\t' + (q != null ? q : ''); })).join('\n');
   const dd = x => { const m = /^(\d{4})-(\d\d)-(\d\d)/.exec(String(x || '')); return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString('en-IN', {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'}) : String(x || ''); };
   const addHtml = g => {                                       // one "Add … to portfolio": when, which part, which settings
@@ -4310,9 +4384,20 @@ async function pfChkOpen() {
     : `<p class="chk-sub">Only the parts you added are checked (<b>${esc(checked)}</b>), against today's PF Builder lists worked out with the settings you added them with.</p>
        ${c.adds.length ? c.adds.slice(0, 4).map(addHtml).join('') : `<div class="chk-set">${c.C ? `<div><span>Value</span><b>${esc(pbSelTxt(c.C.value))}</b></div><div><span>Momentum</span><b>${esc(pbSelTxt(c.C.mom))}</b></div>` : ''}</div>`}
        ${c.pairs.length ? `<p class="chk-sub">${c.pairs.map(n => `${esc(n.c)} vs ${esc(n.d)}: ${esc(n.c)} ${ok(n.mc) ? fmt(n.mc, 1) : '–'} · ${esc(n.d)} ${ok(n.md) ? fmt(n.md, 1) : '–'} → slot holds <b>${esc(n.win)}</b>`).join('<br>')}</p>` : ''}
-       ${tbl('No longer on the list', c.out, 'out')}${tbl('New on the list (not held)', c.inn, 'in')}
+       ${c.sell ? `<div class="chk-sb">Sell signals: hold while within <label><input type="number" min="0" max="100" step="5" data-sb="buf" value="${SB().buf}">%</label> of the screen's limits${(c.C && ((c.C.value || {}).n || (c.C.mom || {}).n)) ? ` and within the top <label><input type="number" min="1" max="10" step="0.5" data-sb="band" value="${SB().band}">× N</label>` : ''}; sell after 2 weeks outside (hard exits at once)</div>`
+         + tbl('Sell list', c.sell, 'sell', 'Outside the buffer for 2 weekly data dates in a row, or a hard exit (value-trap flag, circuit days, dividend stopped, Graham test). ETFs: no longer in the index part')
+         + tbl('Watch: 1st week outside', c.watch, 'watch', 'Outside the buffer this week: on the Sell list next week if it is still outside')
+         + tbl('Hold: off the list, inside the buffer', c.hold, 'hold', 'Off today\'s buy list but still within the buffer: no sell signal')
+         : tbl('No longer on the list', c.out, 'out')}${tbl('New on the list (not held)', c.inn, 'in')}
        <p class="chk-note">Lists change with the weekly data update. This is information only, not a recommendation to buy or sell.</p>`;
   const w = modal('PF Builder check', body, {noFocus: true, cls: 'chk-box'});
+  w.querySelectorAll('[data-sb]').forEach(i => i.addEventListener('change', async () => {          // buffer / rank band: kept in your settings
+    const v = +i.value; if (!(v >= (i.dataset.sb === 'buf' ? 0 : 1))) return;
+    FF.sb = Object.assign({}, SB(), {[i.dataset.sb]: v}); ffSave();
+    w._close(); PF_CHK = null; PF_CHK_SIG = ''; PF_CHK = await pfChkCalc().catch(() => null); pfChkOpen();
+    document.querySelectorAll('.pf-chk').forEach(b => { b.outerHTML = pfChkBtn(); });
+    document.querySelectorAll('[data-open="chk"]').forEach(b => b.addEventListener('click', pfChkOpen));
+  }));
   w.querySelectorAll('[data-cp]').forEach(b => b.addEventListener('click', async () => {
     const txt = tsv(b.dataset.cp), n = txt.split('\n').length - 1;
     let done = false;
