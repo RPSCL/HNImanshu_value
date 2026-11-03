@@ -370,7 +370,7 @@ let SELC = JSON.parse(JSON.stringify(SEL_DEF));
 const PAIR_TAG = {ITBEES: 'IT', ALPHA: 'ALPHA'};   // short names in 'GOLDBEES (IT/Gold)', 'GOLDBEES (ALPHA/Gold)'
 
 /* ---------- small helpers ---------- */
-const hLoad = t => `<div class="hload" role="status"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--panel2)"/><text x="16" y="16.5" dominant-baseline="central" font-family="Georgia,serif" font-size="18" font-weight="bold" fill="var(--brass)" text-anchor="middle">H</text></svg><span class="hl-t">${t}</span></div>`;
+const hLoad = t => `<div class="hload" role="status"><svg viewBox="0 0 32 32" aria-hidden="true"><text x="16" y="16.5" dominant-baseline="central" font-family="Georgia,serif" font-size="30" font-weight="bold" fill="var(--brass)" text-anchor="middle">H</text></svg><span class="hl-t">${t}</span></div>`;
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 const num = v => v != null && isFinite(v);
