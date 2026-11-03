@@ -1446,6 +1446,16 @@ table.chk-t td small{display:block;color:var(--faint);font-size:11.5px}
 table.chk-t td:last-child,table.chk-t th:last-child{white-space:nowrap;width:1%}
 table.chk-t .pf-sym{cursor:pointer;color:var(--ink)}
 .chk-note{margin:12px 0 0;font-size:11.5px;color:var(--faint)}
+.chk-h .chk-cp{margin-left:auto;height:24px;padding:0 9px;font-size:11px;text-transform:none;letter-spacing:0}
+table.chk-t td.r,table.chk-t th.r{text-align:right;white-space:nowrap}
+table.chk-t .up{color:var(--good)} table.chk-t .dn{color:var(--bad)}
+/* waiting: the H tile turns half a turn, then breathes once (H looks the same upside down, so the loop is seamless) */
+.hload{display:flex;flex-direction:column;align-items:center;gap:16px;margin:64px auto;text-align:center;padding:0 16px}
+.hload svg{width:58px;height:58px;animation:hl-turn 2.4s ease-in-out infinite}
+.hload .hl-t{font:600 15.5px var(--sans);color:var(--mute);animation:hl-breathe 2.4s ease-in-out infinite;max-width:420px;line-height:1.5}
+@keyframes hl-turn{0%{transform:rotate(0)}35%{transform:rotate(180deg) scale(1)}62%{transform:rotate(180deg) scale(1.14)}88%,100%{transform:rotate(180deg) scale(1)}}
+@keyframes hl-breathe{0%,35%{opacity:.7;transform:scale(1)}62%{opacity:1;transform:scale(1.04)}88%,100%{opacity:.7;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.hload svg,.hload .hl-t{animation:none}}
 .pf-upd{align-self:center;margin-left:6px;font:500 12px var(--mono);color:var(--faint);white-space:nowrap}   /* live prices arrive by themselves (Oracle): just their time */
 .pf-asof{font:600 11px var(--mono);color:var(--mute)}
 /* NIFTY 50 / BANK NIFTY on the Portfolio page (from the same live-price job) */
@@ -3634,14 +3644,43 @@ function pfLoad() {                                       // loads once; every c
 }
 const pfTxnsOf = d => Array.isArray(d && d.txns) ? d.txns
   : ((d && Array.isArray(d.items)) ? d.items : (Array.isArray(d) ? d : [])).map(it => ({id: it.id || pfId(), t:'buy', sym: it.sym, qty: it.qty, px: it.buy, ch: 0, date: it.date || ''}));   // first version: plain holdings → buys
+/* phone: the portfolio sometimes doesn't arrive (Firestore "unavailable" after the phone wakes up, or the login check hangs). Never shown as
+   an empty portfolio (a save then could wipe it): it is asked again by itself (1.5, 3, 4.5, 6 s), and if it still isn't there the page
+   reloads itself once (not again within 2 minutes). */
+let PF_TRY = 0, PF_RETRY_T = 0, PF_STUCK_T = 0;
+function pfReloadOnce() {
+  let last = 0; try { last = +sessionStorage.getItem('hnif_pfrl') || 0; } catch (e) {}
+  if (Date.now() - last < 120000) return false;
+  try { sessionStorage.setItem('hnif_pfrl', String(Date.now())); } catch (e) {}
+  location.reload(); return true;
+}
+function pfStuckWatch() {                                   // still "Loading your portfolio…" after 12 s: ask again; after 25 s: reload
+  if (PF_STUCK_T) return;
+  const t0 = Date.now();
+  PF_STUCK_T = setInterval(() => {
+    if (PF.txns) { clearInterval(PF_STUCK_T); PF_STUCK_T = 0; return; }
+    const el = Date.now() - t0;
+    if (el > 25000) { clearInterval(PF_STUCK_T); PF_STUCK_T = 0; pfReloadOnce(); }
+    else if (el > 12000 && !PF.busy && !PF_RETRY_T) { PF_WAIT = null; pfLoad(); }
+  }, 3000);
+}
+const pfTimeout = (p, ms) => Promise.race([p, new Promise((_, no) => setTimeout(() => no({code: 'timeout'}), ms))]);
 async function pfLoadNow() {
   PF.busy = true;
   try {
-    const d = await pfStore().load() || {};
+    const d = await pfTimeout(pfStore().load(), 15000) || {};
     PF.txns = pfTxnsOf(d);
     PF.rates = Object.assign({}, PF_RATES, d.rates || {});
-    PF.err = '';
-  } catch (e) { PF.txns = []; PF.err = 'Could not load your portfolio (' + (e.code || e) + ').'; }
+    PF.err = ''; PF_TRY = 0;
+  } catch (e) {
+    PF.busy = false; PF_WAIT = null; PF_TRY++;
+    if (PF_TRY <= 4) {
+      PF.err = `Could not load your portfolio (${e.code || e}). Trying again…`;
+      PF_RETRY_T = setTimeout(() => { PF_RETRY_T = 0; pfLoad(); }, 1500 * PF_TRY);
+    } else if (!pfReloadOnce()) PF.err = `Could not load your portfolio (${e.code || e}). Check your connection and reload the page.`;
+    if ((location.hash || '') === '#/portfolio') route();
+    return;
+  }
   try { PF.mkt = window.hniStore && window.hniStore.market ? await window.hniStore.market() : null; } catch (e) { PF.mkt = null; }
   PF.busy = false;
   pfApplyRenames();
@@ -3998,6 +4037,7 @@ function pfTypesLine(P) {
   return `<p class="pf-types" title="By type: day gain %, overall gain % on cost in brackets">${P.byType.map(t =>
     `<span><i>${esc(t.k)}</i> <b class="${c(t.dayPct)}">${t.dayPct == null ? '–' : pctTxt(t.dayPct, 1)}</b> <small class="${c(t.allPct)}">(${t.allPct == null ? '–' : pctTxt(t.allPct, 1)})</small></span>`).join('<em>·</em>')}</p>`;
 }
+const hLoad = t => `<div class="hload" role="status"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--panel2)"/><text x="16" y="16.5" dominant-baseline="central" font-family="Georgia,serif" font-size="18" font-weight="bold" fill="var(--brass)" text-anchor="middle">H</text></svg><span class="hl-t">${t}</span></div>`;
 function portfolioView() {
   setNav('portfolio'); view.innerHTML = '';
   if (BACK) {                                             // a portfolio is about today; Historical would mix dates
@@ -4006,8 +4046,9 @@ function portfolioView() {
     return;
   }
   if (!PF.txns) {
-    pfLoad();
-    view.insertAdjacentHTML('beforeend', `<p class="hint">${PF.err ? esc(PF.err) : 'Loading your portfolio…'}</p>`);
+    if (!PF_RETRY_T) pfLoad();
+    view.insertAdjacentHTML('beforeend', hLoad(PF.err ? esc(PF.err) : 'Loading your portfolio…'));
+    pfStuckWatch();
     return;
   }
   const P = pfSummary(PF.txns), R = P.R, open = P.open, closed = P.closed;
@@ -4221,10 +4262,35 @@ function pfChkRun() {                                         // worked out once
 async function pfChkOpen() {
   if (!PF_CHK) { PF_CHK = await pfChkCalc().catch(() => null); }
   const c = PF_CHK;
-  const row = x => `<tr><td><b data-news="${esc(x.sym)}" class="pf-sym" role="button">${esc(x.sym)}</b><small>${esc((TODAY.get(x.sym) || {}).name || '')}</small></td><td>${esc(x.part)}</td></tr>`;
-  const tbl = (t, a, cls) => `<h4 class="chk-h ${cls}">${t} <span>${a.length}</span></h4>` + (a.length
-    ? `<div class="chk-tw"><table class="chk-t"><thead><tr><th>Stock</th><th>Part</th></tr></thead><tbody>${a.map(row).join('')}</tbody></table></div>`
+  /* No longer on the list: what you hold of it (qty, day %, P&L). New on the list: a tentative qty = the average current value of
+     your holdings in that part ÷ its price (whole shares). Both copy as a table for Google Sheets (NSE:SYMBOL). */
+  const P = PF.txns ? pfSummary(PF.txns) : {open: []}, H = new Map(P.open.map(r => [r.sym, r]));
+  const avgOf = part => {                                      // average current value per holding of that part (ETF pair = ETF)
+    const t = part === 'ETF pair' ? 'ETF' : part; let v = 0, n = 0;
+    P.open.forEach(r => { const tq = r.tq || {}, sum = Object.values(tq).reduce((a, b) => a + b, 0); if (sum > 0 && tq[t] > 0) { const w = tq[t] / sum; v += r.value * w; n += w; } });
+    return n ? v / n : null;
+  };
+  const AVG = {};
+  const tent = x => { const a = AVG[x.part] = x.part in AVG ? AVG[x.part] : avgOf(x.part), px = pfLtp(x.sym);
+    return a && px > 0 ? Math.floor(a / px) : null; };
+  const nm = x => `<td><b data-news="${esc(x.sym)}" class="pf-sym" role="button">${esc(x.sym)}</b><small>${esc((TODAY.get(x.sym) || {}).name || '')}</small></td>`;
+  const pc = v => v == null ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + fmt(Math.abs(v), 2) + '%';
+  const ud = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'dn' : '';
+  const rowOut = x => { const r = H.get(x.sym) || {};
+    return `<tr>${nm(x)}<td>${esc(x.part)}</td><td class="r">${r.qty != null ? fmt(r.qty, 0) : '–'}</td><td class="r ${ud(r.dayPct)}">${pc(r.dayPct)}</td>
+      <td class="r ${ud(r.pnl)}">${r.priced ? (r.pnl > 0 ? '+' : r.pnl < 0 ? '−' : '') + '₹' + fmt(Math.abs(r.pnl), 0) : '–'}</td><td class="r ${ud(r.pnlPct)}">${r.priced ? pc(r.pnlPct) : '–'}</td></tr>`; };
+  const rowIn = x => { const q = tent(x), px = pfLtp(x.sym);
+    return `<tr>${nm(x)}<td>${esc(x.part)}</td><td class="r">${px > 0 ? fmt(px, 2) : '–'}</td><td class="r"><b>${q != null ? fmt(q, 0) : '–'}</b></td></tr>`; };
+  const tbl = (t, a, cls) => `<h4 class="chk-h ${cls}">${t} <span>${a.length}</span>${a.length ? `<button type="button" class="btn ghost chk-cp" data-cp="${cls}" title="Copy as a table: paste in Google Sheets">Copy</button>` : ''}</h4>` + (a.length
+    ? `<div class="chk-tw"><table class="chk-t"><thead><tr>${cls === 'out'
+        ? '<th>Stock</th><th>Part</th><th class="r">Qty</th><th class="r">Day %</th><th class="r">P&amp;L ₹</th><th class="r">P&amp;L %</th>'
+        : '<th>Stock</th><th>Part</th><th class="r">LTP ₹</th><th class="r" title="Average current value of your holdings in that part ÷ its price">Tentative qty</th>'}</tr></thead><tbody>${a.map(cls === 'out' ? rowOut : rowIn).join('')}</tbody></table></div>`
     : '<p class="na">None.</p>');
+  const n2 = v => v == null || !isFinite(v) ? '' : String(Math.round(v * 100) / 100);
+  const tsv = cls => cls === 'out'
+    ? ['Stock\tQty\tDay %\tP&L ₹\tP&L %'].concat(c.out.map(x => { const r = H.get(x.sym) || {};
+        return ['NSE:' + x.sym, r.qty != null ? n2(r.qty) : '', r.dayPct != null ? n2(r.dayPct) + '%' : '', r.priced ? n2(r.pnl) : '', r.priced ? n2(r.pnlPct) + '%' : ''].join('\t'); })).join('\n')
+    : ['Stock\tTentative qty'].concat(c.inn.map(x => { const q = tent(x); return 'NSE:' + x.sym + '\t' + (q != null ? q : ''); })).join('\n');
   const dd = x => { const m = /^(\d{4})-(\d\d)-(\d\d)/.exec(String(x || '')); return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString('en-IN', {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'}) : String(x || ''); };
   const addHtml = g => {                                       // one "Add … to portfolio": when, which part, which settings
     const p = g.pbs, k = g.k, sp = Array.isArray(p.s) ? p.s : null;
@@ -4246,7 +4312,15 @@ async function pfChkOpen() {
        ${c.pairs.length ? `<p class="chk-sub">${c.pairs.map(n => `${esc(n.c)} vs ${esc(n.d)}: ${esc(n.c)} ${ok(n.mc) ? fmt(n.mc, 1) : '–'} · ${esc(n.d)} ${ok(n.md) ? fmt(n.md, 1) : '–'} → slot holds <b>${esc(n.win)}</b>`).join('<br>')}</p>` : ''}
        ${tbl('No longer on the list', c.out, 'out')}${tbl('New on the list (not held)', c.inn, 'in')}
        <p class="chk-note">Lists change with the weekly data update. This is information only, not a recommendation to buy or sell.</p>`;
-  modal('PF Builder check', body, {noFocus: true, cls: 'chk-box'});
+  const w = modal('PF Builder check', body, {noFocus: true, cls: 'chk-box'});
+  w.querySelectorAll('[data-cp]').forEach(b => b.addEventListener('click', async () => {
+    const txt = tsv(b.dataset.cp), n = txt.split('\n').length - 1;
+    let done = false;
+    try { await navigator.clipboard.writeText(txt); done = true; } catch (e) {}
+    if (!done) { const ta = document.createElement('textarea'); ta.value = txt; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select();
+      try { done = document.execCommand('copy'); } catch (e) {} ta.remove(); }
+    toast(done ? `Copied ${n} row${n > 1 ? 's' : ''}: paste in Google Sheets` : 'Could not copy');
+  }));
 }
 /* when the live prices were last fetched (same for every account): "12:20" today, else "13 Oct" */
 function pfAsOf() {
