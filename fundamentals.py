@@ -4128,12 +4128,13 @@ const PB_KEYS = {score: 'Value score', mom: 'Momentum score', pe: 'PE', pb: 'PB'
 let PF_CHK = null, PF_CHK_SIG = '', PF_CHK_P = null, PB_ETF = null;
 const IC_INFO = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r=".6" fill="currentColor"/></svg>';
 function pfChkBtn() {
-  const c = PF_CHK, n = c && c.ok ? (c.sell ? c.sell.length + c.watch.length : c.out.length) + c.inn.length : 0;
+  // red count = Value / Momentum holdings on the Sell list (confirmed: 2 weeks outside, or a hard exit). Watch, Hold, ETFs and new names: not counted
+  const c = PF_CHK, n = c && c.ok && c.sell ? c.sell.filter(x => x.part === 'Value' || x.part === 'Momentum').length : 0;
   const off = !c || !c.ok;                                     // only when every holding came from PF Builder ("Add … to portfolio")
   const t = !c ? 'PF Builder check: compares your PF Builder holdings with the PF Builder lists of today'
     : !c.parts.length ? 'PF Builder check: no holdings from PF Builder yet. Add stocks with “Add all stocks to portfolio” in PF Builder'
     : !c.ok ? `PF Builder check is off: ${c.other.length} holding${c.other.length > 1 ? 's' : ''} came from elsewhere (${c.other.slice(0, 4).join(', ')}${c.other.length > 4 ? '…' : ''}). It works when every holding came from PF Builder`
-    : n ? `${n} difference${n > 1 ? 's' : ''} with today's PF Builder lists` : "Your PF Builder holdings match today's lists";
+    : n ? `${n} Value / Momentum holding${n > 1 ? 's' : ''} on the Sell list (confirmed)` : 'No confirmed sells. Open for Watch, Hold and new names';
   return `<button type="button" class="btn ghost ico pf-chk${n ? ' alert' : ''}" data-open="chk"${off ? ' disabled' : ''} title="${esc(t)}" aria-label="${esc(t)}">${IC_INFO}${n ? `<b>${n}</b>` : ''}</button>`;
 }
 let PB_REMOTE = null;                                          // this account's PF Builder settings (same on every device), auth.js prefs()
