@@ -245,6 +245,13 @@ html.pb-review .card,html.pb-review .tabs,html.pb-review details.how,html.pb-rev
 .rv-empty a{color:var(--brass)}
 .rv-tot td{font-weight:700;border-top:2px solid var(--line)}
 /* while the lists are worked out */
+/* waiting: the H tile turns half a turn, then breathes once (H looks the same upside down, so the loop is seamless) */
+.hload{display:flex;flex-direction:column;align-items:center;gap:16px;margin:64px auto;text-align:center;padding:0 16px}
+.hload svg{width:58px;height:58px;animation:hl-turn 2.4s ease-in-out infinite}
+.hload .hl-t{font:600 15.5px var(--mono);color:var(--mute);animation:hl-breathe 2.4s ease-in-out infinite;max-width:420px;line-height:1.5}
+@keyframes hl-turn{0%{transform:rotate(0)}35%{transform:rotate(180deg) scale(1)}62%{transform:rotate(180deg) scale(1.14)}88%,100%{transform:rotate(180deg) scale(1)}}
+@keyframes hl-breathe{0%,35%{opacity:.7;transform:scale(1)}62%{opacity:1;transform:scale(1.04)}88%,100%{opacity:.7;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.hload svg,.hload .hl-t{animation:none}}
 .building{display:flex;align-items:center;gap:10px;margin:28px 2px;font:600 15px var(--mono);color:var(--mute)}
 .building i{width:10px;height:10px;border-radius:50%;background:var(--brass);animation:bld 1.1s ease-in-out infinite}
 @keyframes bld{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
@@ -363,6 +370,7 @@ let SELC = JSON.parse(JSON.stringify(SEL_DEF));
 const PAIR_TAG = {ITBEES: 'IT', ALPHA: 'ALPHA'};   // short names in 'GOLDBEES (IT/Gold)', 'GOLDBEES (ALPHA/Gold)'
 
 /* ---------- small helpers ---------- */
+const hLoad = t => `<div class="hload" role="status"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--panel2)"/><text x="16" y="16.5" dominant-baseline="central" font-family="Georgia,serif" font-size="18" font-weight="bold" fill="var(--brass)" text-anchor="middle">H</text></svg><span class="hl-t">${t}</span></div>`;
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 const num = v => v != null && isFinite(v);
@@ -495,7 +503,7 @@ async function backScreen(w, E, unis, key) {
 /* a period not worked out yet in this session: the screens run for it once, then it is kept with the others */
 async function ensurePeriod(key) {
   if (!DATA || (DATA.backs && key in DATA.backs)) return;
-  $('#out').innerHTML = `<p class="building" role="status"><i></i>Building the ${esc(perName(key))} backtest…</p>`;
+  $('#out').innerHTML = hLoad(`Building the ${esc(perName(key))} backtest…`);
   const w = await engine();
   const E = (DATA.etf && DATA.etf.etf) || {};
   const unis = ['all'].concat(DATA.now.lists || []);
@@ -550,7 +558,7 @@ async function reviewView() {
   document.title = 'HNImanshu — Portfolio';
   const out = $('#out');
   status('');
-  out.innerHTML = '<p class="building" role="status"><i></i>Building…</p>';
+  out.innerHTML = hLoad('Building…');
   let d = {}, mkt = null;
   try { d = await window.hniStore.load() || {}; mkt = await window.hniStore.market().catch(() => null); } catch (e) {}
   const tx = Array.isArray(d.txns) ? d.txns.slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))) : [];
@@ -1433,7 +1441,7 @@ paintSplit();
       sc = c.s; if (!sc.backs) sc = {now: sc.now, backs: sc.back ? {'1Y': sc.back} : {}};   // older cache: only the 1-year list
     }
     if (!sc) {
-      $('#out').innerHTML = '<p class="building" role="status"><i></i>Building…</p>';
+      $('#out').innerHTML = hLoad('Building…');
       sc = await screens(etf, [PER]);
       CACHE_V = (info && info.data) || 'x';
     } else CACHE_V = c.v;
