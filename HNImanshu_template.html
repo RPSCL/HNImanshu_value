@@ -1648,7 +1648,8 @@ function toggleFV(f){
   run();
 }
 
-function handleSearch(v){ searchQ=v.toLowerCase(); updateSearchClearBtn(); run(); }
+var SEARCH_T=0;
+function handleSearch(v){ searchQ=v.toLowerCase(); updateSearchClearBtn(); clearTimeout(SEARCH_T); SEARCH_T=setTimeout(run, 150); }   // waits for a pause in typing
 
 function clearAll(){
   activeGrades.clear(); activeFVs.clear(); searchQ=''; selectedSym=null;
@@ -1735,18 +1736,15 @@ function run(){
   updateFabBadge();
 }
 
-function renderTable(data){
-  var tbody=document.getElementById('tbody'), empty=document.getElementById('empty-state');
-  if(!data.length){ tbody.innerHTML=''; empty.style.display='block'; return; }
-  empty.style.display='none';
-  var rows=new Array(data.length);
-  for(var i=0;i<data.length;i++){
-    var s=data[i];
+/* Speed: only the first rows are drawn at once; more are added as you scroll near the end (a 750-row table with ~25 cells a row
+   took seconds on a phone). A row click only moves the highlight, it never redraws the table. */
+var RT_FIRST=60, RT_MORE=120, RT={data:[], n:0}, RT_IO=null;
+function rowHtml(s){
     var gc=GC[s.GRADE]||'#888';
     var up=s.UPSIDE_PCT, mos=s.MARGIN_OF_SAFETY_PCT;
     var fv=FV_MAP[s.FV_GRADE]||{cls:'fv-FP',label:s.FV_GRADE||'—'};
     var sel=s.SYMBOL===selectedSym?' row-selected':'';
-    rows[i]='<tr class="'+sel+'" data-sym="'+s.SYMBOL+'">'
+    return '<tr class="'+sel+'" data-sym="'+s.SYMBOL+'">'
       +'<td class="n-neu">'+(s.FINAL_RANK!=null?'#'+s.FINAL_RANK:'—')+'</td>'
       +'<td title="'+esc(s.COMPANY_NAME)+'"><b style="font-size:12.5px">'+esc(s.COMPANY_NAME||'—')+'</b><br><span style="font-family:var(--mono);font-size:10px;color:var(--text3)">'+s.SYMBOL+'</span></td>'
       +'<td style="font-size:11.5px;color:var(--text2)">'+esc(s.INDUSTRY||'—')+'</td>'
@@ -1771,13 +1769,42 @@ function renderTable(data){
       +'<td class="'+combinedClass(s.COMBINED_SCORE)+'">'+(s.COMBINED_SCORE!=null?s.COMBINED_SCORE:'—')+'</td>'
       +'<td style="font-family:var(--mono);color:var(--accent);font-weight:700">'+f1(s.FINAL_SCORE)+'</td>'
       +'</tr>';
+}
+function rtMore(){                                                   // the next rows, when the end of the drawn ones comes near
+  var tbody=document.getElementById('tbody'), D=RT.data;
+  if(RT.n>=D.length) return;
+  var end=Math.min(D.length, RT.n+(RT.n?RT_MORE:RT_FIRST)), h=new Array(end-RT.n);
+  for(var i=RT.n;i<end;i++) h[i-RT.n]=rowHtml(D[i]);
+  var old=document.getElementById('rt-more'); if(old) old.remove();
+  tbody.insertAdjacentHTML('beforeend', h.join('')+(end<D.length?'<tr id="rt-more" aria-hidden="true"><td colspan="23" style="height:1px;padding:0;border:0"></td></tr>':''));
+  RT.n=end;
+  var m=document.getElementById('rt-more');
+  if(m){
+    if(!RT_IO && 'IntersectionObserver' in window) RT_IO=new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting) rtMore(); }); }, {rootMargin:'900px 0px'});
+    if(RT_IO) RT_IO.observe(m); else rtMore();                       // very old browser: everything
   }
-  tbody.innerHTML=rows.join('');
+}
+function renderTable(data){
+  var tbody=document.getElementById('tbody'), empty=document.getElementById('empty-state');
+  if(RT_IO) RT_IO.disconnect();
+  if(!data.length){ tbody.innerHTML=''; empty.style.display='block'; RT={data:[],n:0}; return; }
+  empty.style.display='none';
+  RT={data:data, n:0}; tbody.innerHTML='';
+  var si=selectedSym?data.findIndex(function(s){return s.SYMBOL===selectedSym;}):-1;
+  rtMore();
+  while(si>=RT.n && RT.n<data.length) rtMore();                    // the selected row is always drawn
+}
+function markSel(){                                                  // highlight the selected row without redrawing anything
+  var tb=document.getElementById('tbody');
+  tb.querySelectorAll('tr.row-selected').forEach(function(r){ r.classList.remove('row-selected'); });
+  if(!selectedSym) return;
+  var tr=tb.querySelector('tr[data-sym="'+(window.CSS&&CSS.escape?CSS.escape(selectedSym):selectedSym)+'"]');
+  if(tr) tr.classList.add('row-selected');
 }
 
 function rowClick(sym){
   if(selectedSym===sym){ closeDetail(); return; }
-  selectedSym=sym; showDetail(sym); renderTable(viewData);
+  selectedSym=sym; showDetail(sym); markSel();
 }
 
 function showDetail(sym){
@@ -1836,7 +1863,7 @@ function closeDetail(){
   selectedSym=null;
   document.getElementById('detail-panel').classList.remove('open');
   document.getElementById('detail-overlay').classList.remove('visible');
-  if(viewData.length) renderTable(viewData);
+  markSel();
 }
 
 function updateSelectAllBtn(){
@@ -1987,7 +2014,7 @@ document.getElementById('tbody').addEventListener('click',function(e){
 
 document.getElementById('lookup-dd').addEventListener('click',function(e){
   var item=e.target.closest('.lookup-item[data-sym]');
-  if(item){ selectedSym=item.dataset.sym; showDetail(item.dataset.sym); renderTable(viewData); }
+  if(item){ selectedSym=item.dataset.sym; showDetail(item.dataset.sym); markSel(); }
 });
 
 document.getElementById('sf-select-all-btn').addEventListener('click',function(){
