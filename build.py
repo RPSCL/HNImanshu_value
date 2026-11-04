@@ -127,6 +127,7 @@ KEY_COLS = [
     # ── consolidated + standalone merge (n500/ns500/nm250 weekly master) ──
     "SCREENER_PAGE_TYPE",   # basis used for the row: consolidated / standalone
     "STALE_SINCE",          # only set when this week's scrape failed → date of the data shown
+    "PSU",                  # "psu" / "semi" / None (fundamentals.PSU / SEMI_PSU): the PSU / Semi PSU switches
 ]
 
 
@@ -764,6 +765,11 @@ def load_csv(path: Path, name_col: str, label: str, optional=False):
         ["COMPANY_NAME", "FINAL_RANK", "FINAL_SCORE", "PIOTROSKI_SCORE", "GRADE"]
     ]
     print(f"\n    Top 5:\n{top5.to_string(index=False)}\n")
+
+    # ── PSU / semi-PSU (same lists as the Factor Screener) ───────────────
+    if fundamentals is not None and "SYMBOL" in df.columns:
+        sy = df["SYMBOL"].astype(str).str.strip().str.upper()
+        df["PSU"] = np.where(sy.isin(fundamentals.PSU), "psu", np.where(sy.isin(fundamentals.SEMI_PSU), "semi", None))
 
     # ── Trim to output columns ───────────────────────────────────────────
     needed = ["COMPANY_NAME"] + KEY_COLS

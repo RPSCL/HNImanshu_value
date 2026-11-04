@@ -153,6 +153,12 @@ input { font-family: var(--sans); }
 }
 .uni-btn.active { background: var(--accent); color: var(--bg); font-weight: 700; }
 .uni-btn:not(.active):hover { color: var(--text); }
+.psu-switch { display: flex; gap: 6px; margin-left: 10px; }
+.psu-btn { padding: 4px 11px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--text2);
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.3px; white-space: nowrap; cursor: pointer; transition: all 0.15s; }
+.psu-btn:hover { color: var(--text); border-color: var(--border2); }
+.psu-btn.hid { border-color: #c0392b; background: rgba(192,57,43,.14); color: var(--text); text-decoration: line-through;
+  text-decoration-color: #e05a4a; text-decoration-thickness: 2px; }
 .h-stats { display: flex; gap: 16px; margin-left: auto; align-items: center; }
 .hstat { text-align: right; }
 .hstat-val { font-family: var(--mono); font-size: 16px; font-weight: 700; color: var(--accent); line-height: 1; }
@@ -715,8 +721,8 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
   #header {
     display: grid !important;
     grid-template-columns: minmax(0,1fr) auto auto auto auto !important;    /* Portfolio + Fundamentals buttons + login / user menu */
-    grid-template-rows: auto auto !important;
-    grid-template-areas: "logo pf fund user toggle" "tabs tabs tabs tabs tabs" !important;
+    grid-template-rows: auto auto auto !important;
+    grid-template-areas: "logo pf fund user toggle" "tabs tabs tabs tabs tabs" "psu psu psu psu psu" !important;
     padding: 8px 12px 0 !important;
     height: auto !important; gap: 0 !important; align-items: center !important;
   }
@@ -729,6 +735,8 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
   .au-login { padding: 6px 8px; font-size: 10.5px; }
   .au-login span { display: none; }                                  /* phone: person icon only, like the Portfolio bag */
   .hni-logo { min-width: 0; overflow: hidden; }
+  .psu-switch { grid-area: psu; margin: 6px 0 6px 0; justify-content: flex-end; }
+  .psu-btn { padding: 5px 12px; font-size: 10.5px; }
 }
 @media (max-width: 440px) {
   .hni-logo > div:not(.hni-mark) { display: none; }                  /* narrow phones: just the H mark (room for the buttons) */
@@ -982,6 +990,11 @@ tr.row-selected td { background: rgba(168,144,96,0.06) !important; }
     <button class="uni-btn" id="btn-sc250">Smallcap 500</button>
     <button class="uni-btn" id="btn-mc250">Microcap 250</button>
     <button class="uni-btn" id="btn-all">All Stocks</button>
+  </div>
+  <!-- PSU / Semi PSU: same switches (and the same saved choice) as the Factor Screener; struck through in red = hidden -->
+  <div class="psu-switch">
+    <button type="button" class="psu-btn" id="btn-psu" title="Click to hide PSU stocks (struck through = hidden)">PSU</button>
+    <button type="button" class="psu-btn" id="btn-semi" title="Click to hide semi-PSU stocks (struck through = hidden)">Semi PSU</button>
   </div>
   <div class="h-stats">
     <div class="hstat"><div class="hstat-val" id="hs-total">—</div><div class="hstat-lbl">Universe</div></div>
@@ -1506,8 +1519,8 @@ function updateSearchClearBtn(){
 }
 
 function buildSidebar(){
-  var gc={},fvc={};
-  rawData.forEach(function(d){ gc[d.GRADE]=(gc[d.GRADE]||0)+1; fvc[d.FV_GRADE]=(fvc[d.FV_GRADE]||0)+1; });
+  var gc={},fvc={}, vis=psuVis(rawData);
+  vis.forEach(function(d){ gc[d.GRADE]=(gc[d.GRADE]||0)+1; fvc[d.FV_GRADE]=(fvc[d.FV_GRADE]||0)+1; });
   var grades=['A','B+','B','C','D','E'].filter(function(g){return gc[g];});
   var gp=document.getElementById('grade-pills');
   if(gp){
@@ -1524,7 +1537,7 @@ function buildSidebar(){
     }).join('');
     fp.querySelectorAll('.fv-pill').forEach(function(btn){ btn.addEventListener('click',function(){ toggleFV(btn.dataset.fv); }); });
   }
-  var ht=document.getElementById('hs-total'); if(ht) ht.textContent=rawData.length;
+  var ht=document.getElementById('hs-total'); if(ht) ht.textContent=vis.length;
   var hd=document.getElementById('hs-dv');    if(hd) hd.textContent=fvc['DEEP VALUE']||0;
   var hb=document.getElementById('hs-best');  if(hb) hb.textContent=(gc['A']||0)+(gc['B+']||0);
   var sc=document.getElementById('sb-clear-btn');
@@ -1658,8 +1671,39 @@ function sortBy(th){
 }
 function clearSortHeaders(){ document.querySelectorAll('th').forEach(function(t){ t.classList.remove('sorted-asc','sorted-desc'); }); }
 
+/* PSU / Semi PSU switches: the Factor Screener's own setting (hnif_gf / your account's ff.gf), changed here too */
+var PSUF = (function(){ var g={psu:false, semi:false};
+  try { var a=JSON.parse(localStorage.getItem('hnif_gf')||'{}'); g.psu=!!a.psu; g.semi=!!a.semi;
+        var f=JSON.parse(localStorage.getItem('hnif_ff')||'{}'); if (f && f.gf) { g.psu=!!f.gf.psu; g.semi=!!f.gf.semi; } } catch(e) {}
+  return g; })();
+function psuVis(a){ return (typeof PSUF === 'object' && PSUF && (PSUF.psu || PSUF.semi)) ? a.filter(function(r){ return !(PSUF.psu && r.PSU==='psu') && !(PSUF.semi && r.PSU==='semi'); }) : a; }
+function psuPaint(){ var a=document.getElementById('btn-psu'), b=document.getElementById('btn-semi');
+  if (a) { a.classList.toggle('hid', PSUF.psu); a.setAttribute('aria-pressed', PSUF.psu); }
+  if (b) { b.classList.toggle('hid', PSUF.semi); b.setAttribute('aria-pressed', PSUF.semi); } }
+async function psuSave(){
+  try { var g=JSON.parse(localStorage.getItem('hnif_gf')||'{}'); g.psu=PSUF.psu; g.semi=PSUF.semi; localStorage.setItem('hnif_gf', JSON.stringify(g)); } catch(e) {}
+  var loc=null; try { loc=JSON.parse(localStorage.getItem('hnif_ff')||'null'); } catch(e) {}
+  var st=window.hniStore, acc=null;
+  if (st && st.prefs) { try { var r=await st.prefs(); acc=r && r.ff; } catch(e) {} }
+  var ff=(acc && (+acc._at||0) >= (+(loc && loc._at)||0)) ? acc : (loc || acc || {});   // the newer copy, so nothing else in your settings is lost
+  ff.gf={psu:PSUF.psu, semi:PSUF.semi}; ff._at=Date.now();
+  try { localStorage.setItem('hnif_ff', JSON.stringify(ff)); } catch(e) {}
+  if (st && st.saveFF) st.saveFF(ff).catch(function(){});
+}
+['psu','semi'].forEach(function(k){ var b=document.getElementById('btn-'+k); if (!b) return;
+  b.addEventListener('click', function(){ PSUF[k]=!PSUF[k]; psuPaint(); buildSidebar(); run(); psuSave(); }); });
+psuPaint();
+if (PSUF.psu || PSUF.semi) setTimeout(function(){ try { buildSidebar(); run(); } catch(e) {} }, 0);   // saved choice: counts + table with it
+window.addEventListener('hni-ready', function(){                     // your account's choice (another device) wins when it is newer
+  var st=window.hniStore; if (!st || !st.prefs) return;
+  st.prefs().then(function(r){ var f=r && r.ff, loc=null; try { loc=JSON.parse(localStorage.getItem('hnif_ff')||'null'); } catch(e) {}
+    if (!f || !f.gf || (+f._at||0) < (+(loc && loc._at)||0)) return;
+    if (!!f.gf.psu===PSUF.psu && !!f.gf.semi===PSUF.semi) return;
+    PSUF.psu=!!f.gf.psu; PSUF.semi=!!f.gf.semi; psuPaint(); buildSidebar(); run(); }).catch(function(){});
+});
 function run(){
   var d=rawData;
+  d=psuVis(d);
   if(activeGrades.size) d=d.filter(function(r){ return activeGrades.has(r.GRADE); });
   if(activeFVs.size)    d=d.filter(function(r){ return activeFVs.has(r.FV_GRADE); });
   if(hideNanFV) d=d.filter(function(r){
@@ -1684,7 +1728,7 @@ function run(){
     return String(av||'').localeCompare(String(bv||''))*dir;
   });
   viewData=d;
-  var rcs=document.getElementById('rc-span'); if(rcs) rcs.textContent=d.length+' / '+rawData.length;
+  var rcs=document.getElementById('rc-span'); if(rcs) rcs.textContent=d.length+' / '+psuVis(rawData).length;
   var mcs=document.getElementById('mc-span'); if(mcs) mcs.textContent=d.length;
   renderTable(d);
   updateSidebarCounts(d);
