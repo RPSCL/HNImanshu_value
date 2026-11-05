@@ -497,7 +497,19 @@ window.__pbAdj = function (M, uni, ks) {
   return JSON.stringify({sb, out});
 };`;
 let ENG = null;
-function engine() {
+const ENG_OK = "typeof V === 'function' && typeof D === 'object' && typeof setHistorical === 'function' && typeof pbCfg === 'function' && FF_READY === true";
+/* the hidden page can reload itself (a new deploy noticed by the service worker): its helpers are then gone → wait for it, add them again */
+async function engine() {
+  const w = await engine0();
+  let has = false; try { has = typeof w.__pb === 'function' && typeof w.__pbAdjLoad === 'function'; } catch (e) {}
+  if (!has) {
+    await waitFor(() => w.document.documentElement.classList.contains('auth-ok') && w.eval(ENG_OK), 60000)
+      .catch(() => { throw new Error('The screens did not load (60 s). Check your connection and reload.'); });
+    w.eval(HELPER());
+  }
+  return w;
+}
+function engine0() {
   return ENG = ENG || new Promise((resolve, reject) => {
     const f = document.createElement('iframe');
     f.className = 'eng'; f.tabIndex = -1; f.setAttribute('aria-hidden', 'true'); f.title = 'screens';
