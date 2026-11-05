@@ -498,7 +498,8 @@ window.__pbAdj = function (M, uni, ks) {
       const pk = s => { const m = M.s[s.sym], f = m.p[k] / m.p[0], x = v => ok(v) ? v * f : null;
         return {sym: s.sym, name: s.name, ind: s.ind, url: s.url, mom: s.momS, score: s.score, pe: x(s.pe), pb: x(s.pb), mcap: x(s.mcap), cagr: s.cagr, circ: s.circ}; };
       const base = V().filter(s => has(s) && !young(s) && ok(s.momS));
-      out[k] = {pool: base.filter(s => pbMomOk(s, P.mf)).map(pk), buf: base.filter(s => pbMomOk(s, fb)).map(pk), why: {}};
+      out[k] = {pool: base.filter(s => pbMomOk(s, P.mf)).map(pk), buf: base.filter(s => pbMomOk(s, fb)).map(pk), why: {}, mm: {}};
+      D.stocks.forEach(s => { if (ok(s.momS) && M.s[s.sym]) out[k].mm[s.sym] = Math.round(s.momS); });   // every stock's momentum then
       out[k].pool.forEach(x => cand.add(x.sym));
       const inBuf = new Set(out[k].buf.map(x => x.sym));
       D.stocks.forEach(s => { if (!cand.has(s.sym)) return;               // why each stock once on the list is out of the buffer now
@@ -510,6 +511,41 @@ window.__pbAdj = function (M, uni, ks) {
     GF.uni = 'all'; setMode(); computeScores.S = null; computeScores();
   }
   return JSON.stringify({sb, out});
+};
+/* the Value list on days between the snapshots (every month / week): the latest snapshot before that day, its price-based
+   figures moved to that day's price (market cap, PE, PB × the price change; yields ÷ it), scores worked out again, your Value
+   screen + the sell buffer. pts = [{i, key (snapshot), ks (its month), k (month) | wk (week), date}] */
+window.__pbAdjVal = function (M, uni, ptsJson) {
+  const P = window.pbCfg(); GF.psu = P.psu; GF.semi = P.semi;
+  const vf = P.vf, fbv = pbBuffer(vf, SB().buf / 100), near = pbBuffer(vf, 1), day = 864e5;
+  let first = '9999'; D.stocks.forEach(s => { if (s.lf && s.lf < first) first = s.lf; });
+  const startISO = new Date(Date.parse(first) + 7 * day).toISOString().slice(0, 10);
+  const pick = s => ({sym: s.sym, name: s.name, ind: s.ind, url: s.url, cmp: s.cmp, pe: s.pe, pb: s.pb, mom: s.momS, score: s.score, mcap: s.mcap, cagr: s.cagr, hi52: s.hi52, circ: s.circ});
+  const out = {}, T0 = D.then, back0 = GF.back, key0 = GF.backP;
+  try {
+    for (const q of JSON.parse(ptsJson)) {
+      const T = BACK_CACHE[q.key];
+      if (!T || !T.stocks || !T.hasPrice) { out[q.i] = null; continue; }
+      const cut = new Date(Date.parse(q.date) - 365 * day).toISOString().slice(0, 10);
+      const young = s => !!(s.lf && s.lf > cut && s.lf > startISO);
+      const scale = s => { const m = M.s[s.sym]; if (!m) return null;
+        const a = m.p[q.ks], b = q.wk != null ? (m.w ? m.w[q.wk] : null) : m.p[q.k];
+        if (!(a > 0 && b > 0) || !ok(s.cmp)) return null;
+        const f = b / a, c = Object.assign({}, s);
+        ['mcap', 'cmp', 'pe', 'cpe', 'pb'].forEach(x => { if (ok(c[x])) c[x] = c[x] * f; });
+        ['dy', 'fcfy'].forEach(x => { if (ok(c[x])) c[x] = c[x] / f; });
+        if (ok(c.lo5pct)) c.lo5pct = ((1 + c.lo5pct / 100) * f - 1) * 100;
+        if (ok(c.hi52) && c.cmp > c.hi52) c.hi52 = c.cmp;
+        return c; };
+      D.then = Object.assign({}, T, {stocks: T.stocks.map(scale).filter(Boolean)});
+      GF.back = true; GF.backP = q.key; GF.uni = uni === 'all' || D.lists.includes(uni) ? uni : 'all';
+      setMode(); computeScores.S = null; computeScores();
+      const base = V().filter(s => !young(s) && s.score != null && s.cmp != null);
+      out[q.i] = {pool: base.filter(s => passVF(s, vf)).map(pick), buf: base.filter(s => passVF(s, fbv)).map(pick),
+        why: Object.fromEntries(V().filter(s => s.score != null && s.cmp != null && !passVF(s, fbv) && passVF(s, near)).map(s => [s.sym, pbWhy(s, {f: vf, fb: fbv}).why.join(' · ')]))};
+    }
+  } finally { D.then = T0; GF.back = back0; GF.backP = key0; GF.uni = 'all'; setMode(); computeScores.S = null; computeScores(); }
+  return JSON.stringify(out);
 };`;
 let ENG = null;
 const ENG_OK = "typeof V === 'function' && typeof D === 'object' && typeof setHistorical === 'function' && typeof pbCfg === 'function' && FF_READY === true";
@@ -595,11 +631,19 @@ async function ensurePeriod(key) {
    by SB.buf %, top N × SB.band), and exactly as many new names are bought (the next ones on the list not held), with the money that
    came back; nothing out = nothing done, even when a new name tops the list. No money added: each part keeps its own share of the
    fund. Every trade pays the Portfolio page's charges, every sale 20% tax on its profit. */
-const ADJ_MOM = [1, 2, 3, 6], ADJ_VAL = [3, 6, 12], ADJ_KEY = {12: '1Y', 9: '9M', 6: '6M', 3: '3M'};
-let ADJ = (() => { let v = {}; try { v = JSON.parse(lsGet('pb_adj') || '{}') || {}; } catch (e) {}
-  return {m: ADJ_MOM.includes(+v.m) ? +v.m : 1, v: ADJ_VAL.includes(+v.v) ? +v.v : 3, w: v.w === undefined ? true : !!v.w, t: [10, 15, 20, 25, 30, 40].includes(+v.t) ? +v.t : 20}; })();
-const adjKeys = () => [12, 9, 6, 3].filter(k => (12 - k) % ADJ.v === 0).map(k => ADJ_KEY[k]);
-const perHas = key => !!DATA && (key === 'ADJ' ? adjKeys().every(k => k in DATA.backs) && !!DATA.adj && DATA.adj.uni === SELC.mom.uni : key in DATA.backs);
+const ADJ_MOM = [1, 2, 3, 6], ADJ_VAL = ['W', 1, 3, 6, 12], ADJ_TR = [0, 10, 15, 20, 25, 30, 40], ADJ_MK = [0, 60, 70, 80, 90];
+const SNAPK = {12: '1Y', 9: '9M', 6: '6M', 3: '3M', 1: '1M'}, SNAPS = [1, 3, 6, 9, 12], ADJ_KEY = SNAPK;
+let ADJ = (() => { let v = {}; try { v = JSON.parse(lsGet('pb_adj2') || '{}') || {}; } catch (e) {}
+  return {m: ADJ_MOM.includes(+v.m) ? +v.m : 1, v: v.v === 'W' ? 'W' : ADJ_VAL.includes(+v.v) ? +v.v : 3,
+    w: v.w === undefined ? true : !!v.w, t: ADJ_TR.includes(+v.t) ? +v.t : 0, mk: ADJ_MK.includes(+v.mk) ? +v.mk : 80}; })();
+const adjSave = () => lsSet('pb_adj2', JSON.stringify(ADJ));
+const vEvery = () => ADJ.v === 'W' ? 'week' : ADJ.v === 1 ? 'month' : ADJ.v === 12 ? 'year (bought once)' : ADJ.v + ' months';
+/* the back screens the Value re-picks need: exact snapshots for 3 / 6 / 12 months; every month / week = the latest snapshot before it,
+   its price-based figures moved to that day's price (PE, PB, market cap, yields …) */
+const adjKeys = () => (ADJ.v === 'W' || ADJ.v === 1 ? SNAPS.slice().reverse() : [12, 9, 6, 3].filter(k => (12 - k) % ADJ.v === 0)).map(k => SNAPK[k]);
+const vSig = () => ADJ.v === 'W' || ADJ.v === 1 ? ADJ.v + '|' + SELC.value.uni : '';
+const perHas = key => !!DATA && (key === 'ADJ' ? adjKeys().every(k => k in DATA.backs) && !!DATA.adj && DATA.adj.uni === SELC.mom.uni
+  && (DATA.adj.none || !vSig() || !!(DATA.adj.vs && DATA.adj.vs[vSig()])) : key in DATA.backs);
 const PER_BUSY = {};
 function ensurePer(key) {                                         // one build per period at a time, however often it is asked for
   if (!DATA) return Promise.resolve();
@@ -611,17 +655,38 @@ function ensurePer(key) {                                         // one build p
 }
 let ADJ_BUSY = null;
 function ensureAdj() { return ADJ_BUSY = ADJ_BUSY || adjBuild().finally(() => { ADJ_BUSY = null; }); }
+/* the points a Value re-pick needs worked out in the hidden page (every month / every week) */
+function adjValPts(M) {
+  const md = k => Math.round(k * 365 / 12), pts = [];
+  if (ADJ.v === 1) [11, 10, 8, 7, 5, 4, 2].forEach(k => { const ks = SNAPS.find(x => x >= k); pts.push({i: 12 - k, key: SNAPK[ks], ks, k, date: M.monthDates[k]}); });
+  if (ADJ.v === 'W' && Array.isArray(M.weekDates)) for (let w = 52; w >= 1; w--) { const ks = SNAPS.find(x => md(x) >= 7 * w) || 12; pts.push({i: 52 - w, key: SNAPK[ks], ks, wk: w, date: M.weekDates[w]}); }
+  return pts;
+}
 async function adjBuild() {
-  if (DATA.adj && DATA.adj.uni === SELC.mom.uni) return;
-  $('#out').innerHTML = hLoad('Building the 1Y adj backtest…');
-  status('Working out the Momentum list month by month…');
   const w = await engine();
-  w.eval('setHistorical(false, null, true)');
-  await waitFor(() => w.eval('!BACK'));
-  const M = await w.__pbAdjLoad();
-  if (!M || !Array.isArray(M.monthDates) || !M.s || !Object.keys(M.s).length) { DATA.adj = {none: true, uni: SELC.mom.uni}; status(READY); return; }
-  const r = JSON.parse(w.__pbAdj(M, SELC.mom.uni, [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]));
-  DATA.adj = {M, at: r.out, sb: r.sb, uni: SELC.mom.uni};
+  if (!(DATA.adj && DATA.adj.uni === SELC.mom.uni)) {
+    $('#out').innerHTML = hLoad('Building the 1Y adj backtest…');
+    status('Working out the Momentum list month by month…');
+    w.eval('setHistorical(false, null, true)');
+    await waitFor(() => w.eval('!BACK'));
+    const M = await w.__pbAdjLoad();
+    if (!M || !Array.isArray(M.monthDates) || !M.s || !Object.keys(M.s).length) { DATA.adj = {none: true, uni: SELC.mom.uni}; status(READY); return; }
+    const r = JSON.parse(w.__pbAdj(M, SELC.mom.uni, [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]));
+    DATA.adj = {M, at: r.out, sb: r.sb, uni: SELC.mom.uni, vs: {}};
+  }
+  const sig = vSig();
+  if (sig && !DATA.adj.none && !DATA.adj.vs[sig]) {
+    const pts = adjValPts(DATA.adj.M);
+    $('#out').innerHTML = hLoad(`Working out the Value list every ${ADJ.v === 'W' ? 'week' : 'month'}…`);
+    status(`Working out the Value list every ${ADJ.v === 'W' ? 'week' : 'month'} (${pts.length} dates)…`);
+    for (const key of [...new Set(pts.map(p => p.key))]) {            // the snapshots, loaded in the hidden page
+      w.eval(`setHistorical(true, '${key}', true)`);
+      await waitFor(() => w.eval(`BACK && D.then && (D.then.key || '1Y') === '${key}' && !!D.then.stocks`), 60000);
+    }
+    w.eval('setHistorical(false, null, true)');
+    await waitFor(() => w.eval('!BACK'));
+    DATA.adj.vs[sig] = JSON.parse(w.__pbAdjVal(DATA.adj.M, SELC.value.uni, JSON.stringify(pts)));
+  }
   status(READY);
 }
 /* Refresh (1Y adj): drop this visit's copy of the monthly prices + the daily closes, load them again, rebuild */
@@ -638,93 +703,113 @@ async function adjRefresh() {
 }
 const sellCharges = (v, r) => { let brok = v * r.brokPct / 100; if (r.brokCap > 0) brok = Math.min(brok, r.brokCap);
   const exch = v * r.exch / 100, sebi = v * r.sebi / 100; return brok + v * r.stt / 100 + exch + sebi + (brok + exch + sebi) * r.gst / 100 + (+r.dp || 0); };
-/* one part (Value or Momentum) with its own money F. picks(k) = null (no re-pick that month) or {strict: [sym…] (the list, in order),
-   keep: Set (inside the sell buffer)}. → value after the trades at each month point, the trades, and the holdings per month */
-function adjSleeve(F, picks, M, opt) {
-  const px = (s, k) => { const m = M.s[s], v = m && m.p[k]; return num(v) && v > 0 ? v : null; };
-  const pos = new Map(), log = [], segs = {}, after = {};
+/* one part (Value or Momentum) with its own money F over the time grid G ([{date, px(sym)}], oldest first).
+   picks(j) = null (no re-pick then) or {strict: [sym…] in list order, keep: Set (inside the sell buffer), why(sym), inWhy}.
+   A holding out of the buffer is still KEPT when its momentum then is ≥ opt.mk, or when it is in profit (opt.win; with opt.t > 0
+   it goes once it is t % below its highest price since bought). A sale's money, after sell charges and tax, is split equally
+   over the names bought in its place (each pays its buy charges): nothing is left in cash unless there is nothing to buy. */
+function adjSleeve(F, G, picks, opt, momOf) {
+  const n = G.length, pos = new Map(), log = [], segs = [], after = [];
+  const px = (s, j) => { const v = G[j].px(s); return num(v) && v > 0 ? v : null; };
   let cash = F, ch = 0, tax = 0, nb = 0, ns = 0;
-  const buy = (list, k) => { if (!list.length) return; const amt = cash / list.length;
-    list.forEach(s => { const q = px(s, k), c = buyCharges(1, amt, PF_RATES); pos.set(s, {u: (amt - c) / q, b: amt, k0: k, q0: q, peak: q}); cash -= amt; ch += c; nb++; }); };
-  const mark = k => { let v = cash; pos.forEach((p, s) => { const q = px(s, k); if (q) p.last = q; v += p.u * (p.last || p.q0); }); return v; };
-  for (let k = 12; k >= 1; k--) {
-    pos.forEach((p, s) => { const q = px(s, k); if (q && q > p.peak) p.peak = q; });     // highest month-end close since bought
-    const P = picks(k);
-    if (k === 12) { const L = P ? P.strict.filter(s => px(s, 12)) : []; buy(L, 12); log.push({k, first: true, out: [], kept: [], inn: L.slice(), innWhy: P ? P.inWhy : {}, n: pos.size}); }
+  const buy = (list, j) => { if (!list.length) return; const amt = cash / list.length;
+    list.forEach(s => { const q = px(s, j), c = buyCharges(1, amt, PF_RATES); pos.set(s, {u: (amt - c) / q, b: amt, j0: j, q0: q, peak: q}); cash -= amt; ch += c; nb++; }); };
+  const mark = j => { let v = cash; pos.forEach((p, s) => { const q = px(s, j); if (q) p.last = q; v += p.u * (p.last || p.q0); }); return v; };
+  for (let j = 0; j < n - 1; j++) {
+    pos.forEach((p, s) => { const q = px(s, j); if (q && q > p.peak) p.peak = q; });
+    const P = picks(j);
+    if (j === 0) { const L = P ? P.strict.filter(s => px(s, 0)) : []; buy(L, 0); log.push({j, first: true, out: [], kept: [], inn: L.slice(), innWhy: P ? P.inWhy : {}, n: pos.size}); }
     else if (P) {
       const outs = [], kept = [];
-      [...pos.keys()].filter(s => !P.keep.has(s) && px(s, k)).forEach(s => {
-        const p = pos.get(s), q = px(s, k), cpu = p.b / p.u;                         // cost per share incl. buy charges
+      [...pos.keys()].filter(s => !P.keep.has(s) && px(s, j)).forEach(s => {
+        const p = pos.get(s), q = px(s, j), cpu = p.b / p.u, mm = momOf ? momOf(j, s) : null, g = (q / cpu - 1) * 100;
         let why = P.why(s);
-        if (opt.win && q > cpu) {                                                    // a winner: kept until it gives back opt.trail % from its high
+        if (opt.mk > 0 && num(mm) && mm >= opt.mk) { kept.push({sym: s, ret: g, why: `momentum ${Math.round(mm)} ≥ ${opt.mk}: not touched · off the list: ${why}`}); return; }
+        if (opt.win && q > cpu) {
           const off = (q / p.peak - 1) * 100;
-          if (off > -opt.trail) { kept.push({sym: s, ret: (q / cpu - 1) * 100, why: `winner, ${off > -0.05 ? 'at its high' : fmt(-off, 1) + '% below its high'} (sold at ${opt.trail}% below) · off the list: ${why}`}); return; }
-          why = `gave back ${fmt(-off, 1)}% from its high (trail ${opt.trail}%) · ${why}`;
+          if (!(opt.t > 0) || off > -opt.t) { kept.push({sym: s, ret: g, why: `winner +${fmt(g, 1)}%${opt.t > 0 ? `, ${off > -0.05 ? 'at its high' : fmt(-off, 1) + '% below its high'} (sold at ${opt.t}% below)` : ': never cut'} · off the list: ${why}`}); return; }
+          why = `gave back ${fmt(-off, 1)}% from its high (trail ${opt.t}%) · ${why}`;
         }
         const v = p.u * q, c = sellCharges(v, PF_RATES), t = TAX * Math.max(0, v - c - p.b);
-        cash += v - c - t; ch += c; tax += t; ns++; outs.push({sym: s, ret: ((v - c) / p.b - 1) * 100, k0: p.k0, why}); pos.delete(s);
+        cash += v - c - t; ch += c; tax += t; ns++; outs.push({sym: s, ret: ((v - c) / p.b - 1) * 100, why: why + (num(mm) ? ` · momentum ${Math.round(mm)}` : '')}); pos.delete(s);
       });
-      const inn = P.strict.filter(s => !pos.has(s) && px(s, k)).slice(0, outs.length);
-      buy(inn, k);
-      log.push({k, out: outs, kept, inn, innWhy: P.inWhy, n: pos.size});
+      const inn = P.strict.filter(s => !pos.has(s) && px(s, j)).slice(0, outs.length);
+      buy(inn, j);
+      log.push({j, out: outs, kept, inn, innWhy: P.inWhy, n: pos.size, cash});
     }
-    after[k] = mark(k);
-    segs[k] = {cash, H: [...pos.entries()].map(([s, p]) => ({s, u: p.u, q: px(s, k) || p.last || p.q0}))};
+    after[j] = mark(j);
+    segs[j] = {cash, H: [...pos.entries()].map(([s, p]) => ({s, u: p.u, q: px(s, j) || p.last || p.q0}))};
   }
-  after[0] = mark(0);
-  const hold = [...pos.entries()].map(([s, p]) => ({sym: s, k0: p.k0, ret: px(s, 0) ? (p.u * px(s, 0) / p.b - 1) * 100 : null}));
-  return {F, after, segs, log, hold, ch, tax, nb, ns, ret: (after[0] / F - 1) * 100};
+  after[n - 1] = mark(n - 1);
+  const hold = [...pos.entries()].map(([s, p]) => ({sym: s, j0: p.j0, ret: px(s, n - 1) ? (p.u * px(s, n - 1) / p.b - 1) * 100 : null}));
+  return {F, G, after, segs, log, hold, ch, tax, nb, ns, ret: (after[n - 1] / F - 1) * 100};
 }
-/* a part's value on every point of the chart (the index part's dates): daily closes where saved, else a smooth line month to month */
-function adjCurve(SL, M, BT, D) {
-  const n = BT.curve.dates.length, v = new Array(n).fill(null);
-  if (!BT.at) { for (let k = 12; k >= 0; k--) v[12 - k] = SL.after[k]; return {v, lines: 0, real: 0}; }
-  const base = BT.at[12], seen = new Set(), withD = new Set();
+/* a part's value on every point of the chart (the index part's days): daily closes where saved, else a smooth line point to point */
+function adjCurve(SL, BT, D) {
+  const G = SL.G, n0 = BT.curve.dates.length, v = new Array(n0).fill(null);
+  if (!BT.at) { for (let j = 0; j < G.length && j < n0; j++) v[j] = SL.after[j]; return {v, lines: 0, real: 0}; }
+  const base = BT.at[12], last = BT.at[0], seen = new Set(), withD = new Set();
   const dp = (s, i) => { const p = D && D.px && D.px[s], x = p && p[i]; return num(x) && x > 0 ? x : null; };
-  for (let k = 12; k >= 1; k--) {
-    const a = BT.at[k], b = BT.at[k - 1], seg = SL.segs[k], end = k === 1 ? b : b - 1;
-    const H = seg.H.map(h => { const m = M.s[h.s], q1 = m && num(m.p[k - 1]) && m.p[k - 1] > 0 ? m.p[k - 1] : h.q, d0 = dp(h.s, a);
+  for (let i = base; i < G[0].di && i <= last; i++) v[i - base] = SL.F;            // before this part's first date: still its money
+  for (let j = 0; j < G.length - 1; j++) {
+    const a = G[j].di, b = G[j + 1].di, seg = SL.segs[j], end = j === G.length - 2 ? last : b - 1;
+    if (a < 0 || !seg) continue;
+    const H = seg.H.map(h => { const q1v = G[j + 1].px(h.s), q1 = num(q1v) && q1v > 0 ? q1v : h.q, d0 = dp(h.s, a);
       seen.add(h.s); if (d0) withD.add(h.s); return Object.assign({q1, d0, last: h.q}, h); });
-    for (let i = a; i <= end; i++) {
+    for (let i = Math.max(a, base); i <= end; i++) {
       let t = seg.cash;
       H.forEach(h => { let x;
         if (h.d0) { const di = dp(h.s, i); x = di ? h.q * di / h.d0 : h.last; }
-        else x = b > a ? h.q * Math.pow(h.q1 / h.q, (i - a) / (b - a)) : h.q;
+        else x = b > a ? h.q * Math.pow(h.q1 / h.q, Math.min(1, (i - a) / (b - a))) : h.q;
         h.last = x; t += h.u * x; });
       v[i - base] = t;
     }
   }
   return {v, lines: [...seen].filter(s => !withD.has(s)).length, real: withD.size};
 }
-/* the whole 1Y adj backtest: index part (etfBacktest), Value and Momentum parts (adjSleeve) → the same shape as portfolio() */
+/* the whole 1Y adj backtest: index part (weekly ETF switches), Value and Momentum parts (adjSleeve) → the same shape as portfolio() */
 function adjRun(F0, part) {
-  const A = DATA.adj, M = A.M, EM = (DATA.etf && DATA.etf.etf) || {}, D = DATA.daily;
-  const BT = hasMonthly(EM) ? etfBacktest(EM, DATA.etf.monthDates, D, 12) : null;
+  const A = DATA.adj, M = A.M, D = DATA.daily;
+  const BT = indexBT(F0);
   const sh = {}; SPLIT.forEach(([k, , x]) => { sh[k] = x; });
   const band = n => n > 0 ? Math.ceil(n * ((A.sb && A.sb.band) || 2)) : 0;
   const names = {};
-  const pv = (k, which) => { const b = DATA.backs[ADJ_KEY[k]], P = (b && b.pools) || {}, c = SELC.value; return ((P[c.uni] || P.all || {})[which]) || null; };
+  const didx = d => { if (!D || !Array.isArray(D.dates)) return -1; let j = -1; for (let i = 0; i < D.dates.length; i++) { if (D.dates[i] <= d) j = i; else break; } return j; };
+  const mGrid = []; for (let k = 12; k >= 0; k--) mGrid.push({date: M.monthDates[k], k, di: BT && BT.at ? BT.at[k] : -1, px: s => { const m = M.s[s]; return m ? m.p[k] : null; }});
+  const weekly = ADJ.v === 'W' && BT && BT.at && Array.isArray(M.weekDates) && A.vs && A.vs[vSig()];
+  const vGrid = weekly ? (() => { const g = []; for (let w = 52; w >= 0; w--) { const d = M.weekDates[w];
+      g.push({date: d, w, k: Math.min(12, Math.max(1, Math.ceil(7 * w / (365 / 12)))), di: w === 0 ? BT.at[0] : didx(d), px: s => { const m = M.s[s]; return m && m.w ? m.w[w] : null; }}); } return g; })() : mGrid;
+  const mmAt = k => (A.at[Math.max(1, Math.min(12, k))] || {}).mm || {};
   /* why a holding is out: the screen limit it misses (with the sell limit), else its rank against the top N × band */
   const rankWhy = (c, rk, s) => { const i = rk.indexOf(s); return i < 0 ? 'not in the list then (list / PSU / listing)' : `ranks ${i + 1}: outside the top ${band(c.n)} (N ${c.n} × ${(A.sb && A.sb.band) || 2})`; };
-  const vPick = k => { if ((12 - k) % ADJ.v || !ADJ_KEY[k]) return null; const pool = pv(k, 'value'); if (!pool) return null;
+  const valSet = (pool, buf, vw) => {
     pool.forEach(x => { names[x.sym] = x; });
-    const strictL = choose(pool, SELC.value, 'value'), bufL = choose(pv(k, 'valueBuf') || pool, Object.assign({}, SELC.value, {n: 0}), 'value'), rk = bufL.map(x => x.sym);
-    const vw = pv(k, 'valueWhy') || {};
+    const strictL = choose(pool, SELC.value, 'value'), rk = choose(buf || pool, Object.assign({}, SELC.value, {n: 0}), 'value').map(x => x.sym);
     return {strict: strictL.map(x => x.sym), keep: new Set(band(SELC.value.n) ? rk.slice(0, band(SELC.value.n)) : rk),
-      why: s => vw[s] || (rk.includes(s) ? rankWhy(SELC.value, rk, s) : 'far outside the screen then'),
-      inWhy: Object.fromEntries(strictL.map((x, i) => [x.sym, `#${i + 1} · value score ${num(x.score) ? Math.round(x.score) : '–'} · PE ${fmt(x.pe, 1)}`]))}; };
-  const mPick = k => { if ((12 - k) % ADJ.m) return null; const t = A.at[k]; if (!t) return null;
+      why: s => (vw || {})[s] || (rk.includes(s) ? rankWhy(SELC.value, rk, s) : 'far outside the screen then'),
+      inWhy: Object.fromEntries(strictL.map((x, i) => [x.sym, `#${i + 1} · value score ${num(x.score) ? Math.round(x.score) : '–'} · PE ${fmt(x.pe, 1)}`]))};
+  };
+  const pv = (key, which) => { const b = DATA.backs[key], P = (b && b.pools) || {}, c = SELC.value; return ((P[c.uni] || P.all || {})[which]) || null; };
+  const vPick = j => {
+    if (weekly) { const t = A.vs[vSig()][j]; return t ? valSet(t.pool, t.buf, t.why) : null; }
+    const k = 12 - j, every = ADJ.v === 'W' ? 1 : ADJ.v;
+    if (j % every) return null;
+    if (SNAPK[k] && pv(SNAPK[k], 'value')) return valSet(pv(SNAPK[k], 'value'), pv(SNAPK[k], 'valueBuf'), pv(SNAPK[k], 'valueWhy'));
+    const t = A.vs && A.vs[vSig()] && A.vs[vSig()][j]; return t ? valSet(t.pool, t.buf, t.why) : null;
+  };
+  const mPick = j => { const k = 12 - j; if (j % ADJ.m) return null; const t = A.at[k]; if (!t) return null;
     t.pool.forEach(x => { names[x.sym] = names[x.sym] || x; });
     const strictL = choose(t.pool, SELC.mom, 'mom'), rk = choose(t.buf, Object.assign({}, SELC.mom, {n: 0}), 'mom').map(x => x.sym), wy = t.why || {};
     return {strict: strictL.map(x => x.sym), keep: new Set(band(SELC.mom.n) ? rk.slice(0, band(SELC.mom.n)) : rk),
-      why: s => { const w = wy[s] || {}; return `momentum ${w.m == null ? '–' : w.m} · circuit ${w.c == null ? '–' : w.c}d · ` + (w.w || rankWhy(SELC.mom, rk, s)); },
+      why: s => { const w = wy[s] || {}; return `circuit ${w.c == null ? '–' : w.c}d · ` + (w.w || rankWhy(SELC.mom, rk, s)); },
       inWhy: Object.fromEntries(strictL.map((x, i) => [x.sym, `#${i + 1} · momentum ${num(x.mom) ? Math.round(x.mom) : '–'} · circuit ${num(x.circ) ? x.circ : '–'}d`]))}; };
   const one = part !== 'all' && sh[part] > 0, F = one ? F0 * sh[part] : F0, w = k => one ? (k === part ? 1 : 0) : sh[k];
-  const opt = {win: ADJ.w, trail: ADJ.t};
-  const SV = adjSleeve(F0 * sh.value, vPick, M, opt), SM = adjSleeve(F0 * sh.mom, mPick, M, opt);
-  const res = {BT, SV, SM, names, ret: {index: BT ? BT.ret : null, value: SV.ret, mom: SM.ret}};
+  const opt = {win: ADJ.w, t: ADJ.t, mk: ADJ.mk};
+  const SV = adjSleeve(F0 * sh.value, vGrid, vPick, opt, (j, s) => mmAt(vGrid[j].k)[s]);
+  const SM = adjSleeve(F0 * sh.mom, mGrid, mPick, opt, (j, s) => mmAt(12 - j)[s]);
+  const res = {BT, SV, SM, names, weekly: !!weekly, ret: {index: BT ? BT.ret : null, value: SV.ret, mom: SM.ret}};
   if (!BT) return res;
-  const cv = adjCurve(SV, M, BT, D), cm = adjCurve(SM, M, BT, D);
+  const cv = adjCurve(SV, BT, D), cm = adjCurve(SM, BT, D);
   const dates = BT.curve.dates, n = dates.length, i0 = BT.at ? BT.at[12] : 0;
   const total = dates.map((_, i) => (w('index') ? F0 * sh.index * BT.curve.v[i] / 100 : 0) + (w('value') ? (cv.v[i] || 0) : 0) + (w('mom') ? (cm.v[i] || 0) : 0));   // each part in rupees from its own share
   let nifty = null; const bench = DATA.etf && DATA.etf.bench;
@@ -739,9 +824,11 @@ const backSyms = () => PER === 'ADJ' ? adjSyms() : (L => [...L.value, ...L.mom].
 function paintAdj(fund) {
   const out = $('#out');
   PF = null;
-  const set = `<div class="adjset"><label>Momentum re-picked every <select id="adjM">${ADJ_MOM.map(m => `<option value="${m}"${m === ADJ.m ? ' selected' : ''}>${m} month${m > 1 ? 's' : ''}</option>`).join('')}</select></label>
-    <label>Value every <select id="adjV">${ADJ_VAL.map(m => `<option value="${m}"${m === ADJ.v ? ' selected' : ''}>${m} months</option>`).join('')}</select></label>
-    <label title="A holding in profit is kept whatever the exit reason (rank, momentum, limits, circuit days) until it falls this much below its highest month-end price since bought"><input type="checkbox" id="adjW"${ADJ.w ? ' checked' : ''}> Keep winners, sell at <select id="adjT"${ADJ.w ? '' : ' disabled'}>${[10, 15, 20, 25, 30, 40].map(t => `<option value="${t}"${t === ADJ.t ? ' selected' : ''}>${t}%</option>`).join('')}</select> off the high</label>
+  const opt = (id, vals, cur, lab) => `<select id="${id}">${vals.map(v => `<option value="${v}"${v === cur ? ' selected' : ''}>${lab(v)}</option>`).join('')}</select>`;
+  const set = `<div class="adjset"><label>Momentum re-picked every ${opt('adjM', ADJ_MOM, ADJ.m, m => m + ' month' + (m > 1 ? 's' : ''))}</label>
+    <label>Value every ${opt('adjV', ADJ_VAL, ADJ.v, v => v === 'W' ? 'week' : v + ' month' + (v > 1 ? 's' : ''))}</label>
+    <label title="A stock with this momentum score or more is never sold, whatever else (Value and Momentum parts)">Never sell momentum ≥ ${opt('adjK', ADJ_MK, ADJ.mk, v => v ? String(v) : 'off')}</label>
+    <label title="A holding in profit is never sold (whatever the exit reason), unless you pick a fall from its highest price since bought"><input type="checkbox" id="adjW"${ADJ.w ? ' checked' : ''}> Never sell a winner${ADJ.w ? `, unless ${opt('adjT', ADJ_TR, ADJ.t, v => v ? v + '% off its high' : 'never')}` : ''}</label>
     <button type="button" class="btn sm" id="adjRef" title="Load the latest month-by-month prices and daily closes and build this backtest again">Refresh</button></div>`;
   if (!perHas('ADJ')) { out.innerHTML = perBar() + set + hLoad('Building the 1Y adj backtest…'); ensurePer('ADJ').then(() => { if (PER === 'ADJ' && TAB === 'back') paint(); }).catch(e => status((e && e.message) || 'Could not build the 1Y adj backtest.', true)); return; }
   if (DATA.adj.none) { out.innerHTML = perBar() + set + '<p class="empty">Month-by-month data is not available yet. <a href="https://t.me/HNImanshu" target="_blank" rel="noopener">Contact us</a>.</p>'; return; }
@@ -765,7 +852,7 @@ function paintAdj(fund) {
       + (PF.daily ? `Valued on ${PF.dates.length} trading days.` : 'Daily prices are not saved yet: the chart uses 13 monthly points and max drawdown is understated.')
       + (PF.lines ? ` ${PF.lines} of ${PF.lines + PF.real} value / momentum stocks have no daily prices (yet): drawn as a smooth line from month to month.` : '')
       + ` Index ETFs after ${TAX * 100}% tax on switches; stocks after charges and ${TAX * 100}% tax on every sale.`;
-  let html = perBar() + set + `<p class="lead2">One year from <b>${esc(fdate(DATA.adj.M.monthDates[12], true))}</b> to ${esc(fdate(DATA.adj.M.monthDates[0], true))}: Momentum re-picked every ${ADJ.m === 1 ? 'month' : ADJ.m + ' months'}, Value every ${ADJ.v === 12 ? 'year (bought once)' : ADJ.v + ' months'}, index ETFs re-checked every month. A holding is sold only when it falls out of the sell buffer (limits loosened ${fmt(sb.buf, 0)}%, top N × ${fmt(sb.band, 1)})${ADJ.w ? `, and a holding in profit only once it is ${ADJ.t}% below its highest month-end price since bought` : ''}; only as many are bought as were sold. No money added; ${SPLIT.map(x => +(x[2] * 100).toFixed(1)).join(' / ')} between parts.</p>
+  let html = perBar() + set + `<p class="lead2">One year from <b>${esc(fdate(DATA.adj.M.monthDates[12], true))}</b> to ${esc(fdate(DATA.adj.M.monthDates[0], true))}: Momentum re-picked every ${ADJ.m === 1 ? 'month' : ADJ.m + ' months'}, Value every ${vEvery()}${ADJ.v === 'W' && !R.weekly ? ' (weekly prices not in yet: monthly used)' : ''}, index ETFs checked every ${BT && BT.weekly ? 'week' : 'month'}. A holding is sold only when it falls out of the sell buffer (limits loosened ${fmt(sb.buf, 0)}%, top N × ${fmt(sb.band, 1)})${ADJ.mk ? `, its momentum is below ${ADJ.mk}` : ''}${ADJ.w ? (ADJ.t ? ` and it is not in profit (a winner goes only ${ADJ.t}% below its high)` : ' and it is not in profit') : ''}. A sale's money, less charges and ${TAX * 100}% tax on the profit, buys the same number of new names. No money added; ${SPLIT.map(x => +(x[2] * 100).toFixed(1)).join(' / ')} between parts.</p>
     <div class="kpis">
       <div class="kpi"><span>Mix return</span><b class="${tot >= 0 ? 'pos' : 'neg'}">${pct(tot)}</b></div>
       <div class="kpi"><span>NIFTY 500</span><b class="${(bench || 0) >= 0 ? 'pos' : 'neg'}">${pct(bench)}</b></div>
@@ -784,25 +871,26 @@ function paintAdj(fund) {
       <p class="sub">${rsK(PF.F)} on ${esc(fdate(a, true))} → ${rsK(end)} on ${esc(fdate(z, true))} · net ${pct((end / PF.F - 1) * 100)} · max drawdown ${pct(PF.mx.dd)} · average drawdown ${pct(PF.avgDD)}${PF.nifty ? ' · faint line: NIFTY 500' : ''}</p>${lack.length && !locked ? `<p class="rh">${lack.length} of ${need.length} stocks have no daily prices: drawn month to month. Refresh chart downloads them (3–5 min).</p>` : ''}</div>${askBtn}</div>
       ${lack.length || PREP.state === 'working' || PREP.state === 'still' || PREP.state === 'failed' ? '<p class="prep" id="prep"></p>' : ''}<div class="chart" id="chPf"></div><p class="note">${esc(note)}</p></div>`;
   } else html += `<p class="note">${esc(note)}</p>`;
-  const M = DATA.adj.M, md = k => { const t = fdate(M.monthDates[k], true).split(' '); return t.length === 3 ? t[0] + ' ' + t[1] + ' ' + t[2].slice(2) : t.join(' '); };
+  const dShort = d => { const t = fdate(d, true).split(' '); return t.length === 3 ? t[0] + ' ' + t[1] + ' ' + t[2].slice(2) : t.join(' '); };
   const nm = s => (R.names[s] && R.names[s].name) || s;
   const tip = (s, t) => `${nm(s)}\n${t}`;
   const chip = x => `<span class="adjc" tabindex="0" data-tip="${esc(tip(x.sym, (x.ret == null ? '' : fmt(x.ret, 1) + '% after charges, before tax\n') + 'Out: ' + (x.why || '–')))}">${esc(x.sym)} ${pill(x.ret)}</span>`;
   const keptChip = x => `<span class="adjc kept" tabindex="0" data-tip="${esc(tip(x.sym, 'Kept: ' + x.why))}">${esc(x.sym)} ${pill(x.ret)}</span>`;
   const part = (k, SL, every) => {
-    const rule = `<p class="rule">${psuTxt(CFG())} that pass ${esc(scrName(k))} · ${esc(selText(k))} · re-picked every ${every === 1 ? 'month' : every + ' months'}${every === 12 ? ' (bought once and held)' : ''}${k === 'mom' ? ' · momentum then from the prices known then; the screen\'s other filters use today\'s figures' : ''}.
-      Out = fails a limit even loosened ${fmt(sb.buf, 0)}% (shown with its sell limit), a hard limit (circuit days), or ranks below the top N × ${fmt(sb.band, 1)}${ADJ.w ? `; a holding in profit is kept until it is ${ADJ.t}% below its high` : ''}. Hover or tap a name for the reason.</p>`;
+    const rule = `<p class="rule">${psuTxt(CFG())} that pass ${esc(scrName(k))} · ${esc(selText(k))} · re-picked every ${every === 'week' ? 'week' : every === 1 ? 'month' : every + ' months'}${every === 12 ? ' (bought once and held)' : ''}${k === 'mom' ? ' · momentum then from the prices known then; the screen\'s other filters use today\'s figures' : (every === 'week' || every === 1) ? ' · between the quarterly snapshots the screen uses the last snapshot\'s results at that day\'s price' : ''}.
+      Off the list = fails a limit even loosened ${fmt(sb.buf, 0)}% (shown with its sell limit), a hard limit (circuit days), or ranks below the top N × ${fmt(sb.band, 1)}. Still kept${ADJ.mk ? ` with momentum ≥ ${ADJ.mk}` : ''}${ADJ.mk && ADJ.w ? ' or' : ''}${ADJ.w ? ` in profit${ADJ.t ? ` (until ${ADJ.t}% below its high)` : ''}` : ''}. Only rows with a sale or a kept name are shown. Hover or tap a name for the reason.</p>`;
     const inChip = (x, s) => `<span class="adjc" tabindex="0" data-tip="${esc(tip(s, 'Bought: ' + ((x.innWhy || {})[s] || '')))}">${esc(s)}</span>`;
-    const logRows = SL.log.map(x => `<tr><td>${esc(md(x.k))}</td><td>${x.first ? '<i>bought ' + x.inn.length + '</i>' : x.out.length ? x.out.map(chip).join(' ') : `<i>${x.kept && x.kept.length ? 'nothing sold' : 'nothing out'}</i>`}${x.kept && x.kept.length ? `<div class="adjk"><i>kept as winners:</i> ${x.kept.map(keptChip).join(' ')}</div>` : ''}</td>
+    const md = j => dShort(SL.G[j].date);
+    const logRows = SL.log.filter(x => x.first || x.out.length || (x.kept && x.kept.length)).map(x => `<tr><td>${esc(md(x.j))}</td><td>${x.first ? '<i>bought ' + x.inn.length + '</i>' : x.out.length ? x.out.map(chip).join(' ') : `<i>${x.kept && x.kept.length ? 'nothing sold' : 'nothing out'}</i>`}${x.kept && x.kept.length ? `<div class="adjk"><i>kept (winner / strong momentum):</i> ${x.kept.map(keptChip).join(' ')}</div>` : ''}</td>
       <td>${x.first ? x.inn.map(s => inChip(x, s)).join(' ') : x.inn.length ? x.inn.map(s => inChip(x, s)).join(' ') : x.out.length ? '<i>none to buy: kept in cash</i>' : ''}</td><td class="r">${x.n}</td></tr>`).join('');
-    const holdRows = SL.hold.sort((a, b) => (b.ret || -1e9) - (a.ret || -1e9)).map(x => `<tr${heldTr(x)}><td>${symCell(x)}</td><td class="nm" title="${esc(nm(x.sym))}">${esc(nm(x.sym))}</td><td>${esc(md(x.k0))}</td><td class="r">${pill(x.ret)}</td></tr>`).join('');
+    const holdRows = SL.hold.sort((a, b) => (b.ret || -1e9) - (a.ret || -1e9)).map(x => `<tr${heldTr(x)}><td>${symCell(x)}</td><td class="nm" title="${esc(nm(x.sym))}">${esc(nm(x.sym))}</td><td>${esc(md(x.j0))}</td><td class="r">${pill(x.ret)}</td></tr>`).join('');
     return rule + `<div class="tw"><table class="adjlog"><thead><tr><th>Re-pick</th><th>Sold (return)</th><th>Bought</th><th class="r">Holdings</th></tr></thead><tbody>${logRows}</tbody></table></div>
       <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th>Bought</th><th class="r">Return since</th></tr></thead><tbody>${holdRows || '<tr><td colspan="4" class="empty">Nothing held at the end.</td></tr>'}</tbody></table></div>`;
   };
   html += '<div class="bar"><span class="sp"></span><button type="button" class="btn sm" data-all="1">Expand all</button><button type="button" class="btn sm" data-all="0">Collapse all</button></div>'
     + SPLIT.filter(x => x[2] > 0).map(([k, label, sh]) => {
-      if (k === 'index') return BT ? section(k, label, `${pc(sh)} · ${pct(r.index)} after ${TAX * 100}% tax (${BT.switches} switch${BT.switches === 1 ? '' : 'es'}) · re-checked monthly`, indexBack(BT, sh), false) : '';
-      const SL = k === 'value' ? SV : SM, every = k === 'value' ? ADJ.v : ADJ.m;
+      if (k === 'index') return BT ? section(k, label, `${pc(sh)} · ${pct(r.index)} after ${TAX * 100}% tax (${BT.switches} switch${BT.switches === 1 ? '' : 'es'}) · re-checked ${BT.weekly ? 'weekly' : 'monthly'}`, indexBack(BT, sh), false) : '';
+      const SL = k === 'value' ? SV : SM, every = k === 'value' ? (ADJ.v === 'W' ? 'week' : ADJ.v) : ADJ.m;
       return section(k, label, `${pc(sh)} · ${pct(SL.ret)} · ${SL.ns} sold, ${SL.nb} bought · ${SL.hold.length} held at the end`, part(k, SL, every), false);
     }).join('');
   out.innerHTML = html;
@@ -944,6 +1032,81 @@ function etfPick(sc) {
    (value - cost basis, losses give no tax); the rest is re-invested after tax. Plain rebalancing of ETFs that stay is tax-free.
    builder_daily.json (saved daily closes, etf_prices/daily_close.csv) → the sleeve is valued DAY BY DAY between the month points
    (total return and drawdown charts). Without it the same maths runs on the 13 monthly points. */
+/* ---------- index part, WEEK BY WEEK (as in your portfolio: the pairs are checked on every weekly data date) ----------
+   builder_etf.json etfW = composite score of each ETF on 53 weekly dates. Each slot (one per pair + one per always-held ETF) starts
+   with an equal share of the money and keeps its ETF until the pair's pick changes; then the WHOLE slot is sold, sell charges and
+   TAX on its profit come off, and everything left (less the buy charges) buys the new ETF. No rebalancing in between. Valued on
+   every trading day (builder_daily.json). Returns the same shape as etfBacktest(), curve in % of the start. */
+function atMap(dates, D, M) {
+  if (!(D && Array.isArray(D.dates) && D.dates.length > 20 && dates)) return null;
+  const at = {};
+  for (let k = M; k >= 0; k--) {
+    const lim = k === 0 ? D.dates[D.dates.length - 1] : dates[k]; let j = -1;
+    for (let i = 0; i < D.dates.length; i++) { if (D.dates[i] <= lim) j = i; else break; }
+    at[k] = j;
+  }
+  return Object.values(at).some(j => j < 0) || at[M] >= at[0] ? null : at;
+}
+function etfWeekly(E, dates, D, M, EW, F0) {
+  const at = atMap(dates, D, M);
+  if (!at || !EW || !Array.isArray(EW.dates) || !EW.comp) return null;
+  const F = F0 || 100000, R = Object.assign({}, PF_RATES, {stt: 0});              // ETFs: no STT
+  const i0 = at[M], iN = at[0];
+  const idx = d => { let j = -1; for (let i = 0; i < D.dates.length; i++) { if (D.dates[i] <= d) j = i; else break; } return j; };
+  const px = (s, i) => { const p = D.px && D.px[s]; if (!p) return null; for (let j = i; j >= 0; j--) { const v = p[j]; if (num(v) && v > 0) return v; } return null; };
+  const scAt = x => { const sc = {}; Object.keys(EW.comp).forEach(s => { const v = EW.comp[s][x]; sc[s] = num(v) ? v : null; }); return sc; };
+  let x0 = -1; EW.dates.forEach((d, x) => { if (d <= D.dates[i0]) x0 = x; });
+  if (x0 < 0 && EW.dates.length && Date.parse(EW.dates[0]) - Date.parse(D.dates[i0]) <= 7 * 864e5) x0 = 0;   // first weekly date a day or two after the start
+  const sc0 = x0 >= 0 ? scAt(x0) : (() => { const sc = {}; Object.keys(E).forEach(s => { const v = E[s] && E[s].compM; sc[s] = v && num(v[M]) ? v[M] : null; }); return sc; })();
+  const slotSyms = pk => [...pk.notes.map(n => n.win), ...ALWAYS];
+  let pk = etfPick(sc0);
+  const n0 = slotSyms(pk).length, amt0 = F / n0;
+  let charges = 0, tax = 0, switches = 0, scored = 0;
+  const slots = slotSyms(pk).map(sym => { const q = px(sym, i0); if (!q) return {sym, u: 0, b: 0, cash: amt0}; const c = buyCharges(1, amt0, R); charges += c; return {sym, u: (amt0 - c) / q, b: amt0, cash: 0}; });
+  const value = i => slots.reduce((t, sl) => t + sl.cash + (sl.u ? sl.u * (px(sl.sym, i) || 0) : 0), 0);
+  const checks = EW.dates.map((d, x) => ({d, x, i: idx(d)})).filter(c => c.x > x0 && c.i > i0 && c.i <= iN);
+  const held = {}, rows = [];
+  let lastI = i0, lastV = value(i0), nWeeks = 0;
+  const holdTick = (a, b) => { [...new Set(slots.map(sl => sl.sym))].forEach(s => { const h = held[s] = held[s] || {weeks: 0, months: 0, g: 1}; const pa = px(s, a), pb = px(s, b); if (pa && pb) h.g *= pb / pa; h.weeks++; h.months = h.weeks; }); };
+  rows.push({date: D.dates[i0], notes: pk.notes, rows: pk.rows, list: pk.list, ret: null, tax: 0, first: true});
+  const cv = [], cd = [];
+  let ci = 0;
+  for (let i = i0; i <= iN; i++) {
+    while (ci < checks.length && checks[ci].i === i) {
+      const c = checks[ci++], sc = scAt(c.x);
+      if (PAIRS.some(([a, b]) => num(sc[a]) && num(sc[b]))) scored++;
+      holdTick(lastI, i); nWeeks++;
+      const np = etfPick(sc), want = slotSyms(np);
+      let sw = 0, tx = 0;
+      slots.forEach((sl, j) => {
+        const to = want[j]; if (!to || to === sl.sym) return;
+        const qn = px(to, i), qo = px(sl.sym, i); if (!qn) return;
+        let amt = sl.cash;
+        if (sl.u && qo) { const v = sl.u * qo, c = sellCharges(v, R), t = TAX * Math.max(0, v - c - sl.b); charges += c; tax += t; tx += t; amt += v - c - t; }
+        const c2 = buyCharges(1, amt, R); charges += c2;
+        sl.sym = to; sl.u = (amt - c2) / qn; sl.b = amt; sl.cash = 0; sw++;
+      });
+      if (sw) {
+        switches += sw;
+        const v = value(i);
+        rows.push({date: D.dates[i], notes: np.notes, rows: np.rows, list: np.list, ret: (v / lastV - 1) * 100, tax: tx / F * 100});
+        lastV = v;
+      }
+      pk = np; lastI = i;
+    }
+    cd.push(D.dates[i]); cv.push(value(i) / F * 100);
+  }
+  if (lastI < iN) holdTick(lastI, iN);
+  const end = value(iN);
+  rows.push({date: D.dates[iN], notes: pk.notes, rows: pk.rows, list: pk.list, ret: (end / lastV - 1) * 100, tax: 0, now: true});
+  return {rows, ret: (end / F - 1) * 100, held, scored, switches, taxPaid: tax / F * 100, chargesPct: charges / F * 100, curve: {dates: cd, v: cv}, at, M, mode: 'daily', weekly: true, nChecks: checks.length + 1};
+}
+/* weekly when the weekly scores and the daily closes are there, else the month-by-month version */
+function indexBT(F) {
+  const EM = (DATA.etf && DATA.etf.etf) || {}, M = PER === 'ADJ' ? 12 : perM();
+  if (!hasMonthly(EM)) return null;
+  return etfWeekly(EM, DATA.etf.monthDates, DATA.daily, M, DATA.etf.etfW, F) || etfBacktest(EM, DATA.etf.monthDates, DATA.daily, M);
+}
 function hasMonthly(E) { return Object.keys(E).some(s => E[s] && Array.isArray(E[s].pxM) && E[s].pxM.length === 13); }
 function etfBacktest(E, dates, D, M = 12) {
   const rows = [], held = {}, cd = [], cv = [];
@@ -1219,10 +1382,14 @@ function section(k, title, small, body, def) {
 }
 function indexBack(BT, sh) {
   const cell = n => `${esc(n.label)} <small>(${esc(n.c)} ${ms(n.mc)} vs ${esc(n.d)} ${ms(n.md)})</small>`;
+  const WK = !!BT.weekly, of = WK ? BT.nChecks : BT.M;
   const heldRows = Object.entries(BT.held).sort((a, b) => b[1].months - a[1].months)
-    .map(([s, h]) => `<tr${heldTr({sym: s})}><td>${symCell({sym: s})}</td><td class="nm">${esc(ETF_NAME[s] || s)}</td><td class="r">${h.months} of ${BT.M}</td><td class="r">${pill((h.g - 1) * 100)}</td></tr>`).join('');
-  const monthRows = BT.rows.map(x => `<tr><td>${esc(x.date || ('−' + x.k + ' mo'))}</td>${x.notes.map(n => `<td>${cell(n)}</td>`).join('')}<td class="r">${x.rows.length}</td><td class="r">${pill(x.ret)}</td></tr>`).join('');
-  const cov = BT.scored < BT.M ? `<p class="note">Composite scores were available for ${BT.scored} of ${BT.M} months; in the others the default (${esc(PAIRS[0][1])}) is held.</p>` : '';
+    .map(([s, h]) => `<tr${heldTr({sym: s})}><td>${symCell({sym: s})}</td><td class="nm">${esc(ETF_NAME[s] || s)}</td><td class="r">${WK ? h.weeks : h.months} of ${of}</td><td class="r">${pill((h.g - 1) * 100)}</td></tr>`).join('');
+  const monthRows = BT.rows.map(x => `<tr><td>${esc(WK ? fdate(x.date, true) + (x.first ? ' (start)' : x.now ? ' (now)' : '') : (x.date || ('−' + x.k + ' mo')))}</td>${x.notes.map(n => `<td>${cell(n)}</td>`).join('')}<td class="r">${x.rows.length}</td><td class="r">${x.ret == null ? '–' : pill(x.ret)}</td></tr>`).join('');
+  const cov = !WK && BT.scored < BT.M ? `<p class="note">Composite scores were available for ${BT.scored} of ${BT.M} months; in the others the default (${esc(PAIRS[0][1])}) is held.</p>` : '';
+  if (WK) return `<p class="rule">Composite Dual Momentum (score = 0.5 × 6M + 0.5 × 12-1M return), checked every week like your portfolio: a slot holds the faster index only while its score is above 0 and ${FAST_K} × its score is above ${esc(PAIRS[0][1])}'s, otherwise ${esc(PAIRS[0][1])} (held twice when both slots pick it). Each slot keeps its ETF until it switches; then the whole slot is sold and everything left after charges and ${TAX * 100}% tax on the profit buys the new ETF. ${esc(ALWAYS.join(', '))} are always held, never rebalanced. Charges ${fmt(BT.chargesPct, 2)}% and tax ${fmt(BT.taxPaid, 2)}% of the starting amount; ${BT.switches} switch${BT.switches === 1 ? '' : 'es'} in ${BT.nChecks - 1} weekly checks.</p>
+    <div class="tw"><table><thead><tr><th>Switch on</th>${PAIRS.map(([c, d], i) => `<th>Slot ${i + 1}: ${esc(c)} vs ${esc(d)}</th>`).join('')}<th class="r">Holdings</th><th class="r">Return since last row</th></tr></thead><tbody>${monthRows}</tbody></table></div>
+    <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Weeks held</th><th class="r">Return while held</th></tr></thead><tbody>${heldRows}</tbody></table></div>`;
   return `<p class="rule">Composite Dual Momentum (score = 0.5 × 6M + 0.5 × 12M return): each month a slot holds the challenger only if its score is above 0 and ${FAST_K} × its score is above ${esc(PAIRS[0][1])}'s, otherwise ${esc(PAIRS[0][1])}. When both slots hold ${esc(PAIRS[0][1])} it is held twice (2× weight). After every switch the sold ETF's profit is taxed at ${TAX * 100}% (tax paid over the ${BT.M === 12 ? 'year' : BT.M + ' month' + (BT.M > 1 ? 's' : '')}: ${fmt(BT.taxPaid, 2)}% of the starting amount). ${esc(ALWAYS.join(', '))} are always held; each other ETF once, rebalanced monthly.</p>${cov}
     <div class="tw"><table><thead><tr><th>Month</th>${PAIRS.map(([c, d], i) => `<th>Slot ${i + 1}: ${esc(c)} vs ${esc(d)}</th>`).join('')}<th class="r">Holdings</th><th class="r">Sleeve return</th></tr></thead><tbody>${monthRows}</tbody></table></div>
     <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Months held</th><th class="r">Return while held</th></tr></thead><tbody>${heldRows}</tbody></table></div>`;
@@ -1305,7 +1472,7 @@ function paintBack(fund) {
   PF = null;
   if (!B || !B.hasPrice) { out.innerHTML = perBar() + `<p class="empty">The ${esc(perName())} backtest needs prices from ${esc(perName())} back (prices.csv); they are not available yet${PER === '1M' ? ' (the 1-month date fills in with the next weekly price update)' : ''}.</p>`; return; }
   const L = lists('back');
-  const EM = (DATA.etf && DATA.etf.etf) || {}, BT = hasMonthly(EM) ? etfBacktest(EM, DATA.etf.monthDates, DATA.daily, perM()) : null;
+  const BT = indexBT(fund || 100000);
   const r = {index: BT ? BT.ret : avg(L.index.map(x => x.ret)), value: avg(L.value.map(x => x.ret)), mom: avg(L.mom.map(x => x.ret))};
   const tot = SPLIT.reduce((s, [k, , sh]) => s + sh * (num(r[k]) ? r[k] : 0), 0);
   const bench = num(B.bench) ? B.bench : (PER === '1Y' && DATA.etf && DATA.etf.bench ? DATA.etf.bench.ret1y : null);
@@ -1325,7 +1492,7 @@ function paintBack(fund) {
       + (PF.daily ? `Valued on ${PF.dates.length} trading days.` : `Daily prices are not saved yet: the chart uses ${perM() + 1} monthly points and max drawdown is understated.`)
       + (PF.lines ? ` ${PF.lines} of ${PF.lines + PF.real} value / momentum stocks have no daily prices (yet) and are drawn as a straight line from start to end.` : '')
       + ` Index ETFs are after ${TAX * 100}% tax on switches;`+' value and momentum stocks are bought once and held.';
-  let html = perBar() + `<p class="lead2">The same rules applied to the data as it stood on <b>${esc(B.date)}</b>, held until ${esc(DATA.now.date)}: value and momentum stocks (${CFG().psu ? 'PSU left out' : 'PSU included'}) without changes; the index ETFs re-checked every month. Equal weight inside each part; ${SPLIT.map(x => +(x[2] * 100).toFixed(1)).join(' / ')} between parts.</p>
+  let html = perBar() + `<p class="lead2">The same rules applied to the data as it stood on <b>${esc(B.date)}</b>, held until ${esc(DATA.now.date)}: value and momentum stocks (${CFG().psu ? 'PSU left out' : 'PSU included'}) without changes; the index ETFs re-checked every ${BT && BT.weekly ? 'week' : 'month'}. Equal weight inside each part; ${SPLIT.map(x => +(x[2] * 100).toFixed(1)).join(' / ')} between parts.</p>
     <div class="kpis">
       <div class="kpi"><span>Mix return</span><b class="${tot >= 0 ? 'pos' : 'neg'}">${pct(tot)}</b></div>
       <div class="kpi"><span>NIFTY 500</span><b class="${(bench || 0) >= 0 ? 'pos' : 'neg'}">${pct(bench)}</b></div>
@@ -1344,7 +1511,7 @@ function paintBack(fund) {
   } else html += `<p class="note">${esc(note)}</p>`;
   const all = '<div class="bar"><span class="sp"></span><button type="button" class="btn sm" data-all="1">Expand all</button><button type="button" class="btn sm" data-all="0">Collapse all</button></div>';
   html += all + SPLIT.filter(x => x[2] > 0).map(([k, label, sh]) => {
-    const hdr = k === 'index' && BT ? `${pc(sh)} · ${L.index.length} holdings then · average ${pct(r[k])} after ${TAX * 100}% tax (${BT.switches} switch${BT.switches === 1 ? '' : 'es'}) · re-checked monthly`
+    const hdr = k === 'index' && BT ? `${pc(sh)} · ${L.index.length} holdings then · average ${pct(r[k])} after ${TAX * 100}% tax (${BT.switches} switch${BT.switches === 1 ? '' : 'es'}) · re-checked ${BT.weekly ? 'weekly' : 'monthly'}`
       : `${pc(sh)} · ${L[k].length} holdings then · average ${pct(r[k])}`;
     if (k === 'index' && BT) return section(k, label, hdr, indexBack(BT, sh), false);
     const rows = L[k];
@@ -1661,9 +1828,10 @@ $('#out').addEventListener('click', async e => {
 })();
 $('#out').addEventListener('change', async e => {
   if (e.target.id === 'chPart') { CHP = e.target.value; lsSet('pb_chpart', CHP); paint(); }
-  if (e.target.id === 'adjW' || e.target.id === 'adjT') { ADJ[e.target.id === 'adjW' ? 'w' : 't'] = e.target.id === 'adjW' ? e.target.checked : +e.target.value; lsSet('pb_adj', JSON.stringify(ADJ)); paint(); return; }
+  if (e.target.id === 'adjW') { ADJ.w = e.target.checked; adjSave(); paint(); return; }
+  if (e.target.id === 'adjT' || e.target.id === 'adjK') { ADJ[e.target.id === 'adjT' ? 't' : 'mk'] = +e.target.value; adjSave(); paint(); return; }
   if (e.target.id === 'adjM' || e.target.id === 'adjV') {
-    ADJ[e.target.id === 'adjM' ? 'm' : 'v'] = +e.target.value; lsSet('pb_adj', JSON.stringify(ADJ));
+    ADJ[e.target.id === 'adjM' ? 'm' : 'v'] = e.target.value === 'W' ? 'W' : +e.target.value; adjSave();
     if (!perHas('ADJ')) { try { await ensurePer('ADJ'); } catch (x) {} }
     paint();
   }
