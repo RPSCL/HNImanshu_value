@@ -21,6 +21,8 @@ daily candles and writes ONE row per symbol:
     MOM_NOW_R1, MOM_M<k>_R1               1-month return (%) as of today / each month point (the 1Y adj backtest's momentum score)
     PX_MONTHLY                            every symbol: split-adjusted close at k = 0 (latest) … 12, '|' separated
     PX_WEEKLY                             every symbol: split-adjusted close 0, 7, 14 … 364 days back (53 points), '|' separated
+    MOM_CAL, CIRC_CAL                     every symbol, calendar months: first session of this month and the 12 before it →
+                                          "YYYY-MM:date,adj close,1M,3M,6M,12-1M %" / "YYYY-MM:circuit days" ('|' separated)
     CIRC_M<k>                             circuit-locked days in the 250 sessions up to each month point k = 1 … 12
     ADJ_FACTOR, CORP_ACTIONS              detected split / bonus factor after BACK_DATE, and every event found
     BACK_DATE, STATUS, FETCHED_AT
@@ -416,6 +418,26 @@ def summarise(c, asof: date, with_px=False):
 		row["PX_MONTHLY"] = "|".join("" if v is None else f"{v:.4f}" for v in path)
 		wk = [last[1]] + [px(7 * w) for w in range(1, 53)]           # … and week by week (w = 0 … 52 weeks back): weekly Value re-picks
 		row["PX_WEEKLY"] = "|".join("" if v is None else f"{v:.4f}" for v in wk)
+	# calendar months (1Y adj backtest): the FIRST trading session of each month, this month and the 12 before it.
+	# "YYYY-MM:session date,adjusted close,1M,3M,6M,12-1M return %" per month, '|' separated (same returns as above, as of that session)
+	def px_on(t):                                                    # adjusted close on / before day t (within 10 days)
+		b = [x for x in adj if x[0] <= t]
+		return b[-1][1] if b and (t - b[-1][0]).days <= 10 else None
+	m0, cal = asof.replace(day=1), []
+	for i in range(12, -1, -1):
+		y, mo = m0.year, m0.month - i
+		while mo <= 0:
+			mo += 12; y -= 1
+		first = date(y, mo, 1)
+		aft = next((x for x in adj if first <= x[0] <= asof), None)
+		if not aft or (aft[0] - first).days > 10:                    # not listed yet / suspended then
+			cal.append(f"{y}-{mo:02d}:")
+			continue
+		d1, p1 = aft[0], aft[1]
+		f = lambda v: "" if v is None else str(v)
+		cal.append(f"{y}-{mo:02d}:{d1:%Y-%m-%d},{p1:.4f},{f(pct(p1, px_on(d1 - timedelta(days=30))))},{f(pct(p1, px_on(d1 - timedelta(days=91))))},"
+		           f"{f(pct(p1, px_on(d1 - timedelta(days=182))))},{f(pct(px_on(d1 - timedelta(days=30)), px_on(d1 - timedelta(days=365))))}")
+	row["MOM_CAL"] = "|".join(cal)
 	row["STATUS"] = "OK" if "PRICE_1Y" in row else "NOT LISTED ON BACK DATE"   # 1Y status kept for older readers
 	return row
 
@@ -809,7 +831,8 @@ def main():
 		o = old.get(s) or {}
 		px = str(o.get("PX_MONTHLY", "") or "")
 		return (str(o.get("STATUS", "")).startswith("OK") and str(o.get("FETCHED_AT", "")) >= cut
-		        and px not in ("", "nan") and "MOM_M1_R1" in o and str(o.get("PX_WEEKLY", "") or "") not in ("", "nan"))
+		        and px not in ("", "nan") and "MOM_M1_R1" in o and str(o.get("PX_WEEKLY", "") or "") not in ("", "nan")
+		        and str(o.get("MOM_CAL", "") or "") not in ("", "nan"))
 	if not a.etf_only and not a.refetch:
 		n0 = len(todo)
 		todo = [s for s in todo if not recent(s)]
@@ -856,6 +879,12 @@ def main():
 				cb = circuit_days(raw, asof - timedelta(days=MONTH_DAYS[k]))
 				if cb is not None:
 					row[f"CIRC_M{k}"] = cb
+			cc = []                                                  # … and on each month's first session (MOM_CAL): "YYYY-MM:days|…"
+			for e in str(row.get("MOM_CAL") or "").split("|"):
+				key, _, rest = e.partition(":")
+				cb = circuit_days(raw, date.fromisoformat(rest.split(",")[0])) if rest else None
+				cc.append(f"{key}:{'' if cb is None else cb}")
+			row["CIRC_CAL"] = "|".join(cc)
 			p1 = f"1Y {row['PRICE_1Y']:>10,.2f} ({row['PRICE_1Y_DATE']})" if row.get("PRICE_1Y") is not None else "1Y        n/a"
 			ca = f"  split/bonus: {row['CORP_ACTIONS']}" if row.get("CORP_ACTIONS") else ""
 			return ({**base, **row},
@@ -894,7 +923,7 @@ def main():
 			cols += [f"MOM_{k}_R3", f"MOM_{k}_R6", f"MOM_{k}_R12"]
 		for k in range(1, 13):
 			cols += [f"MOM_M{k}_R3", f"MOM_M{k}_R6", f"MOM_M{k}_R12", f"MOM_M{k}_R1"]
-		cols += ["MOM_NOW_R1", "PX_MONTHLY", "PX_WEEKLY", "ADJ_FACTOR", "CORP_ACTIONS", "CIRCUIT_250"] + [f"CIRCUIT_250_{k}" for k in PERIODS] + [f"CIRC_M{k}" for k in range(1, 13)] + ["BACK_DATE", "STATUS", "FETCHED_AT"]
+		cols += ["MOM_NOW_R1", "PX_MONTHLY", "PX_WEEKLY", "MOM_CAL", "CIRC_CAL", "ADJ_FACTOR", "CORP_ACTIONS", "CIRCUIT_250"] + [f"CIRCUIT_250_{k}" for k in PERIODS] + [f"CIRC_M{k}" for k in range(1, 13)] + ["BACK_DATE", "STATUS", "FETCHED_AT"]
 		out = pd.DataFrame(rows).reindex(columns=cols)
 		tmp = OUT_CSV.with_suffix(".tmp")
 		out.to_csv(tmp, index=False)

@@ -4374,8 +4374,30 @@ async function pfChkOpen() {
     FUND[partOf(x)] = (FUND[partOf(x)] || 0) + v - ch - tax; NEED[partOf(x)] = (NEED[partOf(x)] || 0) + 1; });
   const FUNDED = new Map(), cnt = {};
   (c.inn || []).forEach(x => { const k = partOf(x); if (!FUND[k] || (cnt[k] || 0) >= NEED[k]) return; cnt[k] = (cnt[k] || 0) + 1; FUNDED.set(k + '|' + x.sym, true); });
-  const tent = x => { const k = partOf(x), px = pfLtp(x.sym); if (!FUNDED.has(k + '|' + x.sym) || !(px > 0)) return null;
-    const amt = FUND[k] / cnt[k]; let q = Math.floor(amt / px); while (q > 0 && q * px + pfCharges('buy', q, px) > amt) q--; return q; };
+  /* Value with fewer than N held (N = the Value "how many" you added with): each further new Value name gets an equal share, taken
+     equally from every Value holding you keep (charges and 20% tax on the profit of each part sold come off), until N are held */
+  const TOP = {per: 0, take: 0, h: 0, ch: 0, tax: 0, names: new Set()};
+  const NV = c.C && c.C.value ? +c.C.value.n || 0 : 0;
+  if (NV > 0) {
+    const selling = new Set((c.sell || []).filter(x => x.part === 'Value').map(x => x.sym));
+    const keepV = P.open.filter(r0 => { const tq = r0.tq || {}; return tq.Value > 0 && !selling.has(r0.sym) && ok(r0.ltp) && r0.ltp > 0; });
+    const share = r0 => { const tq = r0.tq || {}, sum = Object.values(tq).reduce((a, b) => a + b, 0); return sum > 0 ? tq.Value / sum : 1; };
+    const h = keepV.length + (cnt.Value || 0), room = NV - h;
+    const extra = room > 0 ? (c.inn || []).filter(x => x.part === 'Value' && !FUNDED.has('Value|' + x.sym)).slice(0, room) : [];
+    if (extra.length && keepV.length) {
+      const vt = keepV.reduce((t, r0) => t + r0.value * share(r0), 0) + (FUND.Value || 0);
+      const take = vt * extra.length / (h + extra.length) / keepV.length;          // the same rupees from each holding
+      let net = 0;
+      keepV.forEach(r0 => { const x = Math.min(take, r0.value * share(r0)), q = x / r0.ltp, chg = pfCharges('sell', q, r0.ltp), tx = 0.2 * Math.max(0, (r0.ltp - (r0.avg || r0.ltp)) * q);
+        TOP.ch += chg; TOP.tax += tx; net += x - chg - tx; });
+      Object.assign(TOP, {per: net / extra.length, take, h: keepV.length});
+      extra.forEach(x => TOP.names.add(x.sym));
+    }
+  }
+  const tent = x => { const k = partOf(x), px = pfLtp(x.sym); if (!(px > 0)) return null;
+    const amt = FUNDED.has(k + '|' + x.sym) ? FUND[k] / cnt[k] : k === 'Value' && TOP.names.has(x.sym) ? TOP.per : 0;
+    if (!(amt > 0)) return null;
+    let q = Math.floor(amt / px); while (q > 0 && q * px + pfCharges('buy', q, px) > amt) q--; return q; };
   const nm = x => `<td><b data-news="${esc(x.sym)}" class="pf-sym" role="button">${esc(x.sym)}</b><small>${esc((TODAY.get(x.sym) || {}).name || '')}</small></td>`;
   const pc = v => v == null ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + fmt(Math.abs(v), 2) + '%';
   const ud = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'dn' : '';
@@ -4383,7 +4405,7 @@ async function pfChkOpen() {
     return `<tr>${nm(x).replace('</small></td>', `</small>${x.why ? `<small class="chk-why">${esc(x.why)}${x.stage === 'sell' && x.since ? ' · outside since ' + esc(x.since) : ''}</small>` : ''}</td>`)}<td>${esc(x.part)}</td><td class="r">${r.qty != null ? fmt(r.qty, 0) : '–'}</td><td class="r ${ud(r.dayPct)}">${pc(r.dayPct)}</td>
       <td class="r ${ud(r.pnl)}">${r.priced ? (r.pnl > 0 ? '+' : r.pnl < 0 ? '−' : '') + '₹' + fmt(Math.abs(r.pnl), 0) : '–'}</td><td class="r ${ud(r.pnlPct)}">${r.priced ? pc(r.pnlPct) : '–'}</td></tr>`; };
   const rowIn = x => { const q = tent(x), px = pfLtp(x.sym);
-    return `<tr${q == null ? ' class="chk-nf"' : ''}>${nm(x)}<td>${esc(x.part)}</td><td class="r">${px > 0 ? fmt(px, 2) : '–'}</td><td class="r"${q == null ? ' title="Nothing of this part is on the Sell list (or the sales are spent on names above): not bought"' : ''}><b>${q != null ? fmt(q, 0) : '–'}</b></td></tr>`; };
+    return `<tr${q == null ? ' class="chk-nf"' : ''}>${nm(x).replace('</small></td>', TOP.names.has(x.sym) && x.part === 'Value' ? '</small><small class="chk-why">added toward ' + NV + ' Value holdings: money taken equally from all of them</small></td>' : '</small></td>')}<td>${esc(x.part)}</td><td class="r">${px > 0 ? fmt(px, 2) : '–'}</td><td class="r"${q == null ? ' title="Nothing of this part is on the Sell list (or the sales are spent on names above): not bought"' : ''}><b>${q != null ? fmt(q, 0) : '–'}</b></td></tr>`; };
   const tbl = (t, a, cls, tip = '') => { const kind = cls === 'in' ? 'in' : 'out';
     return `<h4 class="chk-h ${cls}"${tip ? ` title="${esc(tip)}"` : ''}>${t} <span>${a.length}</span>${a.length ? `<button type="button" class="btn ghost chk-cp" data-cp="${cls}" title="Copy as a table: paste in Google Sheets">Copy</button>` : ''}</h4>` + (a.length
     ? `<div class="chk-tw"><table class="chk-t"><thead><tr>${kind === 'out'
@@ -4421,7 +4443,7 @@ async function pfChkOpen() {
          + tbl('Sell list', c.sell, 'sell', 'Outside the buffer for 2 weekly data dates in a row, or a hard exit (value-trap flag, circuit days, dividend stopped, Graham test). ETFs: no longer in the index part')
          + tbl('Watch: 1st week outside', c.watch, 'watch', 'Outside the buffer this week: on the Sell list next week if it is still outside')
          + tbl('Hold: off the list, but inside the buffer, strong momentum or a winner', c.hold, 'hold', 'Off today\'s buy list but still within the buffer, momentum at or above your limit, or in profit: no sell signal')
-         : tbl('No longer on the list', c.out, 'out')}${tbl('New on the list (not held)', c.inn, 'in', 'Only as many are bought as were sold in that part, with the whole of that money (after charges and 20% tax on the profit); the rest are greyed out')}
+         : tbl('No longer on the list', c.out, 'out')}${TOP.names.size ? `<p class="chk-sub">Value holds ${TOP.h + (cnt.Value || 0)} of ${NV}: take <b>₹${fmt(TOP.take, 0)}</b> from each of your ${TOP.h} Value holdings (₹${fmt(TOP.take * TOP.h, 0)} in all; about ₹${fmt(TOP.ch, 0)} charges and ₹${fmt(TOP.tax, 0)} tax) and buy the new name${TOP.names.size > 1 ? 's' : ''} marked below.</p>` : ''}${tbl('New on the list (not held)', c.inn, 'in', 'Bought with the money its part\'s sales free up (as many as were sold), or, while Value holds fewer than its N, with an equal share taken from every Value holding; the rest are greyed out')}
        <p class="chk-note">Lists change with the weekly data update. This is information only, not a recommendation to buy or sell.</p>`;
   const w = modal('PF Builder check', body, {noFocus: true, cls: 'chk-box'});
   w.querySelectorAll('[data-sb]').forEach(i => i.addEventListener('change', async () => {          // buffer / rank band: kept in your settings

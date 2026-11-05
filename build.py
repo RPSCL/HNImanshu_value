@@ -833,13 +833,16 @@ def write_nse_list(out: Path) -> int:
 
 
 def write_builder_monthly(folder: Path) -> int:
-    """prices.csv → the 1Y adj backtest's month-by-month prices (Portfolio Builder, re-picked every n months):
+    """prices.csv → the 1Y adj backtest's prices (Portfolio Builder, re-picked every n months / weeks):
     public/fundamentals_back_monthly.json (the 3 lists + ETFs + NIFTY 500) and fundamentals_back_monthly_oth.json (Others: a paid
     file, encrypted by paid.py; the name matches the Others pattern, so the page, auth.js and the data Worker treat it like the
-    other Others files). {"asOf", "monthDates": [k = 0 now … 12 = 1Y back], "s": {SYM: {p: close, a: 1M, b: 3M, c: 6M, d: 12-1M
-    returns %, z: circuit days in the 250 sessions up to that point}}}, every list 13 long (k = 0 … 12), null where unknown.
-    The columns come with fetch_prices.py (PX_MONTHLY, MOM_M<k>_R1/3/6/12, CIRC_M<k>): until the next weekly price run fills
-    them, the file has no stocks and the tab says so."""
+    other Others files).
+    {"asOf", "gd": [dates, oldest first: the FIRST trading session of each calendar month (13 months) + today],
+     "weekDates": [asOf − 7·w days, w = 0 … 52],
+     "s": {SYM: {p: adjusted close, a: 1M, b: 3M, c: 6M, d: 12-1M return %, z: circuit days in the 250 sessions up to it (all on gd),
+                 w: weekly closes (w = 0 … 52), sp: {"1Y": adjusted close on each back snapshot's date, …}}}}
+    Months are matched by their YYYY-MM key, so stocks fetched on different days line up on the same sessions.
+    The columns come with fetch_prices.py (MOM_CAL, CIRC_CAL, PX_WEEKLY): until a price run fills them the file has no stocks."""
     src = BASE / "prices.csv"
     try:
         df = pd.read_csv(src, low_memory=False) if src.exists() else pd.DataFrame()
@@ -864,44 +867,88 @@ def write_builder_monthly(folder: Path) -> int:
             return None if v != v else round(v, nd)
         except Exception:
             return None
-    mk = lambda k, r: f"MOM_{'NOW' if k == 0 else 'M%d' % k}_R{r}"
-    main, oth, n_ok = {}, {}, 0
-    if len(df) and "PX_MONTHLY" in df.columns and "MOM_M1_R1" in df.columns:
+    ok_rows = []
+    if len(df) and "MOM_CAL" in df.columns:
         for r in df.to_dict("records"):
             sym = str(r.get("SYMBOL") or "").strip().upper()
-            path = str(r.get("PX_MONTHLY") or "")
-            if not sym or not path or path == "nan" or not str(r.get("STATUS", "")).startswith(("OK", "STALE", "NOT LISTED")):
+            cal = str(r.get("MOM_CAL") or "")
+            if sym and cal and cal != "nan" and str(r.get("STATUS", "")).startswith(("OK", "STALE", "NOT LISTED")):
+                ok_rows.append((sym, r))
+    head = {"asOf": None, "gd": None, "weekDates": None}
+    main, oth = {}, {}
+    if ok_rows:
+        asof = max(str(r.get("LTP_DATE") or "") for _, r in ok_rows)          # the newest data date
+        y, m = int(asof[:4]), int(asof[5:7])
+        keys = []
+        for i in range(12, -1, -1):
+            yy, mm = y, m - i
+            while mm <= 0:
+                mm += 12; yy -= 1
+            keys.append(f"{yy}-{mm:02d}")
+        from collections import Counter
+        sess = {k: Counter() for k in keys}
+        parsed = []
+        for sym, r in ok_rows:
+            cal = {}
+            for e in str(r.get("MOM_CAL")).split("|"):
+                k, _, rest = e.partition(":")
+                if rest:
+                    t = rest.split(",")
+                    cal[k] = t
+                    if k in sess:
+                        sess[k][t[0]] += 1
+            circ = {}
+            for e in str(r.get("CIRC_CAL") or "").split("|"):
+                k, _, rest = e.partition(":")
+                circ[k] = rest
+            parsed.append((sym, r, cal, circ))
+        gd = [sess[k].most_common(1)[0][0] if sess[k] else None for k in keys]
+        # start = the 1-year-back session (PRICE_1Y_DATE, as every other backtest); then each month's first session after it; then today
+        starts = Counter(str(r.get("PRICE_1Y_DATE")) for _, r in ok_rows if str(r.get("PRICE_1Y_DATE") or "nan") != "nan")
+        start = starts.most_common(1)[0][0] if starts else None
+        use = [j for j, d in enumerate(gd) if d and (not start or d > start)]
+        keys, gd = [keys[j] for j in use], [gd[j] for j in use]
+        now = asof if not gd or asof > gd[-1] else None                       # today, when it is past this month's first session
+        head["gd"] = ([start] if start else []) + gd + ([now] if now else [])
+        head["asOf"] = asof
+        head["weekDates"] = [(pd.Timestamp(asof) - pd.Timedelta(days=7 * w)).strftime("%Y-%m-%d") for w in range(53)]
+        n = len(head["gd"])
+        o = 1 if start else 0
+        for sym, r, cal, circ in parsed:
+            row = {x: [None] * n for x in "pabcdz"}
+            if start:                                                         # the 1-year-back point
+                row["p"][0] = f(r.get("PRICE_1Y_ADJ"), 4)
+                row["a"][0], row["b"][0], row["c"][0], row["d"][0] = (f(r.get(c)) for c in ("MOM_M12_R1", "MOM_1Y_R3", "MOM_1Y_R6", "MOM_1Y_R12"))
+                z = f(r.get("CIRCUIT_250_1Y"), 0)
+                row["z"][0] = None if z is None else int(z)
+            for j0, k in enumerate(keys):
+                j = j0 + o
+                t = cal.get(k)
+                if t and len(t) >= 6:
+                    row["p"][j], row["a"][j], row["b"][j], row["c"][j], row["d"][j] = f(t[1], 4), f(t[2]), f(t[3]), f(t[4]), f(t[5])
+                z = f(circ.get(k), 0)
+                row["z"][j] = None if z is None else int(z)
+            if now:
+                pm = str(r.get("PX_MONTHLY") or "").split("|")
+                row["p"][-1] = f(pm[0], 4) if pm and pm[0] else None
+                row["a"][-1], row["b"][-1], row["c"][-1], row["d"][-1] = (f(r.get(c)) for c in ("MOM_NOW_R1", "MOM_NOW_R3", "MOM_NOW_R6", "MOM_NOW_R12"))
+                z = f(r.get("CIRCUIT_250"), 0)
+                row["z"][-1] = None if z is None else int(z)
+            if not any(v for v in row["p"]):
                 continue
-            px = [f(t, 4) if t else None for t in path.split("|")]
-            if len(px) != 13 or not any(v for v in px):
-                continue
-            row = {"p": px}
-            for key, rr in (("a", 1), ("b", 3), ("c", 6), ("d", 12)):
-                row[key] = [f(r.get(mk(k, rr))) for k in range(13)]
-            row["z"] = [None if (z := f(r.get("CIRCUIT_250" if k == 0 else f"CIRC_M{k}"), 0)) is None else int(z) for k in range(13)]
             wk = str(r.get("PX_WEEKLY") or "")
-            if wk and wk != "nan":                                   # week by week, w = 0 (now) … 52 weeks back
+            if wk and wk != "nan":
                 w = [f(t, 2) if t else None for t in wk.split("|")]
                 if len(w) == 53:
                     row["w"] = w
+            row["sp"] = {k: f(r.get(f"PRICE_{k}_ADJ"), 4) for k in ("1Y", "9M", "6M", "3M", "1M") if f(r.get(f"PRICE_{k}_ADJ"), 4)}
             (main if sym in lists else oth)[sym] = row
-            n_ok += 1
-    MDAYS = [round(k * 365 / 12) for k in range(13)]
-    dates = None
-    try:
-        b = df["BACK_DATE"].dropna().astype(str)
-        asof = pd.to_datetime(b.mode().iloc[0]) + pd.Timedelta(days=365)
-        dates = [(asof - pd.Timedelta(days=d)).strftime("%Y-%m-%d") for d in MDAYS]
-    except Exception:
-        pass
-    head = {"asOf": dates[0] if dates else None, "monthDates": dates,
-            "weekDates": [(pd.Timestamp(dates[0]) - pd.Timedelta(days=7 * w)).strftime("%Y-%m-%d") for w in range(53)] if dates else None}
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "fundamentals_back_monthly.json").write_text(json.dumps(dict(head, s=main), separators=(",", ":")), encoding="utf-8")
     paid.write(folder, "fundamentals_back_monthly_oth.json", json.dumps(dict(head, s=oth), separators=(",", ":")))
-    print(f"  fundamentals_back_monthly: {len(main)} list stocks / ETFs + {len(oth)} Others with month-by-month prices"
-          + ("" if n_ok else " (none yet: they come with the next weekly price run, parts 1-4)"))
-    return n_ok
+    print(f"  fundamentals_back_monthly: {len(main)} list stocks / ETFs + {len(oth)} Others, month by month from {head['gd'][0] if head['gd'] else '–'}"
+          + ("" if main or oth else " (none yet: they come with the next weekly price run, parts 1-4)"))
+    return len(main) + len(oth)
 
 
 def etf_weekly(asof, syms):
