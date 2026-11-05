@@ -93,8 +93,16 @@ h1{font:600 22px var(--sans);margin:20px 0 4px}
 .adjset select{height:31px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font:600 12.5px var(--mono);padding:0 8px;cursor:pointer;outline:none}
 .adjset select:focus{border-color:var(--brass)}
 .adjset .btn.sm{margin-left:auto}
-.adjc{display:inline-block;margin:1px 6px 1px 0;font:600 12px var(--mono);white-space:nowrap}
+.adjc{display:inline-block;margin:1px 6px 1px 0;font:600 12px var(--mono);white-space:nowrap;cursor:help;border-radius:4px;outline:none}
+.adjc:focus-visible{box-shadow:0 0 0 1px var(--brass)}
+.adjc.kept{opacity:.85}
+.adjk{margin-top:4px;font:500 11.5px var(--mono);color:var(--faint)}
+.adjset input[type=checkbox]{accent-color:var(--brass);width:15px;height:15px;margin:0}
+.adjset select:disabled{opacity:.5}
+#adjTip{position:fixed;z-index:60;max-width:min(360px,calc(100vw - 24px));padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink);
+  font:500 12px/1.45 var(--mono);white-space:pre-line;box-shadow:0 8px 24px rgba(0,0,0,.35);pointer-events:none}
 table.adjlog td{white-space:normal;vertical-align:top}
+table.adjlog td:first-child{white-space:nowrap}
 .per .seg{flex-wrap:wrap}
 @media (max-width:480px){.per .seg button{padding:7px 10px}}
 .kpi.vsn i{font-style:normal}
@@ -438,7 +446,7 @@ const HELPER = () => `window.__pb = function (unisJson, etfJson) {
   const pick = s => ({sym: s.sym, name: s.name, ind: s.ind, cmp: s.cmp, pe: s.pe, pb: s.pb, mom: s.momS, score: s.score, url: s.url,
                       mcap: s.mcap, cagr: s.cagr, hi52: s.hi52, circ: s.circ,
                       ret: BACK ? sv(s, 'ret') : null});
-  const vf = P.vf, fbv = pbBuffer(vf, SB().buf / 100);
+  const vf = P.vf, fbv = pbBuffer(vf, SB().buf / 100), near = pbBuffer(vf, 1);
   const day = 864e5, asOfT = Date.parse(D.asOf), judged = BACK ? asOfT - D.then.days * day : asOfT;
   const need = BACK ? Math.max(1, Math.ceil(D.then.days / 365)) : 1;
   const cutISO = new Date(judged - need * 365 * day).toISOString().slice(0, 10);
@@ -451,6 +459,8 @@ const HELPER = () => `window.__pb = function (unisJson, etfJson) {
     GF.uni = u; setMode(); computeScores.S = null; computeScores();
     pools[u] = {value: V().filter(s => !young(s) && s.score != null && s.cmp != null && passVF(s, vf)).map(pick),
                 valueBuf: V().filter(s => !young(s) && s.score != null && s.cmp != null && passVF(s, fbv)).map(pick),
+                valueWhy: Object.fromEntries(V().filter(s => s.score != null && s.cmp != null && !passVF(s, fbv) && passVF(s, near))
+                  .map(s => [s.sym, pbWhy(s, {f: vf, fb: fbv}).why.join(' · ')])),
                 mom: V().filter(s => !young(s) && ok(s.momS) && s.cmp != null && window.pbMomOk(s, P.mf)).map(pick)};
   });
   GF.uni = 'all'; setMode(); computeScores.S = null; computeScores();
@@ -474,7 +484,7 @@ window.__pbAdj = function (M, uni, ks) {
   let first = '9999'; D.stocks.forEach(s => { if (s.lf && s.lf < first) first = s.lf; });
   const startISO = new Date(Date.parse(first) + 7 * day).toISOString().slice(0, 10);
   const save = D.stocks.map(s => [s, s.mom, s.mom1, s.circ, s.momS, s.momStair]);
-  const out = {};
+  const out = {}, cand = new Set();
   try {
     GF.uni = uni === 'all' || D.lists.includes(uni) ? uni : 'all'; setMode();
     for (const k of ks) {
@@ -488,7 +498,12 @@ window.__pbAdj = function (M, uni, ks) {
       const pk = s => { const m = M.s[s.sym], f = m.p[k] / m.p[0], x = v => ok(v) ? v * f : null;
         return {sym: s.sym, name: s.name, ind: s.ind, url: s.url, mom: s.momS, score: s.score, pe: x(s.pe), pb: x(s.pb), mcap: x(s.mcap), cagr: s.cagr, circ: s.circ}; };
       const base = V().filter(s => has(s) && !young(s) && ok(s.momS));
-      out[k] = {pool: base.filter(s => pbMomOk(s, P.mf)).map(pk), buf: base.filter(s => pbMomOk(s, fb)).map(pk)};
+      out[k] = {pool: base.filter(s => pbMomOk(s, P.mf)).map(pk), buf: base.filter(s => pbMomOk(s, fb)).map(pk), why: {}};
+      out[k].pool.forEach(x => cand.add(x.sym));
+      const inBuf = new Set(out[k].buf.map(x => x.sym));
+      D.stocks.forEach(s => { if (!cand.has(s.sym)) return;               // why each stock once on the list is out of the buffer now
+        out[k].why[s.sym] = {m: ok(s.momS) ? Math.round(s.momS) : null, c: s.circ,
+          w: inBuf.has(s.sym) ? '' : !has(s) ? 'no price then' : young(s) ? 'too recently listed' : (pbWhy(s, {f: P.mf, fb}).why.join(' · ') || 'not in the list / PSU')}; });
     }
   } finally {
     save.forEach(([s, a, b, c, d, e]) => { s.mom = a; s.mom1 = b; s.circ = c; s.momS = d; s.momStair = e; });
@@ -582,7 +597,7 @@ async function ensurePeriod(key) {
    fund. Every trade pays the Portfolio page's charges, every sale 20% tax on its profit. */
 const ADJ_MOM = [1, 2, 3, 6], ADJ_VAL = [3, 6, 12], ADJ_KEY = {12: '1Y', 9: '9M', 6: '6M', 3: '3M'};
 let ADJ = (() => { let v = {}; try { v = JSON.parse(lsGet('pb_adj') || '{}') || {}; } catch (e) {}
-  return {m: ADJ_MOM.includes(+v.m) ? +v.m : 1, v: ADJ_VAL.includes(+v.v) ? +v.v : 3}; })();
+  return {m: ADJ_MOM.includes(+v.m) ? +v.m : 1, v: ADJ_VAL.includes(+v.v) ? +v.v : 3, w: v.w === undefined ? true : !!v.w, t: [10, 15, 20, 25, 30, 40].includes(+v.t) ? +v.t : 20}; })();
 const adjKeys = () => [12, 9, 6, 3].filter(k => (12 - k) % ADJ.v === 0).map(k => ADJ_KEY[k]);
 const perHas = key => !!DATA && (key === 'ADJ' ? adjKeys().every(k => k in DATA.backs) && !!DATA.adj && DATA.adj.uni === SELC.mom.uni : key in DATA.backs);
 const PER_BUSY = {};
@@ -625,25 +640,33 @@ const sellCharges = (v, r) => { let brok = v * r.brokPct / 100; if (r.brokCap > 
   const exch = v * r.exch / 100, sebi = v * r.sebi / 100; return brok + v * r.stt / 100 + exch + sebi + (brok + exch + sebi) * r.gst / 100 + (+r.dp || 0); };
 /* one part (Value or Momentum) with its own money F. picks(k) = null (no re-pick that month) or {strict: [sym…] (the list, in order),
    keep: Set (inside the sell buffer)}. → value after the trades at each month point, the trades, and the holdings per month */
-function adjSleeve(F, picks, M) {
+function adjSleeve(F, picks, M, opt) {
   const px = (s, k) => { const m = M.s[s], v = m && m.p[k]; return num(v) && v > 0 ? v : null; };
   const pos = new Map(), log = [], segs = {}, after = {};
   let cash = F, ch = 0, tax = 0, nb = 0, ns = 0;
   const buy = (list, k) => { if (!list.length) return; const amt = cash / list.length;
-    list.forEach(s => { const q = px(s, k), c = buyCharges(1, amt, PF_RATES); pos.set(s, {u: (amt - c) / q, b: amt, k0: k, q0: q}); cash -= amt; ch += c; nb++; }); };
+    list.forEach(s => { const q = px(s, k), c = buyCharges(1, amt, PF_RATES); pos.set(s, {u: (amt - c) / q, b: amt, k0: k, q0: q, peak: q}); cash -= amt; ch += c; nb++; }); };
   const mark = k => { let v = cash; pos.forEach((p, s) => { const q = px(s, k); if (q) p.last = q; v += p.u * (p.last || p.q0); }); return v; };
   for (let k = 12; k >= 1; k--) {
+    pos.forEach((p, s) => { const q = px(s, k); if (q && q > p.peak) p.peak = q; });     // highest month-end close since bought
     const P = picks(k);
-    if (k === 12) { const L = P ? P.strict.filter(s => px(s, 12)) : []; buy(L, 12); log.push({k, first: true, out: [], inn: L.slice(), n: pos.size}); }
+    if (k === 12) { const L = P ? P.strict.filter(s => px(s, 12)) : []; buy(L, 12); log.push({k, first: true, out: [], kept: [], inn: L.slice(), innWhy: P ? P.inWhy : {}, n: pos.size}); }
     else if (P) {
-      const outs = [];
+      const outs = [], kept = [];
       [...pos.keys()].filter(s => !P.keep.has(s) && px(s, k)).forEach(s => {
-        const p = pos.get(s), v = p.u * px(s, k), c = sellCharges(v, PF_RATES), t = TAX * Math.max(0, v - c - p.b);
-        cash += v - c - t; ch += c; tax += t; ns++; outs.push({sym: s, ret: ((v - c) / p.b - 1) * 100, k0: p.k0}); pos.delete(s);
+        const p = pos.get(s), q = px(s, k), cpu = p.b / p.u;                         // cost per share incl. buy charges
+        let why = P.why(s);
+        if (opt.win && q > cpu) {                                                    // a winner: kept until it gives back opt.trail % from its high
+          const off = (q / p.peak - 1) * 100;
+          if (off > -opt.trail) { kept.push({sym: s, ret: (q / cpu - 1) * 100, why: `winner, ${off > -0.05 ? 'at its high' : fmt(-off, 1) + '% below its high'} (sold at ${opt.trail}% below) · off the list: ${why}`}); return; }
+          why = `gave back ${fmt(-off, 1)}% from its high (trail ${opt.trail}%) · ${why}`;
+        }
+        const v = p.u * q, c = sellCharges(v, PF_RATES), t = TAX * Math.max(0, v - c - p.b);
+        cash += v - c - t; ch += c; tax += t; ns++; outs.push({sym: s, ret: ((v - c) / p.b - 1) * 100, k0: p.k0, why}); pos.delete(s);
       });
       const inn = P.strict.filter(s => !pos.has(s) && px(s, k)).slice(0, outs.length);
       buy(inn, k);
-      log.push({k, out: outs, inn, n: pos.size});
+      log.push({k, out: outs, kept, inn, innWhy: P.inWhy, n: pos.size});
     }
     after[k] = mark(k);
     segs[k] = {cash, H: [...pos.entries()].map(([s, p]) => ({s, u: p.u, q: px(s, k) || p.last || p.q0}))};
@@ -681,19 +704,29 @@ function adjRun(F0, part) {
   const band = n => n > 0 ? Math.ceil(n * ((A.sb && A.sb.band) || 2)) : 0;
   const names = {};
   const pv = (k, which) => { const b = DATA.backs[ADJ_KEY[k]], P = (b && b.pools) || {}, c = SELC.value; return ((P[c.uni] || P.all || {})[which]) || null; };
+  /* why a holding is out: the screen limit it misses (with the sell limit), else its rank against the top N × band */
+  const rankWhy = (c, rk, s) => { const i = rk.indexOf(s); return i < 0 ? 'not in the list then (list / PSU / listing)' : `ranks ${i + 1}: outside the top ${band(c.n)} (N ${c.n} × ${(A.sb && A.sb.band) || 2})`; };
   const vPick = k => { if ((12 - k) % ADJ.v || !ADJ_KEY[k]) return null; const pool = pv(k, 'value'); if (!pool) return null;
     pool.forEach(x => { names[x.sym] = x; });
-    return {strict: choose(pool, SELC.value, 'value').map(x => x.sym), keep: new Set(choose(pv(k, 'valueBuf') || pool, Object.assign({}, SELC.value, {n: band(SELC.value.n)}), 'value').map(x => x.sym))}; };
+    const strictL = choose(pool, SELC.value, 'value'), bufL = choose(pv(k, 'valueBuf') || pool, Object.assign({}, SELC.value, {n: 0}), 'value'), rk = bufL.map(x => x.sym);
+    const vw = pv(k, 'valueWhy') || {};
+    return {strict: strictL.map(x => x.sym), keep: new Set(band(SELC.value.n) ? rk.slice(0, band(SELC.value.n)) : rk),
+      why: s => vw[s] || (rk.includes(s) ? rankWhy(SELC.value, rk, s) : 'far outside the screen then'),
+      inWhy: Object.fromEntries(strictL.map((x, i) => [x.sym, `#${i + 1} · value score ${num(x.score) ? Math.round(x.score) : '–'} · PE ${fmt(x.pe, 1)}`]))}; };
   const mPick = k => { if ((12 - k) % ADJ.m) return null; const t = A.at[k]; if (!t) return null;
     t.pool.forEach(x => { names[x.sym] = names[x.sym] || x; });
-    return {strict: choose(t.pool, SELC.mom, 'mom').map(x => x.sym), keep: new Set(choose(t.buf, Object.assign({}, SELC.mom, {n: band(SELC.mom.n)}), 'mom').map(x => x.sym))}; };
+    const strictL = choose(t.pool, SELC.mom, 'mom'), rk = choose(t.buf, Object.assign({}, SELC.mom, {n: 0}), 'mom').map(x => x.sym), wy = t.why || {};
+    return {strict: strictL.map(x => x.sym), keep: new Set(band(SELC.mom.n) ? rk.slice(0, band(SELC.mom.n)) : rk),
+      why: s => { const w = wy[s] || {}; return `momentum ${w.m == null ? '–' : w.m} · circuit ${w.c == null ? '–' : w.c}d · ` + (w.w || rankWhy(SELC.mom, rk, s)); },
+      inWhy: Object.fromEntries(strictL.map((x, i) => [x.sym, `#${i + 1} · momentum ${num(x.mom) ? Math.round(x.mom) : '–'} · circuit ${num(x.circ) ? x.circ : '–'}d`]))}; };
   const one = part !== 'all' && sh[part] > 0, F = one ? F0 * sh[part] : F0, w = k => one ? (k === part ? 1 : 0) : sh[k];
-  const SV = adjSleeve(F0 * sh.value, vPick, M), SM = adjSleeve(F0 * sh.mom, mPick, M);
+  const opt = {win: ADJ.w, trail: ADJ.t};
+  const SV = adjSleeve(F0 * sh.value, vPick, M, opt), SM = adjSleeve(F0 * sh.mom, mPick, M, opt);
   const res = {BT, SV, SM, names, ret: {index: BT ? BT.ret : null, value: SV.ret, mom: SM.ret}};
   if (!BT) return res;
   const cv = adjCurve(SV, M, BT, D), cm = adjCurve(SM, M, BT, D);
   const dates = BT.curve.dates, n = dates.length, i0 = BT.at ? BT.at[12] : 0;
-  const total = dates.map((_, i) => F0 * w('index') * BT.curve.v[i] / 100 + (w('value') ? (cv.v[i] || 0) : 0) + (w('mom') ? (cm.v[i] || 0) : 0));
+  const total = dates.map((_, i) => (w('index') ? F0 * sh.index * BT.curve.v[i] / 100 : 0) + (w('value') ? (cv.v[i] || 0) : 0) + (w('mom') ? (cm.v[i] || 0) : 0));   // each part in rupees from its own share
   let nifty = null; const bench = DATA.etf && DATA.etf.bench;
   const np = BT.at && D && D.px && D.px.NIFTY500 ? D.px.NIFTY500.slice(i0, i0 + n) : (!BT.at && bench && Array.isArray(bench.pxM) && bench.pxM.length === 13 ? bench.pxM.slice().reverse() : null);
   if (np && num(np[0]) && np[0] > 0) { let last = np[0]; nifty = np.map(v => { if (num(v)) last = v; return F * last / np[0]; }); }
@@ -708,6 +741,7 @@ function paintAdj(fund) {
   PF = null;
   const set = `<div class="adjset"><label>Momentum re-picked every <select id="adjM">${ADJ_MOM.map(m => `<option value="${m}"${m === ADJ.m ? ' selected' : ''}>${m} month${m > 1 ? 's' : ''}</option>`).join('')}</select></label>
     <label>Value every <select id="adjV">${ADJ_VAL.map(m => `<option value="${m}"${m === ADJ.v ? ' selected' : ''}>${m} months</option>`).join('')}</select></label>
+    <label title="A holding in profit is kept whatever the exit reason (rank, momentum, limits, circuit days) until it falls this much below its highest month-end price since bought"><input type="checkbox" id="adjW"${ADJ.w ? ' checked' : ''}> Keep winners, sell at <select id="adjT"${ADJ.w ? '' : ' disabled'}>${[10, 15, 20, 25, 30, 40].map(t => `<option value="${t}"${t === ADJ.t ? ' selected' : ''}>${t}%</option>`).join('')}</select> off the high</label>
     <button type="button" class="btn sm" id="adjRef" title="Load the latest month-by-month prices and daily closes and build this backtest again">Refresh</button></div>`;
   if (!perHas('ADJ')) { out.innerHTML = perBar() + set + hLoad('Building the 1Y adj backtest…'); ensurePer('ADJ').then(() => { if (PER === 'ADJ' && TAB === 'back') paint(); }).catch(e => status((e && e.message) || 'Could not build the 1Y adj backtest.', true)); return; }
   if (DATA.adj.none) { out.innerHTML = perBar() + set + '<p class="empty">Month-by-month data is not available yet. <a href="https://t.me/HNImanshu" target="_blank" rel="noopener">Contact us</a>.</p>'; return; }
@@ -731,7 +765,7 @@ function paintAdj(fund) {
       + (PF.daily ? `Valued on ${PF.dates.length} trading days.` : 'Daily prices are not saved yet: the chart uses 13 monthly points and max drawdown is understated.')
       + (PF.lines ? ` ${PF.lines} of ${PF.lines + PF.real} value / momentum stocks have no daily prices (yet): drawn as a smooth line from month to month.` : '')
       + ` Index ETFs after ${TAX * 100}% tax on switches; stocks after charges and ${TAX * 100}% tax on every sale.`;
-  let html = perBar() + set + `<p class="lead2">One year from <b>${esc(fdate(DATA.adj.M.monthDates[12], true))}</b> to ${esc(fdate(DATA.adj.M.monthDates[0], true))}: Momentum re-picked every ${ADJ.m === 1 ? 'month' : ADJ.m + ' months'}, Value every ${ADJ.v === 12 ? 'year (bought once)' : ADJ.v + ' months'}, index ETFs re-checked every month. A holding is sold only when it falls out of the sell buffer (limits loosened ${fmt(sb.buf, 0)}%, top N × ${fmt(sb.band, 1)}), and only as many are bought as were sold. No money added; ${SPLIT.map(x => +(x[2] * 100).toFixed(1)).join(' / ')} between parts.</p>
+  let html = perBar() + set + `<p class="lead2">One year from <b>${esc(fdate(DATA.adj.M.monthDates[12], true))}</b> to ${esc(fdate(DATA.adj.M.monthDates[0], true))}: Momentum re-picked every ${ADJ.m === 1 ? 'month' : ADJ.m + ' months'}, Value every ${ADJ.v === 12 ? 'year (bought once)' : ADJ.v + ' months'}, index ETFs re-checked every month. A holding is sold only when it falls out of the sell buffer (limits loosened ${fmt(sb.buf, 0)}%, top N × ${fmt(sb.band, 1)})${ADJ.w ? `, and a holding in profit only once it is ${ADJ.t}% below its highest month-end price since bought` : ''}; only as many are bought as were sold. No money added; ${SPLIT.map(x => +(x[2] * 100).toFixed(1)).join(' / ')} between parts.</p>
     <div class="kpis">
       <div class="kpi"><span>Mix return</span><b class="${tot >= 0 ? 'pos' : 'neg'}">${pct(tot)}</b></div>
       <div class="kpi"><span>NIFTY 500</span><b class="${(bench || 0) >= 0 ? 'pos' : 'neg'}">${pct(bench)}</b></div>
@@ -750,12 +784,17 @@ function paintAdj(fund) {
       <p class="sub">${rsK(PF.F)} on ${esc(fdate(a, true))} → ${rsK(end)} on ${esc(fdate(z, true))} · net ${pct((end / PF.F - 1) * 100)} · max drawdown ${pct(PF.mx.dd)} · average drawdown ${pct(PF.avgDD)}${PF.nifty ? ' · faint line: NIFTY 500' : ''}</p>${lack.length && !locked ? `<p class="rh">${lack.length} of ${need.length} stocks have no daily prices: drawn month to month. Refresh chart downloads them (3–5 min).</p>` : ''}</div>${askBtn}</div>
       ${lack.length || PREP.state === 'working' || PREP.state === 'still' || PREP.state === 'failed' ? '<p class="prep" id="prep"></p>' : ''}<div class="chart" id="chPf"></div><p class="note">${esc(note)}</p></div>`;
   } else html += `<p class="note">${esc(note)}</p>`;
-  const M = DATA.adj.M, md = k => fdate(M.monthDates[k]), nm = s => (R.names[s] && R.names[s].name) || s;
-  const chip = x => `<span class="adjc" title="${esc(nm(x.sym))}: ${x.ret == null ? '' : fmt(x.ret, 1) + '% after charges, before tax'}">${esc(x.sym)} ${pill(x.ret)}</span>`;
+  const M = DATA.adj.M, md = k => { const t = fdate(M.monthDates[k], true).split(' '); return t.length === 3 ? t[0] + ' ' + t[1] + ' ' + t[2].slice(2) : t.join(' '); };
+  const nm = s => (R.names[s] && R.names[s].name) || s;
+  const tip = (s, t) => `${nm(s)}\n${t}`;
+  const chip = x => `<span class="adjc" tabindex="0" data-tip="${esc(tip(x.sym, (x.ret == null ? '' : fmt(x.ret, 1) + '% after charges, before tax\n') + 'Out: ' + (x.why || '–')))}">${esc(x.sym)} ${pill(x.ret)}</span>`;
+  const keptChip = x => `<span class="adjc kept" tabindex="0" data-tip="${esc(tip(x.sym, 'Kept: ' + x.why))}">${esc(x.sym)} ${pill(x.ret)}</span>`;
   const part = (k, SL, every) => {
-    const rule = `<p class="rule">${psuTxt(CFG())} that pass ${esc(scrName(k))} · ${esc(selText(k))} · re-picked every ${every === 1 ? 'month' : every + ' months'}${every === 12 ? ' (bought once and held)' : ''}${k === 'mom' ? ' · momentum then from the prices known then; the screen\'s other filters use today\'s figures' : ''}.</p>`;
-    const logRows = SL.log.map(x => `<tr><td>${esc(md(x.k))}</td><td>${x.first ? '<i>bought ' + x.inn.length + '</i>' : x.out.length ? x.out.map(chip).join(' ') : '<i>nothing out</i>'}</td>
-      <td>${x.first ? '' : x.inn.length ? x.inn.map(s => `<span class="adjc" title="${esc(nm(s))}">${esc(s)}</span>`).join(' ') : x.out.length ? '<i>none to buy: kept in cash</i>' : ''}</td><td class="r">${x.n}</td></tr>`).join('');
+    const rule = `<p class="rule">${psuTxt(CFG())} that pass ${esc(scrName(k))} · ${esc(selText(k))} · re-picked every ${every === 1 ? 'month' : every + ' months'}${every === 12 ? ' (bought once and held)' : ''}${k === 'mom' ? ' · momentum then from the prices known then; the screen\'s other filters use today\'s figures' : ''}.
+      Out = fails a limit even loosened ${fmt(sb.buf, 0)}% (shown with its sell limit), a hard limit (circuit days), or ranks below the top N × ${fmt(sb.band, 1)}${ADJ.w ? `; a holding in profit is kept until it is ${ADJ.t}% below its high` : ''}. Hover or tap a name for the reason.</p>`;
+    const inChip = (x, s) => `<span class="adjc" tabindex="0" data-tip="${esc(tip(s, 'Bought: ' + ((x.innWhy || {})[s] || '')))}">${esc(s)}</span>`;
+    const logRows = SL.log.map(x => `<tr><td>${esc(md(x.k))}</td><td>${x.first ? '<i>bought ' + x.inn.length + '</i>' : x.out.length ? x.out.map(chip).join(' ') : `<i>${x.kept && x.kept.length ? 'nothing sold' : 'nothing out'}</i>`}${x.kept && x.kept.length ? `<div class="adjk"><i>kept as winners:</i> ${x.kept.map(keptChip).join(' ')}</div>` : ''}</td>
+      <td>${x.first ? x.inn.map(s => inChip(x, s)).join(' ') : x.inn.length ? x.inn.map(s => inChip(x, s)).join(' ') : x.out.length ? '<i>none to buy: kept in cash</i>' : ''}</td><td class="r">${x.n}</td></tr>`).join('');
     const holdRows = SL.hold.sort((a, b) => (b.ret || -1e9) - (a.ret || -1e9)).map(x => `<tr${heldTr(x)}><td>${symCell(x)}</td><td class="nm" title="${esc(nm(x.sym))}">${esc(nm(x.sym))}</td><td>${esc(md(x.k0))}</td><td class="r">${pill(x.ret)}</td></tr>`).join('');
     return rule + `<div class="tw"><table class="adjlog"><thead><tr><th>Re-pick</th><th>Sold (return)</th><th>Bought</th><th class="r">Holdings</th></tr></thead><tbody>${logRows}</tbody></table></div>
       <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th>Bought</th><th class="r">Return since</th></tr></thead><tbody>${holdRows || '<tr><td colspan="4" class="empty">Nothing held at the end.</td></tr>'}</tbody></table></div>`;
@@ -1605,8 +1644,24 @@ $('#out').addEventListener('click', async e => {
   const sp = e.target.closest('[data-pop]');
   if (sp && !(e.ctrlKey || e.metaKey || e.shiftKey || e.button)) { e.preventDefault(); stockPop(sp.dataset.pop, sp.getAttribute('href')); }
 });
+/* reasons on hover (desktop) or tap (phone) for the 1Y adj names: one floating box */
+(() => {
+  let box = null;
+  const hide = () => { if (box) { box.remove(); box = null; } };
+  const show = el => {
+    hide(); box = document.createElement('div'); box.id = 'adjTip'; box.textContent = el.dataset.tip; document.body.appendChild(box);
+    const r = el.getBoundingClientRect(), bw = box.offsetWidth, bh = box.offsetHeight;
+    box.style.left = Math.max(12, Math.min(innerWidth - bw - 12, r.left)) + 'px';
+    box.style.top = (r.bottom + 6 + bh < innerHeight ? r.bottom + 6 : Math.max(8, r.top - bh - 6)) + 'px';
+  };
+  document.addEventListener('mouseover', e => { const el = e.target.closest && e.target.closest('.adjc[data-tip]'); if (el) show(el); });
+  document.addEventListener('mouseout', e => { if (e.target.closest && e.target.closest('.adjc[data-tip]')) hide(); });
+  document.addEventListener('click', e => { const el = e.target.closest && e.target.closest('.adjc[data-tip]'); if (el) show(el); else hide(); });
+  addEventListener('scroll', hide, {passive: true});
+})();
 $('#out').addEventListener('change', async e => {
   if (e.target.id === 'chPart') { CHP = e.target.value; lsSet('pb_chpart', CHP); paint(); }
+  if (e.target.id === 'adjW' || e.target.id === 'adjT') { ADJ[e.target.id === 'adjW' ? 'w' : 't'] = e.target.id === 'adjW' ? e.target.checked : +e.target.value; lsSet('pb_adj', JSON.stringify(ADJ)); paint(); return; }
   if (e.target.id === 'adjM' || e.target.id === 'adjV') {
     ADJ[e.target.id === 'adjM' ? 'm' : 'v'] = +e.target.value; lsSet('pb_adj', JSON.stringify(ADJ));
     if (!perHas('ADJ')) { try { await ensurePer('ADJ'); } catch (x) {} }
