@@ -1449,6 +1449,7 @@ table.chk-t .pf-sym{cursor:pointer;color:var(--ink)}
 .chk-h.sell{color:var(--bad)} .chk-h.watch{color:var(--warn,#e0b840)} .chk-h.hold{color:var(--mute)}
 table.chk-t td small.chk-why{white-space:normal;line-height:1.35;margin-top:3px;color:var(--mute)}
 .chk-sb{margin:12px 0 2px;font-size:12px;color:var(--mute);line-height:1.8}
+.chk-t tr.chk-nf td{opacity:.55}
 .chk-box .chk-sb input{width:58px!important;display:inline-block;height:26px;margin:0 3px;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:600 12px var(--mono);text-align:right}
 .chk-h .chk-cp{margin-left:auto;height:24px;padding:0 9px;font-size:11px;text-transform:none;letter-spacing:0}
 table.chk-t td.r,table.chk-t th.r{text-align:right;white-space:nowrap}
@@ -4193,10 +4194,10 @@ window.pbCfg = pbCfg; window.pbMomOk = pbMomOk;
      Sell   outside the buffer for 2 weekly data dates in a row, or a hard exit at once: value-trap flag, too many circuit days,
             dividend stopped, a Graham test failed. ETF / ETF pair: the index part no longer holds it.
    SB = {buf, band} in your settings (account); the first week each holding was seen outside: FF.sz {"SYM|Part": data date} */
-/* keep winners (win: on by default): a holding in profit is NOT sold when it leaves its list (any reason: rank, momentum, limits,
-   circuit days …); it is sold only once it falls trail % below its highest price since you bought it. In loss: the normal rules.
-   Its highest price is remembered in your settings (FF.pk {"SYM|Part": peak}), updated each time the check runs. */
-const SB = () => Object.assign({buf: 20, band: 2, win: true, trail: 20}, FF.sb || {});
+/* never cut the winners: a holding whose momentum score is mk or more (80; 0 = off), or that is in profit (win, on by default), is NOT
+   sold when it leaves its list (any reason: rank, limits, circuit days …). trl > 0: a winner still goes once it is trl % below its
+   highest price since you bought it (0 = never). Highest prices are remembered in your settings (FF.pk {"SYM|Part": peak}). */
+const SB = () => { const b = Object.assign({buf: 20, band: 2, win: true, trl: 0, mk: 80}, FF.sb || {}); delete b.trail; return b; };
 const PB_BUF_MAX = ['maxPE', 'maxPB', 'maxPeg', 'maxPta', 'maxPfa', 'maxDe', 'maxDebitda', 'maxNpa', 'maxNnpa', 'maxMom'];
 const PB_BUF_MIN = ['minQ', 'minScore', 'minTrend', 'minMom', 'minFcf', 'minOe', 'minCc', 'minQ5', 'minUp', 'minCfo', 'minRoa', 'minPcr', 'minInv'];
 const PB_HARD = ['trap', 'maxCirc', 'minDy', 'graham'];
@@ -4315,15 +4316,17 @@ async function pfChkCalc() {
     const rank = L.rank && L.rank[x.part] ? L.rank[x.part].get(x.sym) : null, n = (L.C[x.part === 'Value' ? 'value' : 'mom'] || {}).n || 0;
     if (!W.why.length) W.why.push(rank ? `ranks ${rank}: outside the top ${n}` + (n ? ` (sell outside the top ${Math.ceil(n * B.band)})` : '') : 'not in the list (list / PSU / recent listing)');
     x.why = W.why.join(' · ');
-    /* winner: in profit and not yet trail % below its highest price since bought → kept, whatever the exit reason */
-    const o = openBy.get(x.sym), key0 = x.sym + '|' + x.part;
+    /* strong momentum (≥ mk) or a winner (in profit; with trl > 0 until trl % below its high since bought) → kept, whatever the exit */
+    const o = openBy.get(x.sym), key0 = x.sym + '|' + x.part, mm = s0 && ok(s0.momS) ? s0.momS : null;
+    if (B.mk > 0 && mm != null && mm >= B.mk) { x.stage = 'hold'; x.strong = true; x.why = `momentum ${Math.round(mm)} ≥ ${B.mk}: not touched · off the list: ` + x.why; return; }
     if (B.win && o && ok(o.ltp) && ok(o.avg) && o.ltp > o.avg) {
       const peak = Math.max(+pk[key0] || 0, o.avg, o.ltp); pk[key0] = +peak.toFixed(2); pkSeen.add(key0);
       const off = (o.ltp / peak - 1) * 100;
       x.gain = (o.ltp / o.avg - 1) * 100; x.offPeak = off;
-      if (off > -B.trail) { x.stage = 'hold'; x.winner = true; x.why = `winner +${fmt(x.gain, 1)}%, ${off > -0.05 ? 'at its high' : fmt(-off, 1) + '% below its high'} (sell at ${fmt(B.trail, 0)}% below) · off the list: ` + x.why; return; }
-      x.stage = 'sell'; x.trailExit = true; x.why = `gave back ${fmt(-off, 1)}% from its high since bought (trail ${fmt(B.trail, 0)}%) · ` + x.why; return;
+      if (!(B.trl > 0) || off > -B.trl) { x.stage = 'hold'; x.winner = true; x.why = `winner +${fmt(x.gain, 1)}%${B.trl > 0 ? `, ${off > -0.05 ? 'at its high' : fmt(-off, 1) + '% below its high'} (sold at ${fmt(B.trl, 0)}% below)` : ': never cut'} · off the list: ` + x.why; return; }
+      x.stage = 'sell'; x.trailExit = true; x.why = `gave back ${fmt(-off, 1)}% from its high since bought (${fmt(B.trl, 0)}%) · ` + x.why; return;
     }
+    if (mm != null) x.why += ` · momentum ${Math.round(mm)}`;
     if (W.hard) { x.stage = 'sell'; x.hardExit = true; return; }
     if (L.keep && L.keep[x.part] && L.keep[x.part].has(x.sym)) { x.stage = 'hold'; return; }
     const key = x.sym + '|' + x.part; seen.add(key);
@@ -4358,17 +4361,21 @@ function pfChkRun() {                                         // worked out once
 async function pfChkOpen() {
   if (!PF_CHK) { PF_CHK = await pfChkCalc().catch(() => null); }
   const c = PF_CHK;
-  /* No longer on the list: what you hold of it (qty, day %, P&L). New on the list: a tentative qty = the average current value of
-     your holdings in that part ÷ its price (whole shares). Both copy as a table for Google Sheets (NSE:SYMBOL). */
+  /* No longer on the list: what you hold of it (qty, day %, P&L). New on the list: qty from the money its part's sales free up.
+     Both copy as a table for Google Sheets (NSE:SYMBOL). */
   const P = PF.txns ? pfSummary(PF.txns) : {open: []}, H = new Map(P.open.map(r => [r.sym, r]));
-  const avgOf = part => {                                      // average current value per holding of that part (ETF pair = ETF)
-    const t = part === 'ETF pair' ? 'ETF' : part; let v = 0, n = 0;
-    P.open.forEach(r => { const tq = r.tq || {}, sum = Object.values(tq).reduce((a, b) => a + b, 0); if (sum > 0 && tq[t] > 0) { const w = tq[t] / sum; v += r.value * w; n += w; } });
-    return n ? v / n : null;
-  };
-  const AVG = {};
-  const tent = x => { const a = AVG[x.part] = x.part in AVG ? AVG[x.part] : avgOf(x.part), px = pfLtp(x.sym);
-    return a && px > 0 ? Math.floor(a / px) : null; };
+  /* money for the new names = what the Sell list of that part brings in: qty × LTP − sell charges − 20% tax on the profit. It is split
+     equally over as many new names of that part as were sold (in list order); each buys whole shares after its buy charges. */
+  const partOf = x => x.part === 'ETF pair' ? 'ETF pair' : x.part;
+  const FUND = {}, NEED = {};
+  (c.sell || []).forEach(x => { const h = H.get(x.sym); const px = pfLtp(x.sym); if (!h || !(px > 0)) return;
+    const tq = h.tq || {}, sum = Object.values(tq).reduce((a, b) => a + b, 0), t = x.part === 'ETF pair' ? 'ETF' : x.part;
+    const q = sum > 0 && tq[t] > 0 ? h.qty * tq[t] / sum : h.qty, v = q * px, ch = pfCharges('sell', q, px), tax = 0.2 * Math.max(0, (px - (h.avg || px)) * q);
+    FUND[partOf(x)] = (FUND[partOf(x)] || 0) + v - ch - tax; NEED[partOf(x)] = (NEED[partOf(x)] || 0) + 1; });
+  const FUNDED = new Map(), cnt = {};
+  (c.inn || []).forEach(x => { const k = partOf(x); if (!FUND[k] || (cnt[k] || 0) >= NEED[k]) return; cnt[k] = (cnt[k] || 0) + 1; FUNDED.set(k + '|' + x.sym, true); });
+  const tent = x => { const k = partOf(x), px = pfLtp(x.sym); if (!FUNDED.has(k + '|' + x.sym) || !(px > 0)) return null;
+    const amt = FUND[k] / cnt[k]; let q = Math.floor(amt / px); while (q > 0 && q * px + pfCharges('buy', q, px) > amt) q--; return q; };
   const nm = x => `<td><b data-news="${esc(x.sym)}" class="pf-sym" role="button">${esc(x.sym)}</b><small>${esc((TODAY.get(x.sym) || {}).name || '')}</small></td>`;
   const pc = v => v == null ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + fmt(Math.abs(v), 2) + '%';
   const ud = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'dn' : '';
@@ -4376,19 +4383,19 @@ async function pfChkOpen() {
     return `<tr>${nm(x).replace('</small></td>', `</small>${x.why ? `<small class="chk-why">${esc(x.why)}${x.stage === 'sell' && x.since ? ' · outside since ' + esc(x.since) : ''}</small>` : ''}</td>`)}<td>${esc(x.part)}</td><td class="r">${r.qty != null ? fmt(r.qty, 0) : '–'}</td><td class="r ${ud(r.dayPct)}">${pc(r.dayPct)}</td>
       <td class="r ${ud(r.pnl)}">${r.priced ? (r.pnl > 0 ? '+' : r.pnl < 0 ? '−' : '') + '₹' + fmt(Math.abs(r.pnl), 0) : '–'}</td><td class="r ${ud(r.pnlPct)}">${r.priced ? pc(r.pnlPct) : '–'}</td></tr>`; };
   const rowIn = x => { const q = tent(x), px = pfLtp(x.sym);
-    return `<tr>${nm(x)}<td>${esc(x.part)}</td><td class="r">${px > 0 ? fmt(px, 2) : '–'}</td><td class="r"><b>${q != null ? fmt(q, 0) : '–'}</b></td></tr>`; };
+    return `<tr${q == null ? ' class="chk-nf"' : ''}>${nm(x)}<td>${esc(x.part)}</td><td class="r">${px > 0 ? fmt(px, 2) : '–'}</td><td class="r"${q == null ? ' title="Nothing of this part is on the Sell list (or the sales are spent on names above): not bought"' : ''}><b>${q != null ? fmt(q, 0) : '–'}</b></td></tr>`; };
   const tbl = (t, a, cls, tip = '') => { const kind = cls === 'in' ? 'in' : 'out';
     return `<h4 class="chk-h ${cls}"${tip ? ` title="${esc(tip)}"` : ''}>${t} <span>${a.length}</span>${a.length ? `<button type="button" class="btn ghost chk-cp" data-cp="${cls}" title="Copy as a table: paste in Google Sheets">Copy</button>` : ''}</h4>` + (a.length
     ? `<div class="chk-tw"><table class="chk-t"><thead><tr>${kind === 'out'
         ? '<th>Stock</th><th>Part</th><th class="r">Qty</th><th class="r">Day %</th><th class="r">P&amp;L ₹</th><th class="r">P&amp;L %</th>'
-        : '<th>Stock</th><th>Part</th><th class="r">LTP ₹</th><th class="r" title="Average current value of your holdings in that part ÷ its price">Tentative qty</th>'}</tr></thead><tbody>${a.map(kind === 'out' ? rowOut : rowIn).join('')}</tbody></table></div>`
+        : '<th>Stock</th><th>Part</th><th class="r">LTP ₹</th><th class="r" title="The money from that part\'s Sell list (after sell charges and 20% tax on the profit), split over as many new names as were sold, whole shares after buy charges">Qty from sales</th>'}</tr></thead><tbody>${a.map(kind === 'out' ? rowOut : rowIn).join('')}</tbody></table></div>`
     : '<p class="na">None.</p>'); };
   const n2 = v => v == null || !isFinite(v) ? '' : String(Math.round(v * 100) / 100);
   const LIST = {sell: c.sell || c.out, watch: c.watch || [], hold: c.hold || [], out: c.out};
   const tsv = cls => cls !== 'in'
     ? ['Stock\tQty\tDay %\tP&L ₹\tP&L %\tWhy'].concat(LIST[cls].map(x => { const r = H.get(x.sym) || {};
         return ['NSE:' + x.sym, r.qty != null ? n2(r.qty) : '', r.dayPct != null ? n2(r.dayPct) + '%' : '', r.priced ? n2(r.pnl) : '', r.priced ? n2(r.pnlPct) + '%' : '', String(x.why || '').replace(/\t/g, ' ')].join('\t'); })).join('\n')
-    : ['Stock\tTentative qty'].concat(c.inn.map(x => { const q = tent(x); return 'NSE:' + x.sym + '\t' + (q != null ? q : ''); })).join('\n');
+    : ['Stock\tQty'].concat(c.inn.filter(x => tent(x) != null).map(x => 'NSE:' + x.sym + '\t' + tent(x))).join('\n');
   const dd = x => { const m = /^(\d{4})-(\d\d)-(\d\d)/.exec(String(x || '')); return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString('en-IN', {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'}) : String(x || ''); };
   const addHtml = g => {                                       // one "Add … to portfolio": when, which part, which settings
     const p = g.pbs, k = g.k, sp = Array.isArray(p.s) ? p.s : null;
@@ -4409,15 +4416,17 @@ async function pfChkOpen() {
        ${c.adds.length ? c.adds.slice(0, 4).map(addHtml).join('') : `<div class="chk-set">${c.C ? `<div><span>Value</span><b>${esc(pbSelTxt(c.C.value))}</b></div><div><span>Momentum</span><b>${esc(pbSelTxt(c.C.mom))}</b></div>` : ''}</div>`}
        ${c.pairs.length ? `<p class="chk-sub">${c.pairs.map(n => `${esc(n.c)} vs ${esc(n.d)}: ${esc(n.c)} ${ok(n.mc) ? fmt(n.mc, 1) : '–'} · ${esc(n.d)} ${ok(n.md) ? fmt(n.md, 1) : '–'} → slot holds <b>${esc(n.win)}</b>`).join('<br>')}</p>` : ''}
        ${c.sell ? `<div class="chk-sb">Sell signals: hold while within <label><input type="number" min="0" max="100" step="5" data-sb="buf" value="${SB().buf}">%</label> of the screen's limits${(c.C && ((c.C.value || {}).n || (c.C.mom || {}).n)) ? ` and within the top <label><input type="number" min="1" max="10" step="0.5" data-sb="band" value="${SB().band}">× N</label>` : ''}; sell after 2 weeks outside (hard exits at once).
-         <br><label><input type="checkbox" data-sb="win"${SB().win ? ' checked' : ''} style="width:auto!important;height:auto">Keep winners</label>: a holding in profit is kept whatever the exit, until it falls <label><input type="number" min="5" max="60" step="5" data-sb="trail" value="${SB().trail}">%</label> below its highest price since bought</div>`
+         <br>Never sell momentum ≥ <label><input type="number" min="0" max="100" step="5" data-sb="mk" value="${SB().mk}"></label> (0 = off) ·
+         <label><input type="checkbox" data-sb="win"${SB().win ? ' checked' : ''} style="width:auto!important;height:auto"> Never sell a winner</label> (in profit), unless <label><input type="number" min="0" max="60" step="5" data-sb="trl" value="${SB().trl}">%</label> below its high since bought (0 = never)</div>`
          + tbl('Sell list', c.sell, 'sell', 'Outside the buffer for 2 weekly data dates in a row, or a hard exit (value-trap flag, circuit days, dividend stopped, Graham test). ETFs: no longer in the index part')
          + tbl('Watch: 1st week outside', c.watch, 'watch', 'Outside the buffer this week: on the Sell list next week if it is still outside')
-         + tbl('Hold: off the list, inside the buffer or a winner', c.hold, 'hold', 'Off today\'s buy list but still within the buffer, or in profit and not yet the trail % below its high: no sell signal')
-         : tbl('No longer on the list', c.out, 'out')}${tbl('New on the list (not held)', c.inn, 'in')}
+         + tbl('Hold: off the list, but inside the buffer, strong momentum or a winner', c.hold, 'hold', 'Off today\'s buy list but still within the buffer, momentum at or above your limit, or in profit: no sell signal')
+         : tbl('No longer on the list', c.out, 'out')}${tbl('New on the list (not held)', c.inn, 'in', 'Only as many are bought as were sold in that part, with the whole of that money (after charges and 20% tax on the profit); the rest are greyed out')}
        <p class="chk-note">Lists change with the weekly data update. This is information only, not a recommendation to buy or sell.</p>`;
   const w = modal('PF Builder check', body, {noFocus: true, cls: 'chk-box'});
   w.querySelectorAll('[data-sb]').forEach(i => i.addEventListener('change', async () => {          // buffer / rank band: kept in your settings
-    const v = i.type === 'checkbox' ? i.checked : +i.value; if (i.type !== 'checkbox' && !(v >= (i.dataset.sb === 'buf' ? 0 : 1))) return;
+    if (w._gone) return;
+    const v = i.type === 'checkbox' ? i.checked : +i.value; if (i.type !== 'checkbox' && !(v >= (i.dataset.sb === 'band' ? 1 : 0))) return;
     FF.sb = Object.assign({}, SB(), {[i.dataset.sb]: v}); ffSave();
     w._close(); PF_CHK = null; PF_CHK_SIG = ''; PF_CHK = await pfChkCalc().catch(() => null); pfChkOpen();
     document.querySelectorAll('.pf-chk').forEach(b => { b.outerHTML = pfChkBtn(); });
@@ -4849,7 +4858,7 @@ function modal(title, html, opt = {}) {
   w.innerHTML = `<div class="wip-box${opt.ov ? ' ov' : ''}${opt.cls ? ' ' + opt.cls : ''}" role="dialog" aria-modal="true"><button type="button" class="wip-x" aria-label="Close">×</button><h3>${title}</h3>${html}</div>`;
   document.body.appendChild(w);
   document.documentElement.classList.add('pop-open');
-  const close = () => { w.remove(); document.removeEventListener('keydown', onKey, true);
+  const close = () => { if (w._gone) return; w._gone = true; w.remove(); document.removeEventListener('keydown', onKey, true);   // once (removing can fire blur → change → close again)
     if (!document.querySelector('.wip-back') && !document.querySelector('.au-back.open')) document.documentElement.classList.remove('pop-open'); };
   const onKey = e => { if (e.key === 'Escape') { e.stopImmediatePropagation(); close(); } };
   document.addEventListener('keydown', onKey, true);

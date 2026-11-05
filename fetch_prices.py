@@ -20,6 +20,7 @@ daily candles and writes ONE row per symbol:
                                           pairs can be re-scored every month in the 1-year backtest
     MOM_NOW_R1, MOM_M<k>_R1               1-month return (%) as of today / each month point (the 1Y adj backtest's momentum score)
     PX_MONTHLY                            every symbol: split-adjusted close at k = 0 (latest) … 12, '|' separated
+    PX_WEEKLY                             every symbol: split-adjusted close 0, 7, 14 … 364 days back (53 points), '|' separated
     CIRC_M<k>                             circuit-locked days in the 250 sessions up to each month point k = 1 … 12
     ADJ_FACTOR, CORP_ACTIONS              detected split / bonus factor after BACK_DATE, and every event found
     BACK_DATE, STATUS, FETCHED_AT
@@ -92,8 +93,8 @@ PERIODS     = {"1M": 30, "3M": 91, "6M": 182, "9M": 273, "1Y": 365, "1_25Y": 456
 RATE        = 2.5                         # max candle requests per second, shared by all workers (Angel throttles ~3/s)
 WORKERS     = 3                           # parallel fetches; network delay overlaps, the rate limit stays global
 CHUNK_DAYS  = 380                         # ~2.5 years in 3 calls (~255 rows each, under the 500-row cap some users hit)
-TIME_BUDGET_MIN = float(os.environ.get("PRICE_BUDGET_MIN", "150"))  # stop starting new symbols after this many minutes and SAVE what
-                                          # was fetched (the rest keep their earlier rows). Keep the GitHub step limit above it (170)
+TIME_BUDGET_MIN = 110                     # auto stop: no new symbols after 110 min, then prices.csv is SAVED (the rest keep their
+                                          # earlier rows; the next run fetches only those). GitHub step limit must be above it (130)
 FRESH_HOURS = float(os.environ.get("PRICE_FRESH_HOURS", "20"))       # a symbol fetched OK within this many hours (new columns
                                           # included) is NOT fetched again: run the same part again and only the rest are fetched.
                                           # --refetch fetches everything anyway
@@ -413,6 +414,8 @@ def summarise(c, asof: date, with_px=False):
 	if with_px:                                                      # the monthly price path (k = 0 … 12): every symbol (1Y adj backtest)
 		path = [last[1]] + [px(MONTH_DAYS[k]) for k in range(1, 13)]
 		row["PX_MONTHLY"] = "|".join("" if v is None else f"{v:.4f}" for v in path)
+		wk = [last[1]] + [px(7 * w) for w in range(1, 53)]           # … and week by week (w = 0 … 52 weeks back): weekly Value re-picks
+		row["PX_WEEKLY"] = "|".join("" if v is None else f"{v:.4f}" for v in wk)
 	row["STATUS"] = "OK" if "PRICE_1Y" in row else "NOT LISTED ON BACK DATE"   # 1Y status kept for older readers
 	return row
 
@@ -806,7 +809,7 @@ def main():
 		o = old.get(s) or {}
 		px = str(o.get("PX_MONTHLY", "") or "")
 		return (str(o.get("STATUS", "")).startswith("OK") and str(o.get("FETCHED_AT", "")) >= cut
-		        and px not in ("", "nan") and "MOM_M1_R1" in o)
+		        and px not in ("", "nan") and "MOM_M1_R1" in o and str(o.get("PX_WEEKLY", "") or "") not in ("", "nan"))
 	if not a.etf_only and not a.refetch:
 		n0 = len(todo)
 		todo = [s for s in todo if not recent(s)]
@@ -891,7 +894,7 @@ def main():
 			cols += [f"MOM_{k}_R3", f"MOM_{k}_R6", f"MOM_{k}_R12"]
 		for k in range(1, 13):
 			cols += [f"MOM_M{k}_R3", f"MOM_M{k}_R6", f"MOM_M{k}_R12", f"MOM_M{k}_R1"]
-		cols += ["MOM_NOW_R1", "PX_MONTHLY", "ADJ_FACTOR", "CORP_ACTIONS", "CIRCUIT_250"] + [f"CIRCUIT_250_{k}" for k in PERIODS] + [f"CIRC_M{k}" for k in range(1, 13)] + ["BACK_DATE", "STATUS", "FETCHED_AT"]
+		cols += ["MOM_NOW_R1", "PX_MONTHLY", "PX_WEEKLY", "ADJ_FACTOR", "CORP_ACTIONS", "CIRCUIT_250"] + [f"CIRCUIT_250_{k}" for k in PERIODS] + [f"CIRC_M{k}" for k in range(1, 13)] + ["BACK_DATE", "STATUS", "FETCHED_AT"]
 		out = pd.DataFrame(rows).reindex(columns=cols)
 		tmp = OUT_CSV.with_suffix(".tmp")
 		out.to_csv(tmp, index=False)

@@ -879,6 +879,11 @@ def write_builder_monthly(folder: Path) -> int:
             for key, rr in (("a", 1), ("b", 3), ("c", 6), ("d", 12)):
                 row[key] = [f(r.get(mk(k, rr))) for k in range(13)]
             row["z"] = [None if (z := f(r.get("CIRCUIT_250" if k == 0 else f"CIRC_M{k}"), 0)) is None else int(z) for k in range(13)]
+            wk = str(r.get("PX_WEEKLY") or "")
+            if wk and wk != "nan":                                   # week by week, w = 0 (now) … 52 weeks back
+                w = [f(t, 2) if t else None for t in wk.split("|")]
+                if len(w) == 53:
+                    row["w"] = w
             (main if sym in lists else oth)[sym] = row
             n_ok += 1
     MDAYS = [round(k * 365 / 12) for k in range(13)]
@@ -889,13 +894,38 @@ def write_builder_monthly(folder: Path) -> int:
         dates = [(asof - pd.Timedelta(days=d)).strftime("%Y-%m-%d") for d in MDAYS]
     except Exception:
         pass
-    head = {"asOf": dates[0] if dates else None, "monthDates": dates}
+    head = {"asOf": dates[0] if dates else None, "monthDates": dates,
+            "weekDates": [(pd.Timestamp(dates[0]) - pd.Timedelta(days=7 * w)).strftime("%Y-%m-%d") for w in range(53)] if dates else None}
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "fundamentals_back_monthly.json").write_text(json.dumps(dict(head, s=main), separators=(",", ":")), encoding="utf-8")
     paid.write(folder, "fundamentals_back_monthly_oth.json", json.dumps(dict(head, s=oth), separators=(",", ":")))
     print(f"  fundamentals_back_monthly: {len(main)} list stocks / ETFs + {len(oth)} Others with month-by-month prices"
           + ("" if n_ok else " (none yet: they come with the next weekly price run, parts 1-4)"))
     return n_ok
+
+
+def etf_weekly(asof, syms):
+    """{"dates": [53 dates, oldest first], "comp": {SYM: [composite % or None]}} from etf_prices/raw/<SYM>.csv"""
+    if not asof:
+        return None
+    t0 = pd.Timestamp(asof)
+    wd = [t0 - pd.Timedelta(days=7 * w) for w in range(52, -1, -1)]
+    comp = {}
+    for sym in syms:
+        f = BASE / "etf_prices" / "raw" / f"{sym.replace('^', '')}.csv"
+        if not f.exists():
+            continue
+        c = pd.read_csv(f, usecols=["date", "close"])
+        c["date"] = pd.to_datetime(c["date"])
+        c = c.dropna().sort_values("date").set_index("date")["close"]
+        c = c[c > 0]
+        px = lambda t: (lambda v: None if pd.isna(v) else float(v))(c.asof(t)) if len(c) and t >= c.index[0] else None
+        out = []
+        for t in wd:
+            p0, p6, p1, p12 = px(t), px(t - pd.Timedelta(days=182)), px(t - pd.Timedelta(days=30)), px(t - pd.Timedelta(days=365))
+            out.append(round(0.5 * (p0 / p6 - 1) * 100 + 0.5 * (p1 / p12 - 1) * 100, 2) if None not in (p0, p6, p1, p12) else None)
+        comp[sym] = out
+    return {"dates": [t.strftime("%Y-%m-%d") for t in wd], "comp": comp} if comp else None
 
 
 def write_builder_etf(out: Path) -> int:
@@ -991,6 +1021,13 @@ def write_builder_etf(out: Path) -> int:
         data["monthDates"] = None
     dates = [x["ltpDate"] for x in data["etf"].values() if x.get("ltpDate")]
     data["asOf"] = max(dates) if dates else None
+    # week by week (the index part is re-checked every week): composite 0.5 x 6M + 0.5 x 12-1M return of each ETF on the dates
+    # asOf − 7·w days (w = 52 … 0, oldest first), from the raw daily candles in etf_prices/raw/ (about 2.5 years kept)
+    try:
+        data["etfW"] = etf_weekly(data["monthDates"][0] if data.get("monthDates") else None, list(ETF_SYMS))
+    except Exception as e:
+        print(f"  [WARN] builder_etf.json: weekly ETF momentum not worked out ({e})")
+        data["etfW"] = None
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
     miss = [e for e in ETF_SYMS if e not in data["etf"]]
