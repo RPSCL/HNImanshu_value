@@ -3653,6 +3653,7 @@ const pfTxnsOf = d => Array.isArray(d && d.txns) ? d.txns
    reloads itself once (not again within 2 minutes). */
 let PF_TRY = 0, PF_RETRY_T = 0, PF_STUCK_T = 0;
 function pfReloadOnce() {
+  if (/[?&]embed=1\b/.test(location.search)) return false;     // PF Builder's hidden copy never reloads itself (its helpers would go)
   let last = 0; try { last = +sessionStorage.getItem('hnif_pfrl') || 0; } catch (e) {}
   if (Date.now() - last < 120000) return false;
   try { sessionStorage.setItem('hnif_pfrl', String(Date.now())); } catch (e) {}
@@ -5706,7 +5707,7 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   addEventListener('pagehide', () => { leaving = true; });              // going to another page: never reload over that navigation
   addEventListener('pageshow', () => { leaving = false; });
   document.addEventListener('visibilitychange', () => {
-    if (!stale || leaving || document.visibilityState !== 'hidden') return;
+    if (!stale || leaving || document.visibilityState !== 'hidden' || /[?&]embed=1\b/.test(location.search)) return;   // not PF Builder's hidden copy
     const a = document.activeElement;
     const busy = document.querySelector('.au-back.open, .wip-back') || (a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.value);
     if (!busy) location.reload();
