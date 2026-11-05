@@ -243,7 +243,7 @@ jobs:
         id: fetchpx
         if: steps.mode.outputs.mode == 'prices' && hashFiles('fetch_prices.py') != ''
         continue-on-error: true
-        timeout-minutes: 60         # ≈ 1.2 s per symbol: ~600 symbols per third ≈ 12–15 min
+        timeout-minutes: 120         # ≈ 1.2 s per symbol: ~600 symbols per third ≈ 12–15 min
         env:
           ANGEL_API_KEY:     ${{ secrets.ANGEL_API_KEY }}
           ANGEL_CLIENT_CODE: ${{ secrets.ANGEL_CLIENT_CODE }}
