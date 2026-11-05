@@ -92,9 +92,12 @@ PERIODS     = {"1M": 30, "3M": 91, "6M": 182, "9M": 273, "1Y": 365, "1_25Y": 456
 RATE        = 2.5                         # max candle requests per second, shared by all workers (Angel throttles ~3/s)
 WORKERS     = 3                           # parallel fetches; network delay overlaps, the rate limit stays global
 CHUNK_DAYS  = 380                         # ~2.5 years in 3 calls (~255 rows each, under the 500-row cap some users hit)
-TIME_BUDGET_MIN = float(os.environ.get("PRICE_BUDGET_MIN", "50"))   # stop starting new symbols after this many minutes and SAVE what
-                                          # was fetched (the rest keep their earlier rows): a GitHub step limit (60 min) never loses
-                                          # the whole run. Run the same part again: the symbols not fetched in the last 20 h go first
+TIME_BUDGET_MIN = float(os.environ.get("PRICE_BUDGET_MIN", "150"))  # stop starting new symbols after this many minutes and SAVE what
+                                          # was fetched (the rest keep their earlier rows). Keep the GitHub step limit above it (170)
+FRESH_HOURS = float(os.environ.get("PRICE_FRESH_HOURS", "20"))       # a symbol fetched OK within this many hours (new columns
+                                          # included) is NOT fetched again: run the same part again and only the rest are fetched.
+                                          # --refetch fetches everything anyway
+CHECKPOINT_EVERY = 50                     # prices.csv is written every 50 symbols too, so even a run killed mid-way keeps its work
 RETRY_PASS  = True                        # after the main pass, retry every failed symbol once more, slowly
 MIN_AGE_DAYS = 5                          # weekly: skip the fetch if prices.csv is younger than this (--force overrides)
 SERIES_PREF = ["EQ", "BE", "BZ", "SM", "ST"]   # which NSE series to use when a stock has several
@@ -299,7 +302,7 @@ class Angel:
 			raw.extend(seen[k] for k in sorted(seen))
 		return [(datetime.strptime(k, "%Y-%m-%d").date(), *v) for k, v in sorted(out.items())]
 
-	def _call(self, token, s, e, tries=6):
+	def _call(self, token, s, e, tries=8):
 		params = {"exchange": "NSE", "symboltoken": token, "interval": "ONE_DAY",
 		          "fromdate": f"{s:%Y-%m-%d} 09:15", "todate": f"{e:%Y-%m-%d} 15:30"}
 		msg = ""
@@ -308,17 +311,17 @@ class Angel:
 			try:
 				res = self.api.getCandleData(params)
 			except Exception as ex:                                  # network / throttling (library raises on non-JSON)
-				res = {"status": False, "message": str(ex)[:160]}
+				res = {"status": False, "message": str(ex)[:400]}   # full text: "Access denied because of exceeding access rate"
 			if res and res.get("status"):
 				return res.get("data") or []
 			msg = str((res or {}).get("message", "")) + " " + str((res or {}).get("errorcode", ""))
 			low = msg.lower()
-			if "timed out" in low or "max retries" in low or "connection" in low:   # Angel not answering: back off longer
+			if "access rate" in low or "access denied" in low or "exceeding" in low or "too many" in low or "AB1019" in msg:
+				self.n_rate += 1
+				self.limiter.cooldown(min(2.0 * (i + 1), 10.0))      # "too fast": everyone pauses 2, 4, 6 … 10 s, then the SAME call again
+			elif "timed out" in low or "max retries" in low or "connection" in low:   # Angel not answering: back off longer
 				self.n_net += 1
 				time.sleep(3.0 * (i + 1))
-			elif "access rate" in low or "exceeding" in low or "too many" in low or "AB1019" in msg:
-				self.n_rate += 1
-				self.limiter.cooldown(2.0 * (i + 1))                 # "too fast": everyone pauses 2, 4, 6 … s
 			elif "token" in low or "AG8001" in msg or "AG8002" in msg:
 				with self.login_lock:                                # session expired → one thread logs in again
 					self.login()
@@ -720,6 +723,7 @@ def main():
 	ap.add_argument("--limit", type=int, default=0)
 	ap.add_argument("--map-only", action="store_true")
 	ap.add_argument("--force", action="store_true", help="fetch even if prices.csv is younger than MIN_AGE_DAYS")
+	ap.add_argument("--refetch", action="store_true", help="fetch every symbol again, also those fetched in the last FRESH_HOURS")
 	ap.add_argument("--is-due", action="store_true", help="only report: exit 0 if a fetch is due, 1 if not")
 	ap.add_argument("--etf-only", action="store_true",
 	                help="fetch only ETF_SYMS + the NIFTY 500 benchmark (cron.yml mode 4: ETF prices + momentum for the "
@@ -796,13 +800,21 @@ def main():
 		except Exception:
 			pass
 
-	# a part run again the same day (e.g. the first one hit the time limit): what was not fetched in the last 20 h goes first
-	cut = (datetime.now(IST) - timedelta(hours=20)).strftime("%Y-%m-%d %H:%M")
-	recent = lambda s: str((old.get(s) or {}).get("STATUS", "")).startswith("OK") and str((old.get(s) or {}).get("FETCHED_AT", "")) >= cut
-	n_recent = sum(1 for s in todo if recent(s))
-	if n_recent and not a.etf_only:
-		todo = [s for s in todo if not recent(s)] + [s for s in todo if recent(s)]
-		log(f"{n_recent} of {len(todo)} symbols were fetched in the last 20 h: they go last")
+	# fetched OK in the last FRESH_HOURS with the current columns → not fetched again (a run cut short is simply run again)
+	cut = (datetime.now(IST) - timedelta(hours=FRESH_HOURS)).strftime("%Y-%m-%d %H:%M")
+	def recent(s):
+		o = old.get(s) or {}
+		px = str(o.get("PX_MONTHLY", "") or "")
+		return (str(o.get("STATUS", "")).startswith("OK") and str(o.get("FETCHED_AT", "")) >= cut
+		        and px not in ("", "nan") and "MOM_M1_R1" in o)
+	if not a.etf_only and not a.refetch:
+		n0 = len(todo)
+		todo = [s for s in todo if not recent(s)]
+		if n0 - len(todo):
+			log(f"{n0 - len(todo)} of {n0} symbols were fetched in the last {FRESH_HOURS:g} h: kept as they are (--refetch to fetch them again)")
+		if not todo:
+			log("Nothing to fetch: every symbol of this part is recent.")
+			return 0
 
 	api = Angel()
 	etf_raw, etf_close = {}, {}                                      # raw candles (ETFs + benchmark only) / daily closes (every symbol) → etf_prices/
@@ -848,16 +860,61 @@ def main():
 		except Exception as ex:
 			return ({**base, "STATUS": f"FAILED: {str(ex)[:80]}"}, f"{tag} FAILED  {str(ex)[:100]}", False)
 
+	def save(final):
+		"""results so far → prices.csv (symbols not fetched yet keep their earlier rows)."""
+		rows, n_ok, n_fail = [], 0, 0
+		for i in range(1, n_all + 1):                                # keep the original order in the CSV
+			row, okk = results.get(i, ({"SYMBOL": todo[i - 1]}, "skip"))
+			if okk == "skip":                                        # not fetched (yet / time budget): keep the earlier row as it was
+				prev = old.get(row["SYMBOL"])
+				if prev is not None:
+					rows.append(prev)
+				continue
+			if okk:
+				n_ok += 1
+			else:
+				n_fail += 1
+				prev = old.get(row["SYMBOL"])
+				if okk is False and prev is not None and str(prev.get("STATUS", "")).startswith("OK"):
+					row = {**prev, "STATUS": f"STALE (fetch failed {now_s[:10]})"}      # keep last good prices
+			rows.append(row)
+		fresh = {r["SYMBOL"]: r for r in rows}                       # every other row (other parts, recent ones) stays
+		keep = list(dict.fromkeys(x for x in syms + [BENCH_SYM] + ETF_SYMS if x in fresh or x in old))
+		rows = [fresh.get(x) or old[x] for x in keep]
+		if final:
+			log(f"{'ETF-only' if a.etf_only else f'Part {a.part}' if a.part else 'Run'}: {n_ok + n_fail} rows fetched now, "
+			    f"{len(rows) - n_ok - n_fail} kept from earlier parts / runs")
+		cols = ["SYMBOL", "ANGEL_SYMBOL", "ANGEL_TOKEN", "LTP", "LTP_DATE", "HIGH_52W_NOW", "LISTED_FROM"]
+		for k in PERIODS:
+			cols += [f"PRICE_{k}", f"PRICE_{k}_DATE", f"PRICE_{k}_ADJ", f"HIGH_52W_{k}"]
+		for k in ["NOW"] + list(PERIODS):
+			cols += [f"MOM_{k}_R3", f"MOM_{k}_R6", f"MOM_{k}_R12"]
+		for k in range(1, 13):
+			cols += [f"MOM_M{k}_R3", f"MOM_M{k}_R6", f"MOM_M{k}_R12", f"MOM_M{k}_R1"]
+		cols += ["MOM_NOW_R1", "PX_MONTHLY", "ADJ_FACTOR", "CORP_ACTIONS", "CIRCUIT_250"] + [f"CIRCUIT_250_{k}" for k in PERIODS] + [f"CIRC_M{k}" for k in range(1, 13)] + ["BACK_DATE", "STATUS", "FETCHED_AT"]
+		out = pd.DataFrame(rows).reindex(columns=cols)
+		tmp = OUT_CSV.with_suffix(".tmp")
+		out.to_csv(tmp, index=False)
+		tmp.replace(OUT_CSV)                                         # never a half-written prices.csv
+		return out, n_ok, n_fail
+
 	t0 = time.monotonic()
 	results, done = {}, 0
-	log(f"Fetching {n_all} symbols  |  {WORKERS} workers  |  max {RATE} requests/s  |  3 requests per symbol")
+	log(f"Fetching {n_all} symbols  |  {WORKERS} workers  |  max {RATE} requests/s  |  3 requests per symbol  |  time budget {TIME_BUDGET_MIN:g} min")
 	with ThreadPoolExecutor(max_workers=WORKERS) as pool:
 		futs = {pool.submit(fetch_one, i, s): i for i, s in enumerate(todo, 1)}
 		for f in as_completed(futs):
 			row, line, okk = f.result()
 			results[futs[f]] = (row, okk)
-			log(line)
 			done += 1
+			el = max(time.monotonic() - t0, 1e-6)
+			log(f"{line}  [{int(el // 60):02d}:{int(el % 60):02d}  {done / el * 60:.0f}/min]")
+			if done % CHECKPOINT_EVERY == 0 and done < n_all:
+				try:
+					save(False)
+					log(f"  ── checkpoint: prices.csv saved ({done}/{n_all})")
+				except Exception as ex:
+					log(f"  [WARN] checkpoint not saved: {ex}")
 			if done % 100 == 0:
 				el = time.monotonic() - t0
 				nok = sum(1 for r, o in results.values() if o is True)
@@ -876,42 +933,10 @@ def main():
 			results[i] = (row, okk)
 			log("  retry" + line[1:])
 
-	rows, n_ok, n_fail = [], 0, 0
-	for i in range(1, n_all + 1):                                    # keep the original order in the CSV
-		row, okk = results[i]
-		if okk == "skip":                                            # time budget used: keep the earlier row as it was
-			prev = old.get(row["SYMBOL"])
-			if prev is not None:
-				rows.append(prev)
-			continue
-		if okk:
-			n_ok += 1
-		else:
-			n_fail += 1
-			prev = old.get(row["SYMBOL"])
-			if okk is False and prev is not None and str(prev.get("STATUS", "")).startswith("OK"):
-				row = {**prev, "STATUS": f"STALE (fetch failed {now_s[:10]})"}      # keep last good prices
-		rows.append(row)
-	if a.part or a.etf_only:                                         # one third / the ETFs fetched: keep every other row
-		fresh = {r["SYMBOL"]: r for r in rows}
-		keep = list(dict.fromkeys(s for s in syms + [BENCH_SYM] + ETF_SYMS if s in fresh or s in old))
-		rows = [fresh.get(s) or old[s] for s in keep]
-		log(f"{'ETF-only' if a.etf_only else f'Part {a.part}'}: {len(fresh)} rows fetched now, "
-		    f"{len(rows) - len(fresh)} kept from earlier parts / runs")
 	el = time.monotonic() - t0
 	log(f"Fetch time {el/60:.1f} min ({el / max(n_all, 1):.2f} s per symbol)  |  rate-limit replies: {api.n_rate}  |  connection timeouts: {api.n_net}"
 	    f"  |  final pace {api.limiter.rate:.2f} requests/s")
-
-	cols = ["SYMBOL", "ANGEL_SYMBOL", "ANGEL_TOKEN", "LTP", "LTP_DATE", "HIGH_52W_NOW", "LISTED_FROM"]
-	for k in PERIODS:
-		cols += [f"PRICE_{k}", f"PRICE_{k}_DATE", f"PRICE_{k}_ADJ", f"HIGH_52W_{k}"]
-	for k in ["NOW"] + list(PERIODS):
-		cols += [f"MOM_{k}_R3", f"MOM_{k}_R6", f"MOM_{k}_R12"]
-	for k in range(1, 13):
-		cols += [f"MOM_M{k}_R3", f"MOM_M{k}_R6", f"MOM_M{k}_R12", f"MOM_M{k}_R1"]
-	cols += ["MOM_NOW_R1", "PX_MONTHLY", "ADJ_FACTOR", "CORP_ACTIONS", "CIRCUIT_250"] + [f"CIRCUIT_250_{k}" for k in PERIODS] + [f"CIRC_M{k}" for k in range(1, 13)] + ["BACK_DATE", "STATUS", "FETCHED_AT"]
-	out = pd.DataFrame(rows).reindex(columns=cols)
-	out.to_csv(OUT_CSV, index=False)
+	out, n_ok, n_fail = save(True)
 	if etf_close:                                                    # raw candles + 365 days of adjusted closes (ETFs + benchmark) → the repo
 		try:
 			save_etf_history(etf_raw, etf_close, asof)
