@@ -50,6 +50,7 @@ Credentials come from creds.py (repo secrets on GitHub, .env locally). Nothing s
 import argparse
 import json
 import math
+import os
 import re
 import sys
 import threading
@@ -91,6 +92,9 @@ PERIODS     = {"1M": 30, "3M": 91, "6M": 182, "9M": 273, "1Y": 365, "1_25Y": 456
 RATE        = 2.5                         # max candle requests per second, shared by all workers (Angel throttles ~3/s)
 WORKERS     = 3                           # parallel fetches; network delay overlaps, the rate limit stays global
 CHUNK_DAYS  = 380                         # ~2.5 years in 3 calls (~255 rows each, under the 500-row cap some users hit)
+TIME_BUDGET_MIN = float(os.environ.get("PRICE_BUDGET_MIN", "50"))   # stop starting new symbols after this many minutes and SAVE what
+                                          # was fetched (the rest keep their earlier rows): a GitHub step limit (60 min) never loses
+                                          # the whole run. Run the same part again: the symbols not fetched in the last 20 h go first
 RETRY_PASS  = True                        # after the main pass, retry every failed symbol once more, slowly
 MIN_AGE_DAYS = 5                          # weekly: skip the fetch if prices.csv is younger than this (--force overrides)
 SERIES_PREF = ["EQ", "BE", "BZ", "SM", "ST"]   # which NSE series to use when a stock has several
@@ -257,7 +261,7 @@ class Angel:
 		from SmartApi import SmartConnect                            # pip install smartapi-python
 		require(ANGEL)
 		self._c, self._totp, self._api = ANGEL, totp, SmartConnect
-		self.limiter, self.login_lock, self.n_rate = RateLimiter(RATE), threading.Lock(), 0
+		self.limiter, self.login_lock, self.n_rate, self.n_net = RateLimiter(RATE), threading.Lock(), 0, 0
 		self.login()
 
 	def login(self):
@@ -309,7 +313,10 @@ class Angel:
 				return res.get("data") or []
 			msg = str((res or {}).get("message", "")) + " " + str((res or {}).get("errorcode", ""))
 			low = msg.lower()
-			if "access rate" in low or "exceeding" in low or "too many" in low or "AB1019" in msg:
+			if "timed out" in low or "max retries" in low or "connection" in low:   # Angel not answering: back off longer
+				self.n_net += 1
+				time.sleep(3.0 * (i + 1))
+			elif "access rate" in low or "exceeding" in low or "too many" in low or "AB1019" in msg:
 				self.n_rate += 1
 				self.limiter.cooldown(2.0 * (i + 1))                 # "too fast": everyone pauses 2, 4, 6 … s
 			elif "token" in low or "AG8001" in msg or "AG8002" in msg:
@@ -789,6 +796,14 @@ def main():
 		except Exception:
 			pass
 
+	# a part run again the same day (e.g. the first one hit the time limit): what was not fetched in the last 20 h goes first
+	cut = (datetime.now(IST) - timedelta(hours=20)).strftime("%Y-%m-%d %H:%M")
+	recent = lambda s: str((old.get(s) or {}).get("STATUS", "")).startswith("OK") and str((old.get(s) or {}).get("FETCHED_AT", "")) >= cut
+	n_recent = sum(1 for s in todo if recent(s))
+	if n_recent and not a.etf_only:
+		todo = [s for s in todo if not recent(s)] + [s for s in todo if recent(s)]
+		log(f"{n_recent} of {len(todo)} symbols were fetched in the last 20 h: they go last")
+
 	api = Angel()
 	etf_raw, etf_close = {}, {}                                      # raw candles (ETFs + benchmark only) / daily closes (every symbol) → etf_prices/
 	keep_from = asof - timedelta(days=BACK_DAYS + DAILY_LEAD)
@@ -797,8 +812,10 @@ def main():
 	n_all = len(todo)
 
 	def fetch_one(i, s):
-		"""→ (row, log line, ok?) for one symbol."""
+		"""→ (row, log line, ok?) for one symbol. ok = "skip" once the time budget is used up (the old row is kept)."""
 		base = {"SYMBOL": s, "BACK_DATE": f"{back:%Y-%m-%d}", "FETCHED_AT": now_s}
+		if time.monotonic() - t0 > TIME_BUDGET_MIN * 60:
+			return (base, f"  [{i:>4}/{n_all}] {s:<14} skipped: time budget ({TIME_BUDGET_MIN:.0f} min) used, earlier row kept", "skip")
 		if s not in tmap:
 			return ({**base, "STATUS": "NO ANGEL TOKEN"},
 			        f"  [{i:>4}/{n_all}] {s:<14} no Angel token (not in scrip master as NSE EQ/BE/BZ/SM/ST)", None)
@@ -843,12 +860,15 @@ def main():
 			done += 1
 			if done % 100 == 0:
 				el = time.monotonic() - t0
-				nok = sum(1 for r, o in results.values() if o)
+				nok = sum(1 for r, o in results.values() if o is True)
 				log(f"  ── {done}/{n_all} done in {el/60:.1f} min  |  ok {nok}  |  rate-limit replies so far {api.n_rate}"
 				    f"  |  ~{el / done * (n_all - done) / 60:.1f} min left")
 
 	retry = sorted(i for i, (r, o) in results.items() if o is False)
-	if RETRY_PASS and retry:
+	n_skip = sum(1 for r, o in results.values() if o == "skip")
+	if n_skip:
+		log(f"TIME BUDGET: {n_skip} of {n_all} symbols not fetched (earlier rows kept). Run this part again to fetch them first.")
+	if RETRY_PASS and retry and time.monotonic() - t0 < TIME_BUDGET_MIN * 60:
 		log(f"Retry pass: {len(retry)} symbols failed, waiting 20 s then retrying one by one …")
 		time.sleep(20)
 		for i in retry:
@@ -859,6 +879,11 @@ def main():
 	rows, n_ok, n_fail = [], 0, 0
 	for i in range(1, n_all + 1):                                    # keep the original order in the CSV
 		row, okk = results[i]
+		if okk == "skip":                                            # time budget used: keep the earlier row as it was
+			prev = old.get(row["SYMBOL"])
+			if prev is not None:
+				rows.append(prev)
+			continue
 		if okk:
 			n_ok += 1
 		else:
@@ -874,7 +899,7 @@ def main():
 		log(f"{'ETF-only' if a.etf_only else f'Part {a.part}'}: {len(fresh)} rows fetched now, "
 		    f"{len(rows) - len(fresh)} kept from earlier parts / runs")
 	el = time.monotonic() - t0
-	log(f"Fetch time {el/60:.1f} min ({el / max(n_all, 1):.2f} s per symbol)  |  rate-limit replies: {api.n_rate}"
+	log(f"Fetch time {el/60:.1f} min ({el / max(n_all, 1):.2f} s per symbol)  |  rate-limit replies: {api.n_rate}  |  connection timeouts: {api.n_net}"
 	    f"  |  final pace {api.limiter.rate:.2f} requests/s")
 
 	cols = ["SYMBOL", "ANGEL_SYMBOL", "ANGEL_TOKEN", "LTP", "LTP_DATE", "HIGH_52W_NOW", "LISTED_FROM"]
