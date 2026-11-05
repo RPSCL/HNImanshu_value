@@ -832,6 +832,72 @@ def write_nse_list(out: Path) -> int:
         return 0
 
 
+def write_builder_monthly(folder: Path) -> int:
+    """prices.csv → the 1Y adj backtest's month-by-month prices (Portfolio Builder, re-picked every n months):
+    public/fundamentals_back_monthly.json (the 3 lists + ETFs + NIFTY 500) and fundamentals_back_monthly_oth.json (Others: a paid
+    file, encrypted by paid.py; the name matches the Others pattern, so the page, auth.js and the data Worker treat it like the
+    other Others files). {"asOf", "monthDates": [k = 0 now … 12 = 1Y back], "s": {SYM: {p: close, a: 1M, b: 3M, c: 6M, d: 12-1M
+    returns %, z: circuit days in the 250 sessions up to that point}}}, every list 13 long (k = 0 … 12), null where unknown.
+    The columns come with fetch_prices.py (PX_MONTHLY, MOM_M<k>_R1/3/6/12, CIRC_M<k>): until the next weekly price run fills
+    them, the file has no stocks and the tab says so."""
+    src = BASE / "prices.csv"
+    try:
+        df = pd.read_csv(src, low_memory=False) if src.exists() else pd.DataFrame()
+    except Exception as e:
+        print(f"  [WARN] fundamentals_back_monthly.json: prices.csv unreadable ({e})")
+        df = pd.DataFrame()
+    lists = set()
+    for p in (N500_CSV, SC250_CSV, MC250_CSV):
+        try:
+            if p.exists():
+                lists |= {str(x).strip().upper() for x in pd.read_csv(p, usecols=["SYMBOL"])["SYMBOL"].dropna()}
+        except Exception:
+            pass
+    try:
+        from fetch_prices import ETF_SYMS, BENCH_SYM
+    except Exception:
+        ETF_SYMS, BENCH_SYM = [], "^NIFTY500"
+    lists |= set(ETF_SYMS) | {BENCH_SYM}
+    def f(v, nd=2):
+        try:
+            v = float(v)
+            return None if v != v else round(v, nd)
+        except Exception:
+            return None
+    mk = lambda k, r: f"MOM_{'NOW' if k == 0 else 'M%d' % k}_R{r}"
+    main, oth, n_ok = {}, {}, 0
+    if len(df) and "PX_MONTHLY" in df.columns and "MOM_M1_R1" in df.columns:
+        for r in df.to_dict("records"):
+            sym = str(r.get("SYMBOL") or "").strip().upper()
+            path = str(r.get("PX_MONTHLY") or "")
+            if not sym or not path or path == "nan" or not str(r.get("STATUS", "")).startswith(("OK", "STALE", "NOT LISTED")):
+                continue
+            px = [f(t, 4) if t else None for t in path.split("|")]
+            if len(px) != 13 or not any(v for v in px):
+                continue
+            row = {"p": px}
+            for key, rr in (("a", 1), ("b", 3), ("c", 6), ("d", 12)):
+                row[key] = [f(r.get(mk(k, rr))) for k in range(13)]
+            row["z"] = [None if (z := f(r.get("CIRCUIT_250" if k == 0 else f"CIRC_M{k}"), 0)) is None else int(z) for k in range(13)]
+            (main if sym in lists else oth)[sym] = row
+            n_ok += 1
+    MDAYS = [round(k * 365 / 12) for k in range(13)]
+    dates = None
+    try:
+        b = df["BACK_DATE"].dropna().astype(str)
+        asof = pd.to_datetime(b.mode().iloc[0]) + pd.Timedelta(days=365)
+        dates = [(asof - pd.Timedelta(days=d)).strftime("%Y-%m-%d") for d in MDAYS]
+    except Exception:
+        pass
+    head = {"asOf": dates[0] if dates else None, "monthDates": dates}
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "fundamentals_back_monthly.json").write_text(json.dumps(dict(head, s=main), separators=(",", ":")), encoding="utf-8")
+    paid.write(folder, "fundamentals_back_monthly_oth.json", json.dumps(dict(head, s=oth), separators=(",", ":")))
+    print(f"  fundamentals_back_monthly: {len(main)} list stocks / ETFs + {len(oth)} Others with month-by-month prices"
+          + ("" if n_ok else " (none yet: they come with the next weekly price run, parts 1-4)"))
+    return n_ok
+
+
 def write_builder_etf(out: Path) -> int:
     """prices.csv → public/builder_etf.json for the Portfolio Builder (builder.html), index part:
     {"asOf", "etf": {SYM: {ltp, ltpDate, r3: 3-month return now %, r3Back: 3-month return as of 1Y back %,
@@ -1014,6 +1080,11 @@ def build(deploy=False):
     n_nse = write_nse_list(OUTPUT.parent / "nse_all.json")
     write_builder_etf(OUTPUT.parent / "builder_etf.json")   # Portfolio Builder: ETF prices / 3-month returns
     write_builder_daily(OUTPUT.parent / "builder_daily.json")   # Portfolio Builder: saved daily ETF closes (backtest charts)
+    try:
+        write_builder_monthly(OUTPUT.parent)                    # Portfolio Builder 1Y adj: month-by-month prices of every stock
+    except Exception:
+        traceback.print_exc()
+        print("  [WARN] fundamentals_back_monthly.json not written")
 
     if data_sc250 is None:
         data_sc250 = []

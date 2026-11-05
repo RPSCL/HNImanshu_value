@@ -18,7 +18,9 @@ daily candles and writes ONE row per symbol:
                                           (MONTH_DAYS: 30, 61, 91 … 365 days; k = 12 is the 1Y back date). With the NOW set these
                                           give the Portfolio Builder the whole stock universe's momentum month by month, so the ETF
                                           pairs can be re-scored every month in the 1-year backtest
-    PX_MONTHLY                            ETFs + benchmark only: split-adjusted close at k = 0 (latest) … 12, '|' separated
+    MOM_NOW_R1, MOM_M<k>_R1               1-month return (%) as of today / each month point (the 1Y adj backtest's momentum score)
+    PX_MONTHLY                            every symbol: split-adjusted close at k = 0 (latest) … 12, '|' separated
+    CIRC_M<k>                             circuit-locked days in the 250 sessions up to each month point k = 1 … 12
     ADJ_FACTOR, CORP_ACTIONS              detected split / bonus factor after BACK_DATE, and every event found
     BACK_DATE, STATUS, FETCHED_AT
 
@@ -396,8 +398,9 @@ def summarise(c, asof: date, with_px=False):
 		d = MONTH_DAYS[k]
 		now_p = px(d)
 		row.update({f"MOM_M{k}_R3": pct(now_p, px(d + 91)), f"MOM_M{k}_R6": pct(now_p, px(d + 182)),
-		            f"MOM_M{k}_R12": pct(px(d + 30), px(d + 365))})
-	if with_px:                                                      # ETFs + benchmark: the monthly price path (k = 0 … 12)
+		            f"MOM_M{k}_R12": pct(px(d + 30), px(d + 365)), f"MOM_M{k}_R1": pct(now_p, px(d + 30))})
+	row["MOM_NOW_R1"] = pct(last[1], px(30))
+	if with_px:                                                      # the monthly price path (k = 0 … 12): every symbol (1Y adj backtest)
 		path = [last[1]] + [px(MONTH_DAYS[k]) for k in range(1, 13)]
 		row["PX_MONTHLY"] = "|".join("" if v is None else f"{v:.4f}" for v in path)
 	row["STATUS"] = "OK" if "PRICE_1Y" in row else "NOT LISTED ON BACK DATE"   # 1Y status kept for older readers
@@ -811,12 +814,16 @@ def main():
 			circ = circuit_days(raw)
 			if keep:                                                 # ETFs + benchmark: raw candles + last 365 days of closes → etf_prices/
 				etf_raw[s], etf_close[s] = raw, [(d, v) for d, v in adjusted_closes(c) if d >= keep_from]
-			row = summarise(c, asof, with_px=(s in ETF_SYMS or s == BENCH_SYM))
+			row = summarise(c, asof, with_px=True)
 			row["CIRCUIT_250"] = circ                                # weekly (Friday price parts): circuit-locked days in the last 250 sessions
 			for k, days in PERIODS.items():                          # … and in the 250 sessions before each back date (backtests: "then")
 				cb = circuit_days(raw, asof - timedelta(days=days))
 				if cb is not None:
 					row[f"CIRCUIT_250_{k}"] = cb
+			for k in range(1, 13):                                   # … and at each month point (1Y adj backtest)
+				cb = circuit_days(raw, asof - timedelta(days=MONTH_DAYS[k]))
+				if cb is not None:
+					row[f"CIRC_M{k}"] = cb
 			p1 = f"1Y {row['PRICE_1Y']:>10,.2f} ({row['PRICE_1Y_DATE']})" if row.get("PRICE_1Y") is not None else "1Y        n/a"
 			ca = f"  split/bonus: {row['CORP_ACTIONS']}" if row.get("CORP_ACTIONS") else ""
 			return ({**base, **row},
@@ -876,8 +883,8 @@ def main():
 	for k in ["NOW"] + list(PERIODS):
 		cols += [f"MOM_{k}_R3", f"MOM_{k}_R6", f"MOM_{k}_R12"]
 	for k in range(1, 13):
-		cols += [f"MOM_M{k}_R3", f"MOM_M{k}_R6", f"MOM_M{k}_R12"]
-	cols += ["PX_MONTHLY", "ADJ_FACTOR", "CORP_ACTIONS", "CIRCUIT_250"] + [f"CIRCUIT_250_{k}" for k in PERIODS] + ["BACK_DATE", "STATUS", "FETCHED_AT"]
+		cols += [f"MOM_M{k}_R3", f"MOM_M{k}_R6", f"MOM_M{k}_R12", f"MOM_M{k}_R1"]
+	cols += ["MOM_NOW_R1", "PX_MONTHLY", "ADJ_FACTOR", "CORP_ACTIONS", "CIRCUIT_250"] + [f"CIRCUIT_250_{k}" for k in PERIODS] + [f"CIRC_M{k}" for k in range(1, 13)] + ["BACK_DATE", "STATUS", "FETCHED_AT"]
 	out = pd.DataFrame(rows).reindex(columns=cols)
 	out.to_csv(OUT_CSV, index=False)
 	if etf_close:                                                    # raw candles + 365 days of adjusted closes (ETFs + benchmark) → the repo
