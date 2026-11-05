@@ -92,6 +92,7 @@ h1{font:600 22px var(--sans);margin:20px 0 4px}
 .adjset label{display:inline-flex;align-items:center;gap:8px}
 .adjset select{height:31px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font:600 12.5px var(--mono);padding:0 8px;cursor:pointer;outline:none}
 .adjset select:focus{border-color:var(--brass)}
+.adjset .btn.sm{margin-left:auto}
 .adjc{display:inline-block;margin:1px 6px 1px 0;font:600 12px var(--mono);white-space:nowrap}
 table.adjlog td{white-space:normal;vertical-align:top}
 .per .seg{flex-wrap:wrap}
@@ -596,6 +597,18 @@ async function adjBuild() {
   DATA.adj = {M, at: r.out, sb: r.sb, uni: SELC.mom.uni};
   status(READY);
 }
+/* Refresh (1Y adj): drop this visit's copy of the monthly prices + the daily closes, load them again, rebuild */
+async function adjRefresh() {
+  const b = $('#adjRef'); if (b) { b.disabled = true; b.textContent = 'Refreshing…'; }
+  try {
+    const w = await engine(); try { w.__pbAdjP = null; } catch (e) {}
+    DAILY_P = null; DATA.daily = await dailyData();
+    DATA.adj = null;
+    await ensurePer('ADJ');
+    toast(DATA.adj && !DATA.adj.none ? 'Refreshed: latest month-by-month prices loaded.' : 'Month-by-month prices are not on the site yet: run the price part, then a build.', 6000);
+  } catch (e) { status((e && e.message) || 'Could not refresh.', true); }
+  paint();
+}
 const sellCharges = (v, r) => { let brok = v * r.brokPct / 100; if (r.brokCap > 0) brok = Math.min(brok, r.brokCap);
   const exch = v * r.exch / 100, sebi = v * r.sebi / 100; return brok + v * r.stt / 100 + exch + sebi + (brok + exch + sebi) * r.gst / 100 + (+r.dp || 0); };
 /* one part (Value or Momentum) with its own money F. picks(k) = null (no re-pick that month) or {strict: [sym…] (the list, in order),
@@ -682,9 +695,10 @@ function paintAdj(fund) {
   const out = $('#out');
   PF = null;
   const set = `<div class="adjset"><label>Momentum re-picked every <select id="adjM">${ADJ_MOM.map(m => `<option value="${m}"${m === ADJ.m ? ' selected' : ''}>${m} month${m > 1 ? 's' : ''}</option>`).join('')}</select></label>
-    <label>Value every <select id="adjV">${ADJ_VAL.map(m => `<option value="${m}"${m === ADJ.v ? ' selected' : ''}>${m} months</option>`).join('')}</select></label></div>`;
+    <label>Value every <select id="adjV">${ADJ_VAL.map(m => `<option value="${m}"${m === ADJ.v ? ' selected' : ''}>${m} months</option>`).join('')}</select></label>
+    <button type="button" class="btn sm" id="adjRef" title="Load the latest month-by-month prices and daily closes and build this backtest again">Refresh</button></div>`;
   if (!perHas('ADJ')) { out.innerHTML = perBar() + set + hLoad('Building the 1Y adj backtest…'); ensurePer('ADJ').then(() => { if (PER === 'ADJ' && TAB === 'back') paint(); }).catch(e => status((e && e.message) || 'Could not build the 1Y adj backtest.', true)); return; }
-  if (DATA.adj.none) { out.innerHTML = perBar() + set + '<p class="empty">The 1Y adj backtest needs every stock\'s month-by-month prices. They come with the next weekly price update (Friday, parts 1–4), or run the price parts now.</p>'; return; }
+  if (DATA.adj.none) { out.innerHTML = perBar() + set + '<p class="empty">The 1Y adj backtest needs every stock\'s month-by-month prices. They come with the weekly price run (mode 2, part 1 for the 3 lists; parts 2–4 for Others) followed by a build: the price run alone does not update the site.</p>'; return; }
   const miss = adjKeys().filter(k => !DATA.backs[k] || !DATA.backs[k].hasPrice);
   if (miss.length) { out.innerHTML = perBar() + set + `<p class="empty">The Value re-picks need the screens as they stood ${esc(miss.join(', '))} back; those prices are not available yet.</p>`; return; }
   const F = fund || 100000, R = adjRun(F, chPart());
@@ -1564,6 +1578,7 @@ document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click
 $('#out').addEventListener('toggle', e => { const d = e.target; if (d.classList && d.classList.contains('sec')) OPEN[TAB + d.dataset.k] = d.open; }, true);
 $('#out').addEventListener('click', async e => {
   if (e.target.closest('#ltpGo')) { fetchLive(); return; }
+  if (e.target.closest('#adjRef')) { adjRefresh(); return; }
   const pb = e.target.closest('[data-per]');
   if (pb) { PER = pb.dataset.per; lsSet('pb_per', PER); if (DATA && !perHas(PER)) { try { await ensurePer(PER); } catch (x) {} } paint(); readyLine(); return; }
   if (e.target.closest('#refreshChart')) { if (e.target.closest('#refreshChart').disabled) return; ensureDaily(backSyms(), true); return; }
