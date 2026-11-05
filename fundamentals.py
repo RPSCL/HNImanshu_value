@@ -4122,6 +4122,7 @@ const pfActsHtml = () => `<div class="pf-top"><div class="pf-acts">
    0.5 × 6M + 0.5 × 12M momentum, builder_etf.json). Anything held that is no longer on its list = "no longer on the list";
    anything on the list of a part you hold that you don't hold = "new on the list"; an ETF pair whose slot now picks the
    other ETF shows both. The button turns red with the count. Information only: what to do with it is yours to decide. */
+const PB_FAST_K = 0.8;                                         // = builder.html FAST_K: 0.8 × challenger must beat Gold
 const PB_PAIRS = [['ITBEES', 'GOLDBEES'], ['ALPHA', 'GOLDBEES']], PB_ALWAYS = ['JUNIORBEES', 'MON100', 'HNGSNGBEES', 'FMCGIETF', 'ALPHA'];
 const PB_SEL_DEF = {value: {uni: 'all', key: 'score', dir: 'desc', n: 0}, mom: {uni: 'all', key: 'mom', dir: 'desc', n: 15}};
 const PB_KEYS = {score: 'Value score', mom: 'Momentum score', pe: 'PE', pb: 'PB', mcap: 'Market cap', cagr: 'EPS CAGR', vs52: 'Vs 52-week high'};
@@ -4171,7 +4172,7 @@ function pbChoose(pool, c, k) {                               // = PF Builder's 
   return c.n > 0 ? a.slice(0, c.n) : a;
 }
 function pbEtfPick(sc) {                                      // = PF Builder's etfPick(): which ETFs the index part holds today
-  const notes = PB_PAIRS.map(([c, d]) => { const mc = sc[c], md = sc[d]; return {c, d, mc, md, win: ok(mc) && mc > 0 && (!ok(md) || mc > md) ? c : d}; });
+  const notes = PB_PAIRS.map(([c, d]) => { const mc = sc[c], md = sc[d]; return {c, d, mc, md, win: ok(mc) && mc > 0 && (!ok(md) || PB_FAST_K * mc > md) ? c : d}; });   // = PF Builder's FAST_K rule
   return {notes, list: [...new Set([...notes.map(n => n.win), ...PB_ALWAYS])]};
 }
 /* PF Builder's Value and Momentum lists use YOUR screens: the Value screen's and the Momentum screen's saved filters and your PSU /
