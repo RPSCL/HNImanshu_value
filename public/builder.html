@@ -320,7 +320,7 @@ tbody tr.held:hover td{background:var(--heldbg);filter:brightness(1.08)}
     <p>Enter a fund amount. It is split between <b>index ETFs</b>, <b>value stocks</b> (the screen you pick for PF Builder on the Value screen; default Deep value) and
     <b>momentum stocks</b> (top 15 of the screen picked on the Momentum tab; default Momentum 70+), equal weight inside each part, using the same data and
     screens as the Factor Screener. The split is 40 / 40 / 20 by default: type the ETF % and the Value % and Momentum gets the rest. For the Value and Momentum parts you can pick the list (universe), what to sort by (value score, momentum score, PE or PB, either way) and how many stocks to take; the sort always uses the numbers of the date shown (today, or 1 year back in the backtest). <b>Your Factor Screener settings are used</b>: the screens picked for PF Builder (“Selecting … for Portfolio Builder” on the Value screen and the Momentum tab: a ready screen, one of your saved screens, or this visit's custom filters) and the PSU / Semi PSU switches. Never changed (or Reset to default): Deep value, Momentum 70+ and no PSU stocks. The index part holds two ETF/Gold slots
-    (IT/Gold and ALPHA/Gold): a slot holds Gold while its ETF is not stronger, so Gold can be held twice (2× weight).
+    (IT/Gold and ALPHA/Gold): a slot holds its ETF only while 0.8 × the ETF's 6M/12M momentum is above Gold's (and above 0), else Gold, so Gold can be held twice (2× weight). The “1Y adj” backtest re-picks Value and Momentum every few months with charges and tax.
     The backtest applies the same rules as they stood 1, 3, 6 or 9 months or 1 year ago (you pick), and re-checks the ETF pairs every month.</p></details>
 
   <div class="card">
@@ -363,9 +363,11 @@ const ETF_NAME = {GOLDBEES: 'Nippon India ETF Gold BeES', ITBEES: 'Nippon India 
   JUNIORBEES: 'Nippon India ETF Nifty Next 50 Junior BeES', MON100: 'Motilal Oswal Nasdaq 100 ETF',
   HNGSNGBEES: 'Nippon India ETF Hang Seng BeES', FMCGIETF: 'ICICI Prudential Nifty FMCG ETF'};
 /* [challenger, default]: Composite Dual Momentum. Score = 0.5 x R6M + 0.5 x R12M (in %).
-   The slot holds the challenger only if (relative) its score beats the default's AND (absolute) its score is > 0;
-   otherwise the default (GOLDBEES). */
+   The slot holds the challenger only if (relative) FAST_K × its score beats the default's AND (absolute) its score is > 0;
+   otherwise the default (GOLDBEES). FAST_K = 0.8: the faster index has to lead by a margin to be held, and is left for Gold
+   as soon as its lead shrinks below it (out of a falling index earlier; only a strong run puts it back). 1 = the plain rule. */
 const PAIRS = [['ITBEES', 'GOLDBEES'], ['ALPHA', 'GOLDBEES']];
+const FAST_K = 0.8;
 const W6 = 0.5, W12 = 0.5;   // composite weights
 const TAX = 0.20;            // 20% (short-term capital gains) of the profit on every ETF / stock sold within the year
 const ALWAYS = ['JUNIORBEES', 'MON100', 'HNGSNGBEES', 'FMCGIETF', 'ALPHA'];
@@ -859,7 +861,7 @@ function etfPick(sc) {
   const notes = [], rows = [], seen = new Set();
   PAIRS.forEach(([c, d]) => {
     const mc = sc[c], md = sc[d];
-    const win = num(mc) && mc > 0 && (!num(md) || mc > md) ? c : d;    // absolute (>0) and relative (> default)
+    const win = num(mc) && mc > 0 && (!num(md) || FAST_K * mc > md) ? c : d;    // absolute (>0) and relative (FAST_K × challenger > default)
     notes.push({c, d, mc, md, win, label: win === d ? `${d} (${PAIR_TAG[c] || c}/Gold)` : win});
   });
   notes.forEach(n => { if (n.win === n.d) rows.push({sym: n.d, label: n.label}); });                 // default ETF: once per slot holding it
@@ -1143,7 +1145,7 @@ function symCell(x) {
 }
 const ms = v => num(v) ? fmt(v, 1) : '–';
 function pairNotes(pk) {
-  return `<div class="pairs">${pk.notes.map(n => `<span>Composite 6M/12M ${esc(n.c)} ${ms(n.mc)} vs ${esc(n.d)} ${ms(n.md)}${' (needs > 0 and > ' + esc(n.d) + ')'} → <b>${esc(n.label)}</b></span>`).join('')}
+  return `<div class="pairs">${pk.notes.map(n => `<span>Composite 6M/12M ${esc(n.c)} ${ms(n.mc)} vs ${esc(n.d)} ${ms(n.md)}${' (needs > 0 and ' + FAST_K + ' × ' + esc(n.c) + ' > ' + esc(n.d) + ')'} → <b>${esc(n.label)}</b></span>`).join('')}
     <span>Always: ${ALWAYS.map(esc).join(', ')} · each ETF once, equal weight (Gold once per slot holding it)</span></div>`;
 }
 /* one collapsible section; open state survives repaints */
@@ -1156,7 +1158,7 @@ function indexBack(BT, sh) {
     .map(([s, h]) => `<tr${heldTr({sym: s})}><td>${symCell({sym: s})}</td><td class="nm">${esc(ETF_NAME[s] || s)}</td><td class="r">${h.months} of ${BT.M}</td><td class="r">${pill((h.g - 1) * 100)}</td></tr>`).join('');
   const monthRows = BT.rows.map(x => `<tr><td>${esc(x.date || ('−' + x.k + ' mo'))}</td>${x.notes.map(n => `<td>${cell(n)}</td>`).join('')}<td class="r">${x.rows.length}</td><td class="r">${pill(x.ret)}</td></tr>`).join('');
   const cov = BT.scored < BT.M ? `<p class="note">Composite scores were available for ${BT.scored} of ${BT.M} months; in the others the default (${esc(PAIRS[0][1])}) is held.</p>` : '';
-  return `<p class="rule">Composite Dual Momentum (score = 0.5 × 6M + 0.5 × 12M return): each month a slot holds the challenger only if its score is above 0 and above ${esc(PAIRS[0][1])}'s, otherwise ${esc(PAIRS[0][1])}. When both slots hold ${esc(PAIRS[0][1])} it is held twice (2× weight). After every switch the sold ETF's profit is taxed at ${TAX * 100}% (tax paid over the ${BT.M === 12 ? 'year' : BT.M + ' month' + (BT.M > 1 ? 's' : '')}: ${fmt(BT.taxPaid, 2)}% of the starting amount). ${esc(ALWAYS.join(', '))} are always held; each other ETF once, rebalanced monthly.</p>${cov}
+  return `<p class="rule">Composite Dual Momentum (score = 0.5 × 6M + 0.5 × 12M return): each month a slot holds the challenger only if its score is above 0 and ${FAST_K} × its score is above ${esc(PAIRS[0][1])}'s, otherwise ${esc(PAIRS[0][1])}. When both slots hold ${esc(PAIRS[0][1])} it is held twice (2× weight). After every switch the sold ETF's profit is taxed at ${TAX * 100}% (tax paid over the ${BT.M === 12 ? 'year' : BT.M + ' month' + (BT.M > 1 ? 's' : '')}: ${fmt(BT.taxPaid, 2)}% of the starting amount). ${esc(ALWAYS.join(', '))} are always held; each other ETF once, rebalanced monthly.</p>${cov}
     <div class="tw"><table><thead><tr><th>Month</th>${PAIRS.map(([c, d], i) => `<th>Slot ${i + 1}: ${esc(c)} vs ${esc(d)}</th>`).join('')}<th class="r">Holdings</th><th class="r">Sleeve return</th></tr></thead><tbody>${monthRows}</tbody></table></div>
     <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Months held</th><th class="r">Return while held</th></tr></thead><tbody>${heldRows}</tbody></table></div>`;
 }
