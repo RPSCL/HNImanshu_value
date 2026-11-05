@@ -605,7 +605,7 @@ async function adjRefresh() {
     DAILY_P = null; DATA.daily = await dailyData();
     DATA.adj = null;
     await ensurePer('ADJ');
-    toast(DATA.adj && !DATA.adj.none ? 'Refreshed: latest month-by-month prices loaded.' : 'Month-by-month prices are not on the site yet: run the price part, then a build.', 6000);
+    toast(DATA.adj && !DATA.adj.none ? 'Refreshed: latest month-by-month prices loaded.' : 'Month-by-month data is not available yet.', 6000);
   } catch (e) { status((e && e.message) || 'Could not refresh.', true); }
   paint();
 }
@@ -698,9 +698,9 @@ function paintAdj(fund) {
     <label>Value every <select id="adjV">${ADJ_VAL.map(m => `<option value="${m}"${m === ADJ.v ? ' selected' : ''}>${m} months</option>`).join('')}</select></label>
     <button type="button" class="btn sm" id="adjRef" title="Load the latest month-by-month prices and daily closes and build this backtest again">Refresh</button></div>`;
   if (!perHas('ADJ')) { out.innerHTML = perBar() + set + hLoad('Building the 1Y adj backtest…'); ensurePer('ADJ').then(() => { if (PER === 'ADJ' && TAB === 'back') paint(); }).catch(e => status((e && e.message) || 'Could not build the 1Y adj backtest.', true)); return; }
-  if (DATA.adj.none) { out.innerHTML = perBar() + set + '<p class="empty">The 1Y adj backtest needs every stock\'s month-by-month prices. They come with the weekly price run (mode 2, part 1 for the 3 lists; parts 2–4 for Others) followed by a build: the price run alone does not update the site.</p>'; return; }
+  if (DATA.adj.none) { out.innerHTML = perBar() + set + '<p class="empty">Month-by-month data is not available yet. <a href="https://t.me/HNImanshu" target="_blank" rel="noopener">Contact us</a>.</p>'; return; }
   const miss = adjKeys().filter(k => !DATA.backs[k] || !DATA.backs[k].hasPrice);
-  if (miss.length) { out.innerHTML = perBar() + set + `<p class="empty">The Value re-picks need the screens as they stood ${esc(miss.join(', '))} back; those prices are not available yet.</p>`; return; }
+  if (miss.length) { out.innerHTML = perBar() + set + '<p class="empty">Month-by-month data is not available yet. <a href="https://t.me/HNImanshu" target="_blank" rel="noopener">Contact us</a>.</p>'; return; }
   const F = fund || 100000, R = adjRun(F, chPart());
   const {BT, SV, SM} = R; PF = R.PF || null;
   const r = R.ret, tot = SPLIT.reduce((s, [k, , sh]) => s + sh * (num(r[k]) ? r[k] : 0), 0);
