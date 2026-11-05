@@ -4193,7 +4193,10 @@ window.pbCfg = pbCfg; window.pbMomOk = pbMomOk;
      Sell   outside the buffer for 2 weekly data dates in a row, or a hard exit at once: value-trap flag, too many circuit days,
             dividend stopped, a Graham test failed. ETF / ETF pair: the index part no longer holds it.
    SB = {buf, band} in your settings (account); the first week each holding was seen outside: FF.sz {"SYM|Part": data date} */
-const SB = () => Object.assign({buf: 20, band: 2}, FF.sb || {});
+/* keep winners (win: on by default): a holding in profit is NOT sold when it leaves its list (any reason: rank, momentum, limits,
+   circuit days …); it is sold only once it falls trail % below its highest price since you bought it. In loss: the normal rules.
+   Its highest price is remembered in your settings (FF.pk {"SYM|Part": peak}), updated each time the check runs. */
+const SB = () => Object.assign({buf: 20, band: 2, win: true, trail: 20}, FF.sb || {});
 const PB_BUF_MAX = ['maxPE', 'maxPB', 'maxPeg', 'maxPta', 'maxPfa', 'maxDe', 'maxDebitda', 'maxNpa', 'maxNnpa', 'maxMom'];
 const PB_BUF_MIN = ['minQ', 'minScore', 'minTrend', 'minMom', 'minFcf', 'minOe', 'minCc', 'minQ5', 'minUp', 'minCfo', 'minRoa', 'minPcr', 'minInv'];
 const PB_HARD = ['trap', 'maxCirc', 'minDy', 'graham'];
@@ -4305,12 +4308,22 @@ async function pfChkCalc() {
   const byName = new Map(); res.inn.forEach(x => byName.set(x.part + x.sym, x)); res.inn = [...byName.values()];
   /* sell signals for what left its list: Hold (inside the buffer) / Watch (first week outside) / Sell (2nd week, or a hard exit) */
   const sz = Object.assign({}, FF.sz || {}), seen = new Set(), wk = D.asOf, B = SB();
+  const pk = Object.assign({}, FF.pk || {}), pkSeen = new Set(), openBy = new Map(P.open.map(r => [r.sym, r]));
   res.out.forEach(x => {
     if (x.part === 'ETF' || x.part === 'ETF pair') { x.stage = 'sell'; x.why = x.part === 'ETF pair' ? 'the slot now holds the other ETF' : 'no longer in the index part'; return; }
     const s0 = TODAY.get(x.sym), W = L.F && L.F[x.part] ? pbWhy(s0, L.F[x.part]) : {hard: false, why: []};
     const rank = L.rank && L.rank[x.part] ? L.rank[x.part].get(x.sym) : null, n = (L.C[x.part === 'Value' ? 'value' : 'mom'] || {}).n || 0;
     if (!W.why.length) W.why.push(rank ? `ranks ${rank}: outside the top ${n}` + (n ? ` (sell outside the top ${Math.ceil(n * B.band)})` : '') : 'not in the list (list / PSU / recent listing)');
     x.why = W.why.join(' · ');
+    /* winner: in profit and not yet trail % below its highest price since bought → kept, whatever the exit reason */
+    const o = openBy.get(x.sym), key0 = x.sym + '|' + x.part;
+    if (B.win && o && ok(o.ltp) && ok(o.avg) && o.ltp > o.avg) {
+      const peak = Math.max(+pk[key0] || 0, o.avg, o.ltp); pk[key0] = +peak.toFixed(2); pkSeen.add(key0);
+      const off = (o.ltp / peak - 1) * 100;
+      x.gain = (o.ltp / o.avg - 1) * 100; x.offPeak = off;
+      if (off > -B.trail) { x.stage = 'hold'; x.winner = true; x.why = `winner +${fmt(x.gain, 1)}%, ${off > -0.05 ? 'at its high' : fmt(-off, 1) + '% below its high'} (sell at ${fmt(B.trail, 0)}% below) · off the list: ` + x.why; return; }
+      x.stage = 'sell'; x.trailExit = true; x.why = `gave back ${fmt(-off, 1)}% from its high since bought (trail ${fmt(B.trail, 0)}%) · ` + x.why; return;
+    }
     if (W.hard) { x.stage = 'sell'; x.hardExit = true; return; }
     if (L.keep && L.keep[x.part] && L.keep[x.part].has(x.sym)) { x.stage = 'hold'; return; }
     const key = x.sym + '|' + x.part; seen.add(key);
@@ -4319,7 +4332,15 @@ async function pfChkCalc() {
     x.since = sz[key];
   });
   Object.keys(sz).forEach(k => { if (!seen.has(k)) delete sz[k]; });
-  if (JSON.stringify(sz) !== JSON.stringify(FF.sz || {}) && !EMBED) { FF.sz = sz; ffSave(); }
+  /* peaks: also kept for winners still on the list (so the trail starts from their real high once they leave it) */
+  rows.forEach(r0 => { const o = openBy.get(r0.sym); if (!o || !ok(o.ltp)) return;
+    srcsOf(r0).forEach(t0 => { const t = t0.replace(/^PF Builder\s*→\s*/, ''); ['Value', 'Momentum'].forEach(pt => { if (t.split('+').map(y => y.trim()).includes(pt)) {
+      const k = r0.sym + '|' + pt; pk[k] = +Math.max(+pk[k] || 0, ok(o.avg) ? o.avg : 0, o.ltp).toFixed(2); pkSeen.add(k); } }); }); });
+  Object.keys(pk).forEach(k => { if (!pkSeen.has(k)) delete pk[k]; });
+  let dirty = false;
+  if (JSON.stringify(sz) !== JSON.stringify(FF.sz || {})) { FF.sz = sz; dirty = true; }
+  if (JSON.stringify(pk) !== JSON.stringify(FF.pk || {})) { FF.pk = pk; dirty = true; }
+  if (dirty && !EMBED) ffSave();
   res.sell = res.out.filter(x => x.stage === 'sell'); res.watch = res.out.filter(x => x.stage === 'watch'); res.hold = res.out.filter(x => x.stage === 'hold');
   return res;
 }
@@ -4387,15 +4408,16 @@ async function pfChkOpen() {
     : `<p class="chk-sub">Only the parts you added are checked (<b>${esc(checked)}</b>), against today's PF Builder lists worked out with the settings you added them with.</p>
        ${c.adds.length ? c.adds.slice(0, 4).map(addHtml).join('') : `<div class="chk-set">${c.C ? `<div><span>Value</span><b>${esc(pbSelTxt(c.C.value))}</b></div><div><span>Momentum</span><b>${esc(pbSelTxt(c.C.mom))}</b></div>` : ''}</div>`}
        ${c.pairs.length ? `<p class="chk-sub">${c.pairs.map(n => `${esc(n.c)} vs ${esc(n.d)}: ${esc(n.c)} ${ok(n.mc) ? fmt(n.mc, 1) : '–'} · ${esc(n.d)} ${ok(n.md) ? fmt(n.md, 1) : '–'} → slot holds <b>${esc(n.win)}</b>`).join('<br>')}</p>` : ''}
-       ${c.sell ? `<div class="chk-sb">Sell signals: hold while within <label><input type="number" min="0" max="100" step="5" data-sb="buf" value="${SB().buf}">%</label> of the screen's limits${(c.C && ((c.C.value || {}).n || (c.C.mom || {}).n)) ? ` and within the top <label><input type="number" min="1" max="10" step="0.5" data-sb="band" value="${SB().band}">× N</label>` : ''}; sell after 2 weeks outside (hard exits at once)</div>`
+       ${c.sell ? `<div class="chk-sb">Sell signals: hold while within <label><input type="number" min="0" max="100" step="5" data-sb="buf" value="${SB().buf}">%</label> of the screen's limits${(c.C && ((c.C.value || {}).n || (c.C.mom || {}).n)) ? ` and within the top <label><input type="number" min="1" max="10" step="0.5" data-sb="band" value="${SB().band}">× N</label>` : ''}; sell after 2 weeks outside (hard exits at once).
+         <br><label><input type="checkbox" data-sb="win"${SB().win ? ' checked' : ''} style="width:auto!important;height:auto">Keep winners</label>: a holding in profit is kept whatever the exit, until it falls <label><input type="number" min="5" max="60" step="5" data-sb="trail" value="${SB().trail}">%</label> below its highest price since bought</div>`
          + tbl('Sell list', c.sell, 'sell', 'Outside the buffer for 2 weekly data dates in a row, or a hard exit (value-trap flag, circuit days, dividend stopped, Graham test). ETFs: no longer in the index part')
          + tbl('Watch: 1st week outside', c.watch, 'watch', 'Outside the buffer this week: on the Sell list next week if it is still outside')
-         + tbl('Hold: off the list, inside the buffer', c.hold, 'hold', 'Off today\'s buy list but still within the buffer: no sell signal')
+         + tbl('Hold: off the list, inside the buffer or a winner', c.hold, 'hold', 'Off today\'s buy list but still within the buffer, or in profit and not yet the trail % below its high: no sell signal')
          : tbl('No longer on the list', c.out, 'out')}${tbl('New on the list (not held)', c.inn, 'in')}
        <p class="chk-note">Lists change with the weekly data update. This is information only, not a recommendation to buy or sell.</p>`;
   const w = modal('PF Builder check', body, {noFocus: true, cls: 'chk-box'});
   w.querySelectorAll('[data-sb]').forEach(i => i.addEventListener('change', async () => {          // buffer / rank band: kept in your settings
-    const v = +i.value; if (!(v >= (i.dataset.sb === 'buf' ? 0 : 1))) return;
+    const v = i.type === 'checkbox' ? i.checked : +i.value; if (i.type !== 'checkbox' && !(v >= (i.dataset.sb === 'buf' ? 0 : 1))) return;
     FF.sb = Object.assign({}, SB(), {[i.dataset.sb]: v}); ffSave();
     w._close(); PF_CHK = null; PF_CHK_SIG = ''; PF_CHK = await pfChkCalc().catch(() => null); pfChkOpen();
     document.querySelectorAll('.pf-chk').forEach(b => { b.outerHTML = pfChkBtn(); });
