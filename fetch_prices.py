@@ -20,7 +20,8 @@ daily candles and writes ONE row per symbol:
                                           pairs can be re-scored every month in the 1-year backtest
     MOM_NOW_R1, MOM_M<k>_R1               1-month return (%) as of today / each month point (the 1Y adj backtest's momentum score)
     PX_MONTHLY                            every symbol: split-adjusted close at k = 0 (latest) … 12, '|' separated
-    PX_WEEKLY                             every symbol: split-adjusted close 0, 7, 14 … 364 days back (53 points), '|' separated
+    PX_WEEKLY                             every symbol: split-adjusted close 0, 7, 14 … 728 days back (105 points), '|' separated
+    CIRC_WK                               circuit-locked days in the 250 sessions up to each week back (w = 0 … 52)
     MOM_CAL, CIRC_CAL                     every symbol, calendar months: first session of this month and the 12 before it →
                                           "YYYY-MM:date,adj close,1M,3M,6M,12-1M %" / "YYYY-MM:circuit days" ('|' separated)
     CIRC_M<k>                             circuit-locked days in the 250 sessions up to each month point k = 1 … 12
@@ -416,7 +417,8 @@ def summarise(c, asof: date, with_px=False):
 	if with_px:                                                      # the monthly price path (k = 0 … 12): every symbol (1Y adj backtest)
 		path = [last[1]] + [px(MONTH_DAYS[k]) for k in range(1, 13)]
 		row["PX_MONTHLY"] = "|".join("" if v is None else f"{v:.4f}" for v in path)
-		wk = [last[1]] + [px(7 * w) for w in range(1, 53)]           # … and week by week (w = 0 … 52 weeks back): weekly Value re-picks
+		wk = [last[1]] + [px(7 * w) for w in range(1, 105)]          # … and week by week (w = 0 … 104 weeks back): weekly Value / Momentum re-picks
+		                                                             # (2 years, so the 12-1M momentum can be worked out on every week of the last year)
 		row["PX_WEEKLY"] = "|".join("" if v is None else f"{v:.4f}" for v in wk)
 	# calendar months (1Y adj backtest): the FIRST trading session of each month, this month and the 12 before it.
 	# "YYYY-MM:session date,adjusted close,1M,3M,6M,12-1M return %" per month, '|' separated (same returns as above, as of that session)
@@ -832,7 +834,8 @@ def main():
 		px = str(o.get("PX_MONTHLY", "") or "")
 		return (str(o.get("STATUS", "")).startswith("OK") and str(o.get("FETCHED_AT", "")) >= cut
 		        and px not in ("", "nan") and "MOM_M1_R1" in o and str(o.get("PX_WEEKLY", "") or "") not in ("", "nan")
-		        and str(o.get("MOM_CAL", "") or "") not in ("", "nan"))
+		        and str(o.get("MOM_CAL", "") or "") not in ("", "nan") and str(o.get("CIRC_WK", "") or "") not in ("", "nan")
+		        and str(o.get("PX_WEEKLY", "")).count("|") >= 104)
 	if not a.etf_only and not a.refetch:
 		n0 = len(todo)
 		todo = [s for s in todo if not recent(s)]
@@ -885,6 +888,7 @@ def main():
 				cb = circuit_days(raw, date.fromisoformat(rest.split(",")[0])) if rest else None
 				cc.append(f"{key}:{'' if cb is None else cb}")
 			row["CIRC_CAL"] = "|".join(cc)
+			row["CIRC_WK"] = "|".join("" if (cb := circuit_days(raw, asof - timedelta(days=7 * w))) is None else str(cb) for w in range(53))   # each week back
 			p1 = f"1Y {row['PRICE_1Y']:>10,.2f} ({row['PRICE_1Y_DATE']})" if row.get("PRICE_1Y") is not None else "1Y        n/a"
 			ca = f"  split/bonus: {row['CORP_ACTIONS']}" if row.get("CORP_ACTIONS") else ""
 			return ({**base, **row},
@@ -923,7 +927,7 @@ def main():
 			cols += [f"MOM_{k}_R3", f"MOM_{k}_R6", f"MOM_{k}_R12"]
 		for k in range(1, 13):
 			cols += [f"MOM_M{k}_R3", f"MOM_M{k}_R6", f"MOM_M{k}_R12", f"MOM_M{k}_R1"]
-		cols += ["MOM_NOW_R1", "PX_MONTHLY", "PX_WEEKLY", "MOM_CAL", "CIRC_CAL", "ADJ_FACTOR", "CORP_ACTIONS", "CIRCUIT_250"] + [f"CIRCUIT_250_{k}" for k in PERIODS] + [f"CIRC_M{k}" for k in range(1, 13)] + ["BACK_DATE", "STATUS", "FETCHED_AT"]
+		cols += ["MOM_NOW_R1", "PX_MONTHLY", "PX_WEEKLY", "MOM_CAL", "CIRC_CAL", "CIRC_WK", "ADJ_FACTOR", "CORP_ACTIONS", "CIRCUIT_250"] + [f"CIRCUIT_250_{k}" for k in PERIODS] + [f"CIRC_M{k}" for k in range(1, 13)] + ["BACK_DATE", "STATUS", "FETCHED_AT"]
 		out = pd.DataFrame(rows).reindex(columns=cols)
 		tmp = OUT_CSV.with_suffix(".tmp")
 		out.to_csv(tmp, index=False)

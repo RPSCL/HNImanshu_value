@@ -840,7 +840,7 @@ def write_builder_monthly(folder: Path) -> int:
     {"asOf", "gd": [dates, oldest first: the FIRST trading session of each calendar month (13 months) + today],
      "weekDates": [asOf − 7·w days, w = 0 … 52],
      "s": {SYM: {p: adjusted close, a: 1M, b: 3M, c: 6M, d: 12-1M return %, z: circuit days in the 250 sessions up to it (all on gd),
-                 w: weekly closes (w = 0 … 52), sp: {"1Y": adjusted close on each back snapshot's date, …}}}}
+                 w: weekly closes (w = 0 … 104), wz: circuit days up to each week (w = 0 … 52), sp: {"1Y": adjusted close on each back snapshot's date, …}}}}
     Months are matched by their YYYY-MM key, so stocks fetched on different days line up on the same sessions.
     The columns come with fetch_prices.py (MOM_CAL, CIRC_CAL, PX_WEEKLY): until a price run fills them the file has no stocks."""
     src = BASE / "prices.csv"
@@ -937,10 +937,15 @@ def write_builder_monthly(folder: Path) -> int:
             if not any(v for v in row["p"]):
                 continue
             wk = str(r.get("PX_WEEKLY") or "")
-            if wk and wk != "nan":
+            if wk and wk != "nan":                                   # weekly closes, w = 0 (now) … 104 weeks back
                 w = [f(t, 2) if t else None for t in wk.split("|")]
-                if len(w) == 53:
+                if len(w) in (53, 105):
                     row["w"] = w
+            cw = str(r.get("CIRC_WK") or "")
+            if cw and cw != "nan":                                   # circuit days up to each week back (w = 0 … 52)
+                z = [None if not t else int(float(t)) for t in cw.split("|")]
+                if len(z) == 53:
+                    row["wz"] = z
             row["sp"] = {k: f(r.get(f"PRICE_{k}_ADJ"), 4) for k in ("1Y", "9M", "6M", "3M", "1M") if f(r.get(f"PRICE_{k}_ADJ"), 4)}
             (main if sym in lists else oth)[sym] = row
     folder.mkdir(parents=True, exist_ok=True)
