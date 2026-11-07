@@ -1450,6 +1450,14 @@ table.chk-t .pf-sym{cursor:pointer;color:var(--ink)}
 table.chk-t td small.chk-why{white-space:normal;line-height:1.35;margin-top:3px;color:var(--mute)}
 .chk-sb{margin:12px 0 2px;font-size:12px;color:var(--mute);line-height:1.8}
 .chk-t tr.chk-nf td{opacity:.55}
+.chk-sbx>div>span{align-self:center;color:var(--mute)}
+.chk-sbx .chk-sbh{display:block;grid-column:1/-1;font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--brass);margin-bottom:4px}
+.chk-sbx .chk-sbh i{font:italic 400 11px var(--sans);letter-spacing:0;text-transform:none;color:var(--mute)}
+.chk-sbx b{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-weight:500}
+.chk-sbx b i{color:var(--mute);font-weight:400}
+.chk-sbx input[type=number]{width:64px!important;height:30px;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:600 12px var(--mono);text-align:right}
+@media (max-width:520px){.chk-sbx{grid-template-columns:1fr}.chk-sbx>div>span{margin-top:6px}}
+.chk-sbx select{height:30px;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
 .chk-rules{margin:12px 0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;line-height:1.55}
 .chk-rules ul{margin:6px 0 0;padding:0;list-style:none}
 .chk-rules li{display:flex;gap:10px;padding:3px 0}
@@ -4410,11 +4418,16 @@ async function pfChkOpen() {
   /* money for the new names = what the Sell list of that part brings in: qty × LTP − sell charges − 20% tax on the profit. It is split
      equally over as many new names of that part as were sold (in list order); each buys whole shares after its buy charges. */
   const partOf = x => x.part === 'ETF pair' ? 'ETF pair' : x.part;
-  const FUND = {}, NEED = {};
+  /* tax on the Sell list: 20% of (profits − losses) over all of it; a sale at a loss pays none and lowers the tax of the others
+     (each profit carries its share of the tax) */
+  const FUND = {}, NEED = {}, SALES = [];
   (c.sell || []).forEach(x => { const h = H.get(x.sym); const px = pfLtp(x.sym); if (!h || !(px > 0)) return;
     const tq = h.tq || {}, sum = Object.values(tq).reduce((a, b) => a + b, 0), t = x.part === 'ETF pair' ? 'ETF' : x.part;
-    const q = sum > 0 && tq[t] > 0 ? h.qty * tq[t] / sum : h.qty, v = q * px, ch = pfCharges('sell', q, px), tax = 0.2 * Math.max(0, (px - (h.avg || px)) * q);
-    FUND[partOf(x)] = (FUND[partOf(x)] || 0) + v - ch - tax; NEED[partOf(x)] = (NEED[partOf(x)] || 0) + 1; });
+    const q = sum > 0 && tq[t] > 0 ? h.qty * tq[t] / sum : h.qty, v = q * px, ch = pfCharges('sell', q, px);
+    SALES.push({k: partOf(x), net: v - ch, g: (px - (h.avg || px)) * q - ch}); });
+  const GP = SALES.reduce((a, x) => a + Math.max(0, x.g), 0), GL = SALES.reduce((a, x) => a + Math.max(0, -x.g), 0), TAXT = 0.2 * Math.max(0, GP - GL);
+  SALES.forEach(x => { const tax = x.g > 0 && GP > 0 ? TAXT * x.g / GP : 0;
+    FUND[x.k] = (FUND[x.k] || 0) + x.net - tax; NEED[x.k] = (NEED[x.k] || 0) + 1; });
   const FUNDED = new Map(), cnt = {};
   (c.inn || []).forEach(x => { const k = partOf(x); if (x.wait || !FUND[k] || (cnt[k] || 0) >= NEED[k]) return; cnt[k] = (cnt[k] || 0) + 1; FUNDED.set(k + '|' + x.sym, true); });
   /* Value with fewer than N held (N = the Value "how many" you added with): each further new Value name gets an equal share, taken
@@ -4430,9 +4443,10 @@ async function pfChkOpen() {
     if (extra.length && keepV.length) {
       const vt = keepV.reduce((t, r0) => t + r0.value * share(r0), 0) + (FUND.Value || 0);
       const take = vt * extra.length / (h + extra.length) / keepV.length;          // the same rupees from each holding
-      let net = 0;
-      keepV.forEach(r0 => { const x = Math.min(take, r0.value * share(r0)), q = x / r0.ltp, chg = pfCharges('sell', q, r0.ltp), tx = 0.2 * Math.max(0, (r0.ltp - (r0.avg || r0.ltp)) * q);
-        TOP.ch += chg; TOP.tax += tx; net += x - chg - tx; });
+      let net = 0, gp = 0, gl = 0;
+      keepV.forEach(r0 => { const x = Math.min(take, r0.value * share(r0)), q = x / r0.ltp, chg = pfCharges('sell', q, r0.ltp), g = (r0.ltp - (r0.avg || r0.ltp)) * q - chg;
+        TOP.ch += chg; net += x - chg; if (g > 0) gp += g; else gl -= g; });
+      TOP.tax = 0.2 * Math.max(0, gp - gl); net -= TOP.tax;                         // losses on some trims lower the tax on the others
       Object.assign(TOP, {per: net / extra.length, take, h: keepV.length});
       extra.forEach(x => TOP.names.add(x.sym));
     }
@@ -4485,9 +4499,15 @@ async function pfChkOpen() {
            <ul><li><span>Re-pick</span><div>${dl('Momentum', 'm')} · ${dl('Value', 'v')} · ${dl('Index ETFs', 'e')}. Between re-picks nothing is sold or bought.</div></li>
            <li><span>Sold when</span><div>off its list at a re-pick: fails a screen limit even loosened ${B.buf}%, a hard limit (circuit days, trap …), or ranks below the top N × ${B.band}.</div></li>
            <li><span>Never sold</span><div>${B.mk ? `momentum ≥ ${B.mk}` : ''}${B.mk && B.win ? ' · ' : ''}${B.win ? `in profit${B.trl ? ` (until ${B.trl}% below its high since bought)` : ''}` : ''}${!B.mk && !B.win ? 'off' : ''}.</div></li></ul></div>`; })() : ''}
-       ${c.sell ? `<div class="chk-sb">Sell signals: hold while within <label><input type="number" min="0" max="100" step="5" data-sb="buf" value="${SB().buf}">%</label> of the screen's limits${(c.C && ((c.C.value || {}).n || (c.C.mom || {}).n)) ? ` and within the top <label><input type="number" min="1" max="10" step="0.5" data-sb="band" value="${SB().band}">× N</label>` : ''}${SB().sync ? '; sold at the re-pick.' : '; sell after 2 weeks outside (hard exits at once).'}
-         <br>Never sell momentum ≥ <label><input type="number" min="0" max="100" step="5" data-sb="mk" value="${SB().mk}"></label> (0 = off) ·
-         <label><input type="checkbox" data-sb="win"${SB().win ? ' checked' : ''} style="width:auto!important;height:auto"> Never sell a winner</label> (in profit), unless <label><input type="number" min="0" max="60" step="5" data-sb="trl" value="${SB().trl}">%</label> below its high since bought (0 = never)</div>`
+       ${c.sell ? (() => { const B = SB(), topN = c.C && ((c.C.value || {}).n || (c.C.mom || {}).n);
+         const num = (k, v, mn, mx, st) => `<input type="number" min="${mn}" max="${mx}" step="${st}" data-sb="${k}" value="${v}">`;
+         return `<div class="chk-set chk-sbx"><div class="chk-sbh">Sell rules <i>(saved in your account; change them here or in PF Builder → 1Y adj)</i></div>
+           <div><span>Keep while within</span><b>${num('buf', B.buf, 0, 100, 5)} % of the screen's limits</b></div>
+           ${topN ? `<div><span>Keep while ranked</span><b>in the top ${num('band', B.band, 1, 10, 0.5)} × N</b></div>` : ''}
+           <div><span>Never sell if momentum</span><b>≥ ${num('mk', B.mk, 0, 100, 5)} <i>(0 = off)</i></b></div>
+           <div><span>Never sell a winner</span><b><select data-sb="win"><option value="1"${B.win ? ' selected' : ''}>Yes (in profit)</option><option value="0"${B.win ? '' : ' selected'}>No</option></select>
+             ${B.win ? `unless ${num('trl', B.trl, 0, 60, 5)} % below its high since bought <i>(0 = never)</i>` : ''}</b></div>
+           <div><span>When</span><b>${B.sync ? 'sold at the part\'s re-pick' : 'sold after 2 weekly data dates outside; hard exits at once'}</b></div></div>`; })()
          + tbl('Sell list', c.sell, 'sell', 'Outside the buffer for 2 weekly data dates in a row, or a hard exit (value-trap flag, circuit days, dividend stopped, Graham test). ETFs: no longer in the index part')
          + (c.wait && c.wait.length ? tbl('Waiting for the re-pick', c.wait, 'wait', 'Off the list now, but this part is re-picked only on its schedule: sold then if it is still off the list and not protected') : '')
          + (SB().sync ? '' : tbl('Watch: 1st week outside', c.watch, 'watch', 'Outside the buffer this week: on the Sell list next week if it is still outside'))
@@ -4497,7 +4517,7 @@ async function pfChkOpen() {
   const w = modal('PF Builder check', body, {noFocus: true, cls: 'chk-box'});
   w.querySelectorAll('[data-sb]').forEach(i => i.addEventListener('change', async () => {          // buffer / rank band: kept in your settings
     if (w._gone) return;
-    const v = i.type === 'checkbox' ? i.checked : +i.value; if (i.type !== 'checkbox' && !(v >= (i.dataset.sb === 'band' ? 1 : 0))) return;
+    const v = i.tagName === 'SELECT' ? i.value === '1' : i.type === 'checkbox' ? i.checked : +i.value; if (i.tagName !== 'SELECT' && i.type !== 'checkbox' && !(v >= (i.dataset.sb === 'band' ? 1 : 0))) return;
     FF.sb = Object.assign({}, SB(), {[i.dataset.sb]: v}); ffSave();
     w._close(); PF_CHK = null; PF_CHK_SIG = ''; PF_CHK = await pfChkCalc().catch(() => null); pfChkOpen();
     document.querySelectorAll('.pf-chk').forEach(b => { b.outerHTML = pfChkBtn(); });
