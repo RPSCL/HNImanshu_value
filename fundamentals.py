@@ -4288,13 +4288,14 @@ function pbLists(C0) {                                        // today's PF Buil
       GF.uni = C[k].uni === 'all' || D.lists.includes(C[k].uni) ? C[k].uni : 'all'; setMode(); computeScores.S = null; computeScores();
       const pool = k === 'value' ? V().filter(s => !young(s) && s.score != null && s.cmp != null && passVF(s, vf))
                                  : V().filter(s => !young(s) && ok(s.momS) && s.cmp != null && pbMomOk(s, P.mf));
-      out[k] = pbChoose(pool, C[k], k).map(s => s.sym);
+      const Ck = k === 'value' && !(C[k].n > 0) ? Object.assign({}, C[k], {n: 15}) : C[k];   // Value "all that pass": at most 15 (PF Builder VAL_CAP)
+      out[k] = pbChoose(pool, Ck, k).map(s => s.sym);
       /* sell signals: a holding is kept while it still passes the screen with the buffer (limits loosened by SB.buf) and, when the
          list takes the top N, ranks within the top N × SB.band */
       const fb = pbBuffer(k === 'value' ? vf : P.mf, SB().buf / 100);
       const bpool = k === 'value' ? V().filter(s => !young(s) && s.score != null && s.cmp != null && passVF(s, fb))
                                   : V().filter(s => !young(s) && ok(s.momS) && s.cmp != null && pbMomOk(s, fb));
-      out[k + 'Keep'] = new Set(pbChoose(bpool, Object.assign({}, C[k], {n: C[k].n > 0 ? Math.ceil(C[k].n * SB().band) : 0}), k).map(s => s.sym));
+      out[k + 'Keep'] = new Set(pbChoose(bpool, Object.assign({}, Ck, {n: Ck.n > 0 ? Math.ceil(Ck.n * SB().band) : 0}), k).map(s => s.sym));
       out[k + 'Rank'] = new Map(pbChoose(bpool, Object.assign({}, C[k], {n: 0}), k).map((s, i) => [s.sym, i + 1]));
       out[k + 'F'] = {f: k === 'value' ? vf : P.mf, fb};
     }
@@ -4433,7 +4434,7 @@ async function pfChkOpen() {
   /* Value with fewer than N held (N = the Value "how many" you added with): each further new Value name gets an equal share, taken
      equally from every Value holding you keep (charges and 20% tax on the profit of each part sold come off), until N are held */
   const TOP = {per: 0, take: 0, h: 0, ch: 0, tax: 0, names: new Set()};
-  const NV = c.C && c.C.value ? +c.C.value.n || Infinity : 0;                     // "all that pass": every new name is added
+  const NV = c.C && c.C.value ? +c.C.value.n || 15 : 0;                           // "all that pass": at most 15 (= PF Builder's VAL_CAP)
   if (NV > 0) {
     const selling = new Set((c.sell || []).filter(x => x.part === 'Value').map(x => x.sym));
     const keepV = P.open.filter(r0 => { const tq = r0.tq || {}; return tq.Value > 0 && !selling.has(r0.sym) && ok(r0.ltp) && r0.ltp > 0; });
@@ -4462,7 +4463,7 @@ async function pfChkOpen() {
     return `<tr>${nm(x).replace('</small></td>', `</small>${x.why ? `<small class="chk-why">${esc(x.why)}${x.stage === 'sell' && x.since ? ' · outside since ' + esc(x.since) : ''}</small>` : ''}</td>`)}<td>${esc(x.part)}</td><td class="r">${r.qty != null ? fmt(r.qty, 0) : '–'}</td><td class="r ${ud(r.dayPct)}">${pc(r.dayPct)}</td>
       <td class="r ${ud(r.pnl)}">${r.priced ? (r.pnl > 0 ? '+' : r.pnl < 0 ? '−' : '') + '₹' + fmt(Math.abs(r.pnl), 0) : '–'}</td><td class="r ${ud(r.pnlPct)}">${r.priced ? pc(r.pnlPct) : '–'}</td></tr>`; };
   const rowIn = x => { const q = tent(x), px = pfLtp(x.sym);
-    return `<tr${q == null ? ' class="chk-nf"' : ''}>${nm(x).replace('</small></td>', TOP.names.has(x.sym) && x.part === 'Value' ? '</small><small class="chk-why">' + (NV === Infinity ? 'new on the Value list' : 'added toward ' + NV + ' Value holdings') + ': money taken equally from all of them</small></td>' : '</small></td>')}<td>${esc(x.part)}</td><td class="r">${px > 0 ? fmt(px, 2) : '–'}</td><td class="r"${q == null ? ` title="${x.wait ? 'Bought only at this part\'s re-pick (' + esc(x.wait) + ')' : 'Nothing of this part is on the Sell list (or the sales are spent on names above): not bought'}"` : ''}><b>${q != null ? fmt(q, 0) : '–'}</b></td></tr>`; };
+    return `<tr${q == null ? ' class="chk-nf"' : ''}>${nm(x).replace('</small></td>', TOP.names.has(x.sym) && x.part === 'Value' ? '</small><small class="chk-why">' + ('added toward ' + NV + ' Value holdings') + ': money taken equally from all of them</small></td>' : '</small></td>')}<td>${esc(x.part)}</td><td class="r">${px > 0 ? fmt(px, 2) : '–'}</td><td class="r"${q == null ? ` title="${x.wait ? 'Bought only at this part\'s re-pick (' + esc(x.wait) + ')' : 'Nothing of this part is on the Sell list (or the sales are spent on names above): not bought'}"` : ''}><b>${q != null ? fmt(q, 0) : '–'}</b></td></tr>`; };
   const tbl = (t, a, cls, tip = '') => { const kind = cls === 'in' ? 'in' : 'out';
     return `<h4 class="chk-h ${cls}"${tip ? ` title="${esc(tip)}"` : ''}>${t} <span>${a.length}</span>${a.length ? `<button type="button" class="btn ghost chk-cp" data-cp="${cls}" title="Copy as a table: paste in Google Sheets">Copy</button>` : ''}</h4>` + (a.length
     ? `<div class="chk-tw"><table class="chk-t"><thead><tr>${kind === 'out'
@@ -4512,7 +4513,7 @@ async function pfChkOpen() {
          + (c.wait && c.wait.length ? tbl('Waiting for the re-pick', c.wait, 'wait', 'Off the list now, but this part is re-picked only on its schedule: sold then if it is still off the list and not protected') : '')
          + (SB().sync ? '' : tbl('Watch: 1st week outside', c.watch, 'watch', 'Outside the buffer this week: on the Sell list next week if it is still outside'))
          + tbl('Hold: off the list, but inside the buffer, strong momentum or a winner', c.hold, 'hold', 'Off today\'s buy list but still within the buffer, momentum at or above your limit, or in profit: no sell signal')
-         : tbl('No longer on the list', c.out, 'out')}${TOP.names.size ? `<p class="chk-sub">Value holds ${TOP.h + (cnt.Value || 0)}${NV === Infinity ? ' (all that pass are held)' : ` of ${NV}`}: take <b>₹${fmt(TOP.take, 0)}</b> from each of your ${TOP.h} Value holdings (₹${fmt(TOP.take * TOP.h, 0)} in all; about ₹${fmt(TOP.ch, 0)} charges and ₹${fmt(TOP.tax, 0)} tax) and buy the new name${TOP.names.size > 1 ? 's' : ''} marked below.</p>` : ''}${tbl('New on the list (not held)', c.inn, 'in', 'Bought with the money its part\'s sales free up (as many as were sold), or, while Value holds fewer than its N, with an equal share taken from every Value holding; the rest are greyed out')}
+         : tbl('No longer on the list', c.out, 'out')}${TOP.names.size ? `<p class="chk-sub">Value holds ${TOP.h + (cnt.Value || 0)} of ${NV}: take <b>₹${fmt(TOP.take, 0)}</b> from each of your ${TOP.h} Value holdings (₹${fmt(TOP.take * TOP.h, 0)} in all; about ₹${fmt(TOP.ch, 0)} charges and ₹${fmt(TOP.tax, 0)} tax) and buy the new name${TOP.names.size > 1 ? 's' : ''} marked below.</p>` : ''}${tbl('New on the list (not held)', c.inn, 'in', 'Bought with the money its part\'s sales free up (as many as were sold), or, while Value holds fewer than its N, with an equal share taken from every Value holding; the rest are greyed out')}
        <p class="chk-note">Lists change with the weekly data update. This is information only, not a recommendation to buy or sell.</p>`;
   const w = modal('PF Builder check', body, {noFocus: true, cls: 'chk-box'});
   w.querySelectorAll('[data-sb]').forEach(i => i.addEventListener('change', async () => {          // buffer / rank band: kept in your settings
