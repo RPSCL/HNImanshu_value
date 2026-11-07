@@ -808,8 +808,8 @@ function adjSleeve(F, G0, picks, opt, momOf) {
       /* fewer than N held (opt.N, Value): each new name on the list gets an equal share, the money taken equally from every
          holding (each sells that much; charges and tax on its profit come off), until N are held */
       let add = [];
-      if (opt.N > 0 && pos.size < opt.N) {
-        add = P.strict.filter(s => !pos.has(s) && px(s, j)).slice(0, opt.N - pos.size);
+      if (opt.N && pos.size < opt.N) {                                  // N = Infinity: "all that pass", every new name is added
+        add = P.strict.filter(s => !pos.has(s) && px(s, j)).slice(0, opt.N === Infinity ? undefined : opt.N - pos.size);
         if (add.length) {
           const V0 = mark(j), h = pos.size, take = h ? V0 * add.length / (h + add.length) / h : 0;
           pos.forEach((p, s) => { const q = px(s, j) || p.last || p.q0, val = p.u * q, x = Math.min(take, val); if (!(x > 0)) return;
@@ -894,7 +894,7 @@ function adjRun(F0, part) {
       inWhy: Object.fromEntries(strictL.map((x, i) => [x.sym, `#${i + 1} · momentum ${num(x.mom) ? Math.round(x.mom) : '–'} · circuit ${num(x.circ) ? x.circ : '–'}d`]))}; };
   const one = part !== 'all' && sh[part] > 0, F = one ? F0 * sh[part] : F0, w = k => one ? (k === part ? 1 : 0) : sh[k];
   const opt = {win: ADJ.w, t: ADJ.t, mk: ADJ.mk, buf: ADJ.buf, band: ADJ.band};
-  const SV = adjSleeve(F0 * sh.value, vGrid, vPick, Object.assign({N: SELC.value.n > 0 ? SELC.value.n : 0}, opt), (j, s) => mmAt(mjOf(vGrid[j].date))[s]);
+  const SV = adjSleeve(F0 * sh.value, vGrid, vPick, Object.assign({N: SELC.value.n > 0 ? SELC.value.n : Infinity}, opt), (j, s) => mmAt(mjOf(vGrid[j].date))[s]);
   const mmW = d => { let k = 52; M.weekDates.forEach((x, w) => { if (w >= 1 && x <= d && w < k) k = w; }); return ((A.atW || {})[k] || {}).mm || {}; };   // the week on / before a date
   const SM = adjSleeve(F0 * sh.mom, mG, mPick, opt, (j, s) => (mWeekly ? mmW(mG[j].date) : mmAt(j))[s]);
   /* the year's tax over all three parts: 20% of (all profits − all losses); what the parts paid above that comes back at the end */
@@ -1011,12 +1011,13 @@ function paintAdj(fund) {
   const chip = x => `<span class="adjc" tabindex="0" data-tip="${esc(tip(x.sym, (x.ret == null ? '' : fmt(x.ret, 1) + '% after charges, before tax\n') + 'Out: ' + (x.why || '–')))}">${esc(x.sym)} ${pill(x.ret)}</span>`;
   const keptChip = x => `<span class="adjc kept" tabindex="0" data-tip="${esc(tip(x.sym, 'Kept: ' + x.why))}">${esc(x.sym)} ${pill(x.ret)}</span>`;
   const part = (k, SL, every) => {
-    const rule = `<p class="rule">${psuTxt(CFG())} that pass ${esc(scrName(k))} · ${esc(selText(k))} · re-picked ${per(every)}. Only dates with a change are shown; hover or tap a name for the reason. <a href="#" data-adjtab="rules">Selling rules</a></p>`;
+    const rule = `<p class="rule">${psuTxt(CFG())} that pass ${esc(scrName(k))} · ${esc(selText(k))} · re-picked ${per(every)}. ${SL.log.length <= 14 ? 'Every re-pick is shown' : 'Only dates with a change are shown'}; hover or tap a name for the reason. <a href="#" data-adjtab="rules">Selling rules</a></p>`;
     const inChip = (x, s) => `<span class="adjc" tabindex="0" data-tip="${esc(tip(s, 'Bought: ' + ((x.innWhy || {})[s] || '')))}">${esc(s)}</span>`;
     const md = j => dShort(SL.G[j].date);
-    const addChip = (x, s) => `<span class="adjc" tabindex="0" data-tip="${esc(tip(s, 'Added: ' + ((x.innWhy || {})[s] || '') + '\nFewer than ' + SELC.value.n + ' held: an equal share taken from every holding (after charges and tax)'))}">${esc(s)} <small>+</small></span>`;
-    const logRows = SL.log.filter(x => x.first || x.out.length || (x.kept && x.kept.length) || (x.add && x.add.length)).map(x => `<tr><td>${esc(md(x.j))}</td><td>${x.first ? '<i>bought ' + x.inn.length + '</i>' : x.out.length ? x.out.map(chip).join(' ') : `<i>${x.kept && x.kept.length ? 'nothing sold' : 'nothing out'}</i>`}${x.kept && x.kept.length ? `<div class="adjk"><i>kept (winner / strong momentum):</i> ${x.kept.map(keptChip).join(' ')}</div>` : ''}</td>
-      <td>${x.first ? x.inn.map(s => inChip(x, s)).join(' ') : x.inn.length ? x.inn.map(s => inChip(x, s)).join(' ') : x.out.length ? '<i>none to buy: kept in cash</i>' : ''}${x.add && x.add.length ? `<div class="adjk"><i>added toward ${SELC.value.n} (money taken equally from all):</i> ${x.add.map(s => addChip(x, s)).join(' ')}</div>` : ''}</td><td class="r">${x.n}</td></tr>`).join('');
+    const addChip = (x, s) => `<span class="adjc" tabindex="0" data-tip="${esc(tip(s, 'Added: ' + ((x.innWhy || {})[s] || '') + (SELC.value.n > 0 ? '\nFewer than ' + SELC.value.n + ' held' : '\nNew on the list (all that pass are held)') + ': an equal share taken from every holding (after charges and tax)'))}">${esc(s)} <small>+</small></span>`;
+    const showAll = SL.log.length <= 14;                                  // monthly: every re-pick; weekly: only dates with a change
+    const logRows = SL.log.filter(x => showAll || x.first || x.out.length || (x.kept && x.kept.length) || (x.add && x.add.length)).map(x => `<tr><td>${esc(md(x.j))}</td><td>${x.first ? '<i>bought ' + x.inn.length + '</i>' : x.out.length ? x.out.map(chip).join(' ') : `<i>${x.kept && x.kept.length ? 'nothing sold' : 'nothing out of the list'}</i>`}${x.kept && x.kept.length ? `<div class="adjk"><i>kept (winner / strong momentum):</i> ${x.kept.map(keptChip).join(' ')}</div>` : ''}</td>
+      <td>${x.first ? x.inn.map(s => inChip(x, s)).join(' ') : x.inn.length ? x.inn.map(s => inChip(x, s)).join(' ') : x.out.length ? '<i>none to buy: kept in cash</i>' : ''}${x.add && x.add.length ? `<div class="adjk"><i>${SELC.value.n > 0 ? `added toward ${SELC.value.n}` : 'new on the list, added'} (money taken equally from all):</i> ${x.add.map(s => addChip(x, s)).join(' ')}</div>` : ''}</td><td class="r">${x.n}</td></tr>`).join('');
     const holdRows = SL.hold.sort((a, b) => (b.ret || -1e9) - (a.ret || -1e9)).map(x => `<tr${heldTr(x)}><td>${symCell(x)}</td><td class="nm" title="${esc(nm(x.sym))}">${esc(nm(x.sym))}</td><td>${esc(md(x.j0))}</td><td class="r">${pill(x.ret)}</td></tr>`).join('');
     const sold = SL.log.flatMap(x => x.out.map(o => Object.assign({j: x.j}, o))).sort((a, b) => b.j - a.j);
     const soldRows = sold.map(x => `<tr><td>${symCell(x)}</td><td class="nm" title="${esc(nm(x.sym))}">${esc(nm(x.sym))}</td><td>${x.j0 != null ? esc(md(x.j0)) : '–'}</td><td>${esc(md(x.j))}</td><td class="r"><span class="adjc" tabindex="0" data-tip="${esc(tip(x.sym, 'Out: ' + (x.why || '–')))}">${pill(x.ret)}</span></td></tr>`).join('');
@@ -1051,7 +1052,7 @@ function adjRulesHtml(sb, mEv, vEv, eEv) {
       <li><b>Hold</b> a holding off the list is kept while it is within the limits loosened ${fmt(sb.buf, 0)}% (the Sold column)${c.n > 0 ? ` and ranks within the top ${Math.ceil(c.n * sb.band)} (N ${c.n} × ${sb.band})` : ''}; a hard limit has no buffer.</li>
       ${never}
       <li><b>Sold</b> when it is off the list and not protected; the money (less charges, and ${TAX * 100}% tax on a profit after losses are set off; none on a loss) buys the next names on the list, one for one.</li>${extra}</ul>${lim(rows)}</div>`; };
-  const vExtra = SELC.value.n > 0 ? `<li><b>Money</b> each stock gets 1/${SELC.value.n} of the Value part; with fewer passing, all of it goes into those, and each new name later takes an equal share from all of them until ${SELC.value.n} are held.</li>` : '<li><b>Money</b> split equally over the stocks that pass.</li>';
+  const vExtra = SELC.value.n > 0 ? `<li><b>Money</b> each stock gets 1/${SELC.value.n} of the Value part; with fewer passing, all of it goes into those, and each new name later takes an equal share from all of them until ${SELC.value.n} are held.</li>` : '<li><b>Money</b> split equally over the stocks that pass at the start; every stock that newly passes at a re-pick takes an equal share from all holdings (all that pass are held).</li>';
   const mExtra = `<li><b>Momentum score</b> = average percentile (among NIFTY 500, Smallcap 500 and Microcap 250) of the 1M, 3M, 6M and 12-1M returns, plus up to 10 for a rising staircase (1M &gt; 3M &gt; 6M &gt; 12M, each step a third), at most 100. Worked out again at each re-pick from the prices known then.</li>
     <li><b>Money</b> split equally at the start; a replacement gets the money of the stock it replaces.</li>`;
   return `<div class="adjrules">${card('value', 'Value' + (RU && RU.vLabel ? ` <small>${esc(RU.vLabel)}</small>` : ''), vEv, RU && RU.value, vExtra)}${card('mom', 'Momentum' + (RU && RU.mLabel ? ` <small>${esc(RU.mLabel)}</small>` : ''), mEv, RU && RU.mom, mExtra)}</div>
@@ -1071,7 +1072,7 @@ function adjHowHtml(F, sb, mEv, vEv, eEv) {
     <h3>How the money is split</h3><ul>
       <li>${rsK(F)} split ${SPLIT.map(x => x[1] + ' ' + +(x[2] * 100).toFixed(1) + '%').join(' · ')}. No money is added later; each part lives on its own money.</li>
       <li><b>Index ETFs</b>: one equal slot per pair and per always-held ETF. A switch moves the whole slot.</li>
-      <li><b>Value</b>: ${SELC.value.n > 0 ? `1/${SELC.value.n} of the part per stock; with fewer passing, everything goes into those; each new name later takes an equal share from all holdings until ${SELC.value.n} are held` : 'split equally over the stocks that pass'}.</li>
+      <li><b>Value</b>: ${SELC.value.n > 0 ? `1/${SELC.value.n} of the part per stock; with fewer passing, everything goes into those; each new name later takes an equal share from all holdings until ${SELC.value.n} are held` : 'split equally over the stocks that pass; every stock that newly passes takes an equal share from all holdings'}.</li>
       <li><b>Momentum</b>: split equally over the top ${SELC.mom.n || 'list'} at the start; afterwards each replacement gets the money of the stock it replaced.</li>
       <li>Every buy and sale pays the Portfolio page's charges. Tax is ${TAX * 100}% of the profit; a sale at a loss pays none, and its loss is set off against later profits. At the year's end the tax is squared up over all three parts (20% of all profits minus all losses). What is left after each sale is reinvested in full.</li></ul>
     <h3>Reading the chart</h3><ul>
