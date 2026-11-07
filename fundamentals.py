@@ -4241,7 +4241,7 @@ function pbRules(f, fb) {
   });
   return out;
 }
-window.pbRulesAll = () => { const P = pbCfg(), b = SB().buf / 100;
+window.pbRulesAll = bufOv => { const P = pbCfg(), b = (bufOv != null ? +bufOv : SB().buf) / 100;
   return JSON.stringify({value: pbRules(P.vf, pbBuffer(P.vf, b)), mom: pbRules(P.mf, pbBuffer(P.mf, b)), sb: SB(), vLabel: P.vLabel, mLabel: P.mLabel}); };
 const PB_BUF_MAX = ['maxPE', 'maxPB', 'maxPeg', 'maxPta', 'maxPfa', 'maxDe', 'maxDebitda', 'maxNpa', 'maxNnpa', 'maxMom'];
 const PB_BUF_MIN = ['minQ', 'minScore', 'minTrend', 'minMom', 'minFcf', 'minOe', 'minCc', 'minQ5', 'minUp', 'minCfo', 'minRoa', 'minPcr', 'minInv'];
