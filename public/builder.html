@@ -93,6 +93,40 @@ h1{font:600 22px var(--sans);margin:20px 0 4px}
 .adjset select{height:31px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font:600 12.5px var(--mono);padding:0 8px;cursor:pointer;outline:none}
 .adjset select:focus{border-color:var(--brass)}
 .adjset .btn.sm{margin-left:auto}
+.adjcard{display:grid;grid-template-columns:1fr 1fr;gap:12px 22px;margin:-2px 0 14px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.adjgrp h4{margin:0 0 8px;font:700 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--brass)}
+.adjgrp h4 small{font-weight:500;letter-spacing:0;text-transform:none;color:var(--mute)}
+.adjrow{display:flex;flex-wrap:wrap;gap:8px 14px}
+.adjrow label{display:flex;flex-direction:column;gap:4px;font:500 11.5px var(--mono);color:var(--mute)}
+.adjrow label.ck>span{display:flex;align-items:center;gap:6px}
+.adjrow select{height:32px;min-width:118px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:600 12.5px var(--mono);padding:0 8px;cursor:pointer;outline:none}
+.adjrow select:focus{border-color:var(--brass)}
+.adjrow input[type=checkbox]{accent-color:var(--brass);width:15px;height:15px;margin:0}
+.adjact{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding-top:10px;border-top:1px dashed var(--line)}
+.adjsync{font:500 12px var(--mono);color:var(--mute);margin-right:auto}
+.adjsync.on{color:var(--good)}
+.adjq{font-size:13px;margin-right:auto}
+.adjtabs{display:flex;gap:4px;margin:0 0 12px;border-bottom:1px solid var(--line)}
+.adjtabs button{background:none;border:0;border-bottom:2px solid transparent;color:var(--mute);font:600 13px var(--mono);padding:8px 12px;cursor:pointer;margin-bottom:-1px}
+.adjtabs button.on{color:var(--ink);border-bottom-color:var(--brass)}
+.adjstrip{display:flex;flex-wrap:wrap;gap:6px 18px;margin:0 0 12px;font:500 12px var(--mono);color:var(--mute)}
+.adjstrip b{color:var(--ink);font-weight:600}
+.adjrules{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.adjrc{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel);margin-bottom:14px}
+.adjrules .adjrc{margin-bottom:0}
+.adjrc h3,.adjhow h3{margin:0 0 8px;font-size:15px}
+.adjrc h3 small{font:500 11.5px var(--mono);color:var(--mute)}
+.adjrc ul,.adjhow ul{margin:0 0 10px;padding-left:18px;font-size:13px;line-height:1.55}
+.adjrc li,.adjhow li{margin:3px 0}
+.adjrc li b{color:var(--brass);font-weight:600}
+table.adjr{width:100%;border-collapse:collapse;font:500 12px var(--mono)}
+table.adjr th,table.adjr td{padding:5px 6px;border-top:1px solid var(--line);text-align:left}
+table.adjr th{color:var(--mute);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+table.adjr tr.hard td:first-child i{font-style:normal;font-size:10px;color:var(--bad);border:1px solid currentColor;border-radius:4px;padding:0 4px;margin-left:4px}
+.adjhow{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--panel)}
+.adjhow h3{margin-top:12px}.adjhow h3:first-child{margin-top:0}
+h4.adjh{margin:14px 0 6px;font:700 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+@media (max-width:760px){.adjcard,.adjrules{grid-template-columns:1fr}.adjrow label{flex:1 1 140px}.adjrow select{width:100%}.adjtabs{overflow-x:auto}}
 .adjc{display:inline-block;margin:1px 6px 1px 0;font:600 12px var(--mono);white-space:nowrap;cursor:help;border-radius:4px;outline:none}
 .adjc:focus-visible{box-shadow:0 0 0 1px var(--brass)}
 .adjc.kept{opacity:.85}
@@ -557,6 +591,7 @@ const ENG_OK = "typeof V === 'function' && typeof D === 'object' && typeof setHi
 /* the hidden page can reload itself (a new deploy noticed by the service worker): its helpers are then gone → wait for it, add them again */
 async function engine() {
   const w = await engine0();
+  if (!ENG_WIN) { ENG_WIN = w; adjFromAccount(); }
   let has = false; try { has = typeof w.__pb === 'function' && typeof w.__pbAdjLoad === 'function'; } catch (e) {}
   if (!has) {
     await waitFor(() => w.document.documentElement.classList.contains('auth-ok') && w.eval(ENG_OK), 60000)
@@ -640,8 +675,15 @@ const ADJ_MOM = ['W', 1, 2, 3, 6], ADJ_ETF = ['W', 1, 3, 6], ADJ_VAL = ['W', 1, 
 const SNAPK = {12: '1Y', 9: '9M', 6: '6M', 3: '3M', 1: '1M'}, SNAPS = [1, 3, 6, 9, 12], ADJ_KEY = SNAPK;
 let ADJ = (() => { let v = {}; try { v = JSON.parse(lsGet('pb_adj2') || '{}') || {}; } catch (e) {}
   return {m: v.m === 'W' ? 'W' : ADJ_MOM.includes(+v.m) ? +v.m : 1, e: v.e === 'W' || v.e === undefined ? 'W' : ADJ_ETF.includes(+v.e) ? +v.e : 'W', v: v.v === 'W' ? 'W' : ADJ_VAL.includes(+v.v) ? +v.v : 3,
-    w: v.w === undefined ? true : !!v.w, t: ADJ_TR.includes(+v.t) ? +v.t : 0, mk: ADJ_MK.includes(+v.mk) ? +v.mk : 80}; })();
-const adjSave = () => lsSet('pb_adj2', JSON.stringify(ADJ));
+    w: v.w === undefined ? true : !!v.w, t: ADJ_TR.includes(+v.t) ? +v.t : 0, mk: ADJ_MK.includes(+v.mk) ? +v.mk : 80,
+    tab: ['res', 'rules', 'how'].includes(v.tab) ? v.tab : 'res', own: !!v.own}; })();
+const adjSave = () => { ADJ.own = true; lsSet('pb_adj2', JSON.stringify(ADJ)); };
+/* this browser has not set 1Y adj rules yet → start from the ones your portfolio uses (if they were copied from here) */
+function adjFromAccount() {
+  if (ADJ.own) return;
+  try { const sb = JSON.parse(ENG_WIN.eval('JSON.stringify(SB())'));
+    if (sb && sb.sync && sb.cad) Object.assign(ADJ, {m: sb.cad.m, v: sb.cad.v, e: sb.cad.e, mk: +sb.mk || 0, w: !!sb.win, t: +sb.trl || 0}); } catch (e) {}
+}
 const everyTxt = x => x === 'W' ? 'week' : x === 1 ? 'month' : x + ' months';
 const hasWk = M => !!M && Array.isArray(M.weekDates) && Object.values(M.s || {}).some(m => m.w && m.w.length >= 105);   // 2 years of weekly closes
 const vEvery = () => ADJ.v === 'W' ? 'week' : ADJ.v === 1 ? 'month' : ADJ.v === 12 ? 'year (bought once)' : ADJ.v + ' months';
@@ -750,7 +792,7 @@ function adjSleeve(F, G, picks, opt, momOf) {
           why = `gave back ${fmt(-off, 1)}% from its high (trail ${opt.t}%) · ${why}`;
         }
         const v = p.u * q, c = sellCharges(v, PF_RATES), t = TAX * Math.max(0, v - c - p.b);
-        cash += v - c - t; ch += c; tax += t; ns++; outs.push({sym: s, ret: ((v - c) / p.b - 1) * 100, why: why + (num(mm) ? ` · momentum ${Math.round(mm)}` : '')}); pos.delete(s);
+        cash += v - c - t; ch += c; tax += t; ns++; outs.push({sym: s, j0: p.j0, ret: ((v - c) / p.b - 1) * 100, why: why + (num(mm) ? ` · momentum ${Math.round(mm)}` : '')}); pos.delete(s);
       });
       const inn = P.strict.filter(s => !pos.has(s) && px(s, j)).slice(0, outs.length);
       buy(inn, j);
@@ -854,22 +896,56 @@ function adjRun(F0, part) {
 }
 const adjSyms = () => { try { const R = adjRun(100000, 'all'); return [...new Set([...R.SV.log, ...R.SM.log].flatMap(x => x.inn.concat(x.add || [])))]; } catch (e) { return []; } };
 const backSyms = () => PER === 'ADJ' ? adjSyms() : (L => [...L.value, ...L.mom].map(x => x.sym).filter(Boolean))(lists('back'));
+/* the account's selling rules (what the PF Builder check on the Portfolio page uses), read from the hidden page */
+let ENG_WIN = null, ADJ_ASK = false, ADJ_RULES = null;
+const accSB = () => { try { return ENG_WIN ? JSON.parse(ENG_WIN.eval('JSON.stringify(SB())')) : null; } catch (e) { return null; } };
+const adjSame = sb => !!(sb && sb.sync && sb.cad && String(sb.cad.m) === String(ADJ.m) && String(sb.cad.v) === String(ADJ.v) && String(sb.cad.e) === String(ADJ.e)
+  && +sb.mk === +ADJ.mk && !!sb.win === !!ADJ.w && (+sb.trl || 0) === (+ADJ.t || 0));
+/* "Use these rules in my portfolio": the 1Y adj settings → your account (FF.sb), read by the PF Builder check */
+async function adjApply() {
+  const w = ENG_WIN || await engine();
+  const sb = Object.assign(JSON.parse(w.eval('JSON.stringify(SB())')), {mk: ADJ.mk, win: ADJ.w, trl: ADJ.t, cad: {m: ADJ.m, v: ADJ.v, e: ADJ.e}, sync: true,
+    syncAt: new Date(Date.now() + 19800000).toISOString().slice(0, 10)});
+  const all = JSON.parse(w.eval(`FF.sb = ${JSON.stringify(sb)}; FF._at = Date.now(); lsSet('ff', JSON.stringify(FF)); JSON.stringify(FF)`));
+  try { if (window.hniStore && window.hniStore.saveFF) await window.hniStore.saveFF(all); toast('Done: the Portfolio page now checks your holdings with these rules.', 6000); }
+  catch (e) { toast('Saved in this browser; the account copy did not save (' + ((e && e.message) || 'error') + ').', 8000); }
+}
 function paintAdj(fund) {
   const out = $('#out');
   PF = null;
-  const opt = (id, vals, cur, lab) => `<select id="${id}">${vals.map(v => `<option value="${v}"${v === cur ? ' selected' : ''}>${lab(v)}</option>`).join('')}</select>`;
-  const set = `<div class="adjset"><label>Momentum re-picked every ${opt('adjM', ADJ_MOM, ADJ.m, m => m === 'W' ? 'week' : m + ' month' + (m > 1 ? 's' : ''))}</label>
-    <label>Index ETFs every ${opt('adjE', ADJ_ETF, ADJ.e, m => m === 'W' ? 'week' : m + ' month' + (m > 1 ? 's' : ''))}</label>
-    <label>Value every ${opt('adjV', ADJ_VAL, ADJ.v, v => v === 'W' ? 'week' : v + ' month' + (v > 1 ? 's' : ''))}</label>
-    <label title="A stock with this momentum score or more is never sold, whatever else (Value and Momentum parts)">Never sell momentum ≥ ${opt('adjK', ADJ_MK, ADJ.mk, v => v ? String(v) : 'off')}</label>
-    <label title="A holding in profit is never sold (whatever the exit reason), unless you pick a fall from its highest price since bought"><input type="checkbox" id="adjW"${ADJ.w ? ' checked' : ''}> Never sell a winner${ADJ.w ? `, unless ${opt('adjT', ADJ_TR, ADJ.t, v => v ? v + '% off its high' : 'never')}` : ''}</label>
-    <button type="button" class="btn sm" id="adjRef" title="Load the latest month-by-month prices and daily closes and build this backtest again">Refresh</button></div>`;
-  if (!perHas('ADJ')) { out.innerHTML = perBar() + set + hLoad('Building the 1Y adj backtest…'); ensurePer('ADJ').then(() => { if (PER === 'ADJ' && TAB === 'back') paint(); }).catch(e => status((e && e.message) || 'Could not build the 1Y adj backtest.', true)); return; }
-  if (DATA.adj.none) { out.innerHTML = perBar() + set + '<p class="empty">Month-by-month data is not available yet. <a href="https://t.me/HNImanshu" target="_blank" rel="noopener">Contact us</a>.</p>'; return; }
-  const miss = ['1Y'].filter(k => !DATA.backs[k] || !DATA.backs[k].hasPrice);      // the start; later snapshots are used when they have prices
-  if (miss.length) { out.innerHTML = perBar() + set + '<p class="empty">Month-by-month data is not available yet. <a href="https://t.me/HNImanshu" target="_blank" rel="noopener">Contact us</a>.</p>'; return; }
+  const opt = (id, vals, cur, lab) => `<select id="${id}">${vals.map(v => `<option value="${v}"${String(v) === String(cur) ? ' selected' : ''}>${lab(v)}</option>`).join('')}</select>`;
+  const per = v => v === 'W' ? 'every week' : v === 1 ? 'every month' : `every ${v} months`;
+  const asb = accSB(), same = adjSame(asb);
+  const set = `<div class="adjcard">
+    <div class="adjgrp"><h4>Rebalance <small>(re-pick)</small></h4><div class="adjrow">
+      <label><span>Momentum</span>${opt('adjM', ADJ_MOM, ADJ.m, per)}</label>
+      <label><span>Value</span>${opt('adjV', ADJ_VAL, ADJ.v, per)}</label>
+      <label><span>Index ETFs</span>${opt('adjE', ADJ_ETF, ADJ.e, per)}</label></div></div>
+    <div class="adjgrp"><h4>Never sell</h4><div class="adjrow">
+      <label title="A stock with this momentum score or more is never sold (Value and Momentum)"><span>Momentum ≥</span>${opt('adjK', ADJ_MK, ADJ.mk, v => v ? String(v) : 'off')}</label>
+      <label class="ck" title="A holding in profit is never sold, unless you pick a fall from its highest price since bought"><span><input type="checkbox" id="adjW"${ADJ.w ? ' checked' : ''}> A winner (in profit)</span>${ADJ.w ? opt('adjT', ADJ_TR, ADJ.t, v => v ? `unless ${v}% off its high` : 'never') : ''}</label></div></div>
+    <div class="adjact">${ADJ_ASK ? `<span class="adjq">Your portfolio's re-pick schedule and selling rules will be replaced by the ones above.</span>
+        <button type="button" class="btn sm primary" id="adjYes">Apply to portfolio</button><button type="button" class="btn sm" id="adjNo">Cancel</button>`
+      : `<span class="adjsync ${same ? 'on' : ''}">${same ? '✓ Your portfolio uses these rules' : asb && asb.sync ? 'Your portfolio uses different rules' : 'Your portfolio uses the default rules'}</span>
+        ${same ? '' : '<button type="button" class="btn sm primary" id="adjUse">Use these rules in my portfolio</button>'}
+        <button type="button" class="btn sm" id="adjRef" title="Load the latest month-by-month prices and daily closes and build this backtest again">Refresh</button>`}</div>
+  </div>`;
+  const tabs = `<div class="adjtabs" role="tablist">${[['res', 'Results'], ['rules', 'Selling rules'], ['how', 'How it works']].map(([k, l]) => `<button type="button" role="tab" data-adjtab="${k}" class="${ADJ.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  const head = perBar() + set + tabs;
+  const na = '<p class="empty">Month-by-month data is not available yet. <a href="https://t.me/HNImanshu" target="_blank" rel="noopener">Contact us</a>.</p>';
+  if (!perHas('ADJ')) { out.innerHTML = head + hLoad('Building the 1Y adj backtest…'); ensurePer('ADJ').then(() => { if (PER === 'ADJ' && TAB === 'back') paint(); }).catch(e => status((e && e.message) || 'Could not build the 1Y adj backtest.', true)); return; }
+  if (DATA.adj.none || !DATA.backs['1Y'] || !DATA.backs['1Y'].hasPrice) { out.innerHTML = head + na; return; }
   const F = fund || 100000, R = adjRun(F, chPart());
   const {BT, SV, SM} = R; PF = R.PF || null;
+  const sb = DATA.adj.sb || {buf: 20, band: 2};
+  const M = DATA.adj.M, d0 = M.gd[0], d1 = M.gd[M.gd.length - 1];
+  const mEvery = R.mWeekly ? 'W' : ADJ.m === 'W' ? 1 : ADJ.m, vEv = R.weekly ? 'W' : ADJ.v === 'W' ? 1 : ADJ.v, eEv = BT && BT.weekly ? ADJ.e : 1;
+  const strip = `<div class="adjstrip"><span><b>${esc(fdate(d0, true))}</b> → <b>${esc(fdate(d1, true))}</b></span>
+    <span>Momentum <b>${per(mEvery)}</b>${ADJ.m === 'W' && !R.mWeekly ? ' <i>(weekly prices not in yet: monthly)</i>' : ''}</span><span>Value <b>${per(vEv)}</b>${ADJ.v === 'W' && !R.weekly ? ' <i>(weekly prices not in yet: monthly)</i>' : ''}</span><span>Index ETFs <b>${per(eEv)}</b></span>
+    <span>Split <b>${SPLIT.map(x => x[1].replace('Index ETFs', 'ETFs') + ' ' + +(x[2] * 100).toFixed(1) + '%').join(' · ')}</b></span></div>`;
+  const nm = s => (R.names[s] && R.names[s].name) || s;
+  if (ADJ.tab === 'rules') { out.innerHTML = head + strip + adjRulesHtml(sb, mEvery, vEv, eEv); return; }
+  if (ADJ.tab === 'how') { out.innerHTML = head + strip + adjHowHtml(F, sb, mEvery, vEv, eEv); return; }
   const r = R.ret, tot = SPLIT.reduce((s, [k, , sh]) => s + sh * (num(r[k]) ? r[k] : 0), 0);
   const B1 = DATA.backs['1Y'], bench = num(B1 && B1.bench) ? B1.bench : (DATA.etf && DATA.etf.bench ? DATA.etf.bench.ret1y : null);
   const partName = PF && PF.part !== 'all' ? (SPLIT.find(x => x[0] === PF.part) || [0, ''])[1] : '';
@@ -880,14 +956,12 @@ function paintAdj(fund) {
   else if (lack.length && PREP.state === 'done') PREP.state = 'idle';
   const locked = PREP.state === 'working' || PREP.state === 'still' || !!pendingReq();
   const cost = SV.ch + SM.ch, taxS = SV.tax + SM.tax, trades = SV.nb + SV.ns + SM.nb + SM.ns + SV.trims + SM.trims;
-  const sb = DATA.adj.sb || {buf: 20, band: 2};
   const note = !BT ? 'Monthly ETF data is not in yet, so there is no chart.'
     : (fund ? '' : 'No fund amount entered: the chart starts from ₹1,00,000. ')
-      + (PF.daily ? `Valued on ${PF.dates.length} trading days.` : 'Daily prices are not saved yet: the chart uses 13 monthly points and max drawdown is understated.')
-      + (PF.lines ? ` ${PF.lines} of ${PF.lines + PF.real} value / momentum stocks have no daily prices (yet): drawn as a smooth line from month to month.` : '')
-      + ` Index ETFs after ${TAX * 100}% tax on switches; stocks after charges and ${TAX * 100}% tax on every sale.`;
-  let html = perBar() + set + `<p class="lead2">One year from <b>${esc(fdate(DATA.adj.M.gd[0], true))}</b> (the month's first session) to ${esc(fdate(DATA.adj.M.gd[DATA.adj.M.gd.length - 1], true))}, re-picks on each month's first trading session: Momentum re-picked every ${everyTxt(ADJ.m)}${ADJ.m === 'W' && !R.mWeekly ? ' (2 years of weekly prices not in yet: monthly used)' : ''}, Value every ${vEvery()}${ADJ.v === 'W' && !R.weekly ? ' (weekly prices not in yet: monthly used)' : ''}, index ETFs checked every ${BT && BT.weekly ? everyTxt(ADJ.e) : 'month'}. A holding is sold only when it falls out of the sell buffer (limits loosened ${fmt(sb.buf, 0)}%, top N × ${fmt(sb.band, 1)})${ADJ.mk ? `, its momentum is below ${ADJ.mk}` : ''}${ADJ.w ? (ADJ.t ? ` and it is not in profit (a winner goes only ${ADJ.t}% below its high)` : ' and it is not in profit') : ''}. A sale's money, less charges and ${TAX * 100}% tax on the profit, buys the same number of new names. No money added; ${SPLIT.map(x => +(x[2] * 100).toFixed(1)).join(' / ')} between parts.</p>
-    <div class="kpis">
+      + (PF.daily ? `Valued on ${PF.dates.length} trading days.` : 'Daily prices are not saved yet: the chart uses monthly points and max drawdown is understated.')
+      + (PF.lines ? ` ${PF.lines} of ${PF.lines + PF.real} value / momentum stocks have no daily prices (yet): drawn as a smooth line between re-picks.` : '')
+      + ` After charges and ${TAX * 100}% tax on every sale.`;
+  let html = head + strip + `<div class="kpis">
       <div class="kpi"><span>Mix return</span><b class="${tot >= 0 ? 'pos' : 'neg'}">${pct(tot)}</b></div>
       <div class="kpi"><span>NIFTY 500</span><b class="${(bench || 0) >= 0 ? 'pos' : 'neg'}">${pct(bench)}</b></div>
       ${SPLIT.map(([k, label]) => `<div class="kpi"><span>${label}</span><b class="${(r[k] || 0) >= 0 ? 'pos' : 'neg'}">${pct(r[k])}</b></div>`).join('')}
@@ -902,35 +976,86 @@ function paintAdj(fund) {
     const end = PF.total[PF.total.length - 1], a = PF.dates[0], z = PF.dates[PF.dates.length - 1];
     const askBtn = lack.length ? `<div><button type="button" class="btn sm primary" id="refreshChart"${locked ? ' disabled title="The prices of an earlier request are still being prepared"' : ''}>${locked ? 'Preparing…' : 'Refresh chart'}</button></div>` : '';
     html += `<div class="cc" style="margin-bottom:14px"><div class="cch"><div><h3>${partName ? esc(partName) + ' part' : 'Portfolio value'}, day by day</h3>
-      <p class="sub">${rsK(PF.F)} on ${esc(fdate(a, true))} → ${rsK(end)} on ${esc(fdate(z, true))} · net ${pct((end / PF.F - 1) * 100)} · max drawdown ${pct(PF.mx.dd)} · average drawdown ${pct(PF.avgDD)}${PF.nifty ? ' · faint line: NIFTY 500' : ''}</p>${lack.length && !locked ? `<p class="rh">${lack.length} of ${need.length} stocks have no daily prices: drawn month to month. Refresh chart downloads them (3–5 min).</p>` : ''}</div>${askBtn}</div>
-      ${lack.length || PREP.state === 'working' || PREP.state === 'still' || PREP.state === 'failed' ? '<p class="prep" id="prep"></p>' : ''}<div class="chart" id="chPf"></div><p class="note">${esc(note)}</p></div>`;
+      <p class="sub">${rsK(PF.F)} on ${esc(fdate(a, true))} → ${rsK(end)} on ${esc(fdate(z, true))} · net ${pct((end / PF.F - 1) * 100)} · max drawdown ${pct(PF.mx.dd)} · average drawdown ${pct(PF.avgDD)}${PF.nifty ? ' · faint line: NIFTY 500' : ''}</p>${lack.length && !locked ? `<p class="rh">${lack.length} of ${need.length} stocks have no daily prices: drawn between re-picks. Refresh chart downloads them (3–5 min).</p>` : ''}</div>${askBtn}</div>
+      ${lack.length || PREP.state === 'working' || PREP.state === 'still' || PREP.state === 'failed' ? '<p class="prep" id="prep"></p>' : ''}<div class="chart" id="chPf"></div><p class="note">${esc(note)} <a href="#" data-adjtab="how">How to read this chart</a></p></div>`;
   } else html += `<p class="note">${esc(note)}</p>`;
   const dShort = d => { const t = fdate(d, true).split(' '); return t.length === 3 ? t[0] + ' ' + t[1] + ' ' + t[2].slice(2) : t.join(' '); };
-  const nm = s => (R.names[s] && R.names[s].name) || s;
   const tip = (s, t) => `${nm(s)}\n${t}`;
   const chip = x => `<span class="adjc" tabindex="0" data-tip="${esc(tip(x.sym, (x.ret == null ? '' : fmt(x.ret, 1) + '% after charges, before tax\n') + 'Out: ' + (x.why || '–')))}">${esc(x.sym)} ${pill(x.ret)}</span>`;
   const keptChip = x => `<span class="adjc kept" tabindex="0" data-tip="${esc(tip(x.sym, 'Kept: ' + x.why))}">${esc(x.sym)} ${pill(x.ret)}</span>`;
   const part = (k, SL, every) => {
-    const rule = `<p class="rule">${psuTxt(CFG())} that pass ${esc(scrName(k))} · ${esc(selText(k))} · re-picked every ${every === 'week' ? 'week' : every === 1 ? 'month' : every + ' months'}${every === 12 ? ' (bought once and held)' : ''}${k === 'mom' ? ' · momentum then from the prices known then; the screen\'s other filters use today\'s figures' : (every === 'week' || every === 1) ? ' · between the quarterly snapshots the screen uses the last snapshot\'s results at that day\'s price' : ''}.
-      Off the list = fails a limit even loosened ${fmt(sb.buf, 0)}% (shown with its sell limit), a hard limit (circuit days), or ranks below the top N × ${fmt(sb.band, 1)}. Still kept${ADJ.mk ? ` with momentum ≥ ${ADJ.mk}` : ''}${ADJ.mk && ADJ.w ? ' or' : ''}${ADJ.w ? ` in profit${ADJ.t ? ` (until ${ADJ.t}% below its high)` : ''}` : ''}. ${k === 'value' && SELC.value.n > 0 ? ` Each stock gets 1/${SELC.value.n} of the part; with fewer passing, all the money goes into those, and every new name later takes an equal share from all of them until ${SELC.value.n} are held.` : ''} Only dates with a change are shown. Hover or tap a name for the reason.</p>`;
+    const rule = `<p class="rule">${psuTxt(CFG())} that pass ${esc(scrName(k))} · ${esc(selText(k))} · re-picked ${per(every)}. Only dates with a change are shown; hover or tap a name for the reason. <a href="#" data-adjtab="rules">Selling rules</a></p>`;
     const inChip = (x, s) => `<span class="adjc" tabindex="0" data-tip="${esc(tip(s, 'Bought: ' + ((x.innWhy || {})[s] || '')))}">${esc(s)}</span>`;
     const md = j => dShort(SL.G[j].date);
     const addChip = (x, s) => `<span class="adjc" tabindex="0" data-tip="${esc(tip(s, 'Added: ' + ((x.innWhy || {})[s] || '') + '\nFewer than ' + SELC.value.n + ' held: an equal share taken from every holding (after charges and tax)'))}">${esc(s)} <small>+</small></span>`;
     const logRows = SL.log.filter(x => x.first || x.out.length || (x.kept && x.kept.length) || (x.add && x.add.length)).map(x => `<tr><td>${esc(md(x.j))}</td><td>${x.first ? '<i>bought ' + x.inn.length + '</i>' : x.out.length ? x.out.map(chip).join(' ') : `<i>${x.kept && x.kept.length ? 'nothing sold' : 'nothing out'}</i>`}${x.kept && x.kept.length ? `<div class="adjk"><i>kept (winner / strong momentum):</i> ${x.kept.map(keptChip).join(' ')}</div>` : ''}</td>
       <td>${x.first ? x.inn.map(s => inChip(x, s)).join(' ') : x.inn.length ? x.inn.map(s => inChip(x, s)).join(' ') : x.out.length ? '<i>none to buy: kept in cash</i>' : ''}${x.add && x.add.length ? `<div class="adjk"><i>added toward ${SELC.value.n} (money taken equally from all):</i> ${x.add.map(s => addChip(x, s)).join(' ')}</div>` : ''}</td><td class="r">${x.n}</td></tr>`).join('');
     const holdRows = SL.hold.sort((a, b) => (b.ret || -1e9) - (a.ret || -1e9)).map(x => `<tr${heldTr(x)}><td>${symCell(x)}</td><td class="nm" title="${esc(nm(x.sym))}">${esc(nm(x.sym))}</td><td>${esc(md(x.j0))}</td><td class="r">${pill(x.ret)}</td></tr>`).join('');
-    return rule + `<div class="tw"><table class="adjlog"><thead><tr><th>Re-pick</th><th>Sold (return)</th><th>Bought</th><th class="r">Holdings</th></tr></thead><tbody>${logRows}</tbody></table></div>
-      <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th>Bought</th><th class="r">Return since</th></tr></thead><tbody>${holdRows || '<tr><td colspan="4" class="empty">Nothing held at the end.</td></tr>'}</tbody></table></div>`;
+    const sold = SL.log.flatMap(x => x.out.map(o => Object.assign({j: x.j}, o))).sort((a, b) => b.j - a.j);
+    const soldRows = sold.map(x => `<tr><td>${symCell(x)}</td><td class="nm" title="${esc(nm(x.sym))}">${esc(nm(x.sym))}</td><td>${x.j0 != null ? esc(md(x.j0)) : '–'}</td><td>${esc(md(x.j))}</td><td class="r"><span class="adjc" tabindex="0" data-tip="${esc(tip(x.sym, 'Out: ' + (x.why || '–')))}">${pill(x.ret)}</span></td></tr>`).join('');
+    const sw = SL.ret != null ? '' : '';
+    return rule + `<h4 class="adjh">Re-pick log</h4><div class="tw"><table class="adjlog"><thead><tr><th>Re-pick</th><th>Sold (return)</th><th>Bought</th><th class="r">Holdings</th></tr></thead><tbody>${logRows}</tbody></table></div>
+      <h4 class="adjh">Held at the end (${SL.hold.length})</h4><div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th>Bought</th><th class="r">Return since</th></tr></thead><tbody>${holdRows || '<tr><td colspan="4" class="empty">Nothing held at the end.</td></tr>'}</tbody></table></div>
+      <h4 class="adjh">Sold during the year (${sold.length})</h4>${sold.length ? `<div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th>Bought</th><th>Sold</th><th class="r" title="After charges, before tax">Return</th></tr></thead><tbody>${soldRows}</tbody></table></div>` : '<p class="na">Nothing sold.</p>'}${sw}`;
   };
   html += '<div class="bar"><span class="sp"></span><button type="button" class="btn sm" data-all="1">Expand all</button><button type="button" class="btn sm" data-all="0">Collapse all</button></div>'
     + SPLIT.filter(x => x[2] > 0).map(([k, label, sh]) => {
-      if (k === 'index') return BT ? section(k, label, `${pc(sh)} · ${pct(r.index)} after ${TAX * 100}% tax (${BT.switches} switch${BT.switches === 1 ? '' : 'es'}) · checked every ${BT.weekly ? everyTxt(BT.every) : 'month'}`, indexBack(BT, sh), false) : '';
-      const SL = k === 'value' ? SV : SM, every = k === 'value' ? (R.weekly ? 'week' : ADJ.v === 'W' ? 1 : ADJ.v) : (R.mWeekly ? 'week' : ADJ.m === 'W' ? 1 : ADJ.m);
-      return section(k, label, `${pc(sh)} · ${pct(SL.ret)} · ${SL.ns} sold, ${SL.nb} bought · ${SL.hold.length} held at the end`, part(k, SL, every), false);
+      if (k === 'index') return BT ? section(k, label, `${pc(sh)} · ${pct(r.index)} after ${TAX * 100}% tax · ${BT.switches} switch${BT.switches === 1 ? '' : 'es'} · checked ${per(eEv)}`, indexBack(BT, sh), false) : '';
+      const SL = k === 'value' ? SV : SM, every = k === 'value' ? vEv : mEvery;
+      return section(k, label, `${pc(sh)} · ${pct(SL.ret)} · ${SL.ns} sold, ${SL.nb} bought · ${SL.hold.length} held · re-picked ${per(every)}`, part(k, SL, every), false);
     }).join('');
   out.innerHTML = html;
   drawCharts();
   prepNote();
+}
+/* the Selling rules tab: Value | Momentum side by side (stacked on a phone), then the index ETFs */
+function adjRulesHtml(sb, mEv, vEv, eEv) {
+  const per = v => v === 'W' ? 'every week' : v === 1 ? 'every month' : `every ${v} months`;
+  let RU = null; try { RU = ENG_WIN ? JSON.parse(ENG_WIN.pbRulesAll()) : null; } catch (e) {}
+  const lim = rows => rows && rows.length ? `<table class="adjr"><thead><tr><th>Limit</th><th>To buy</th><th>Sold</th></tr></thead><tbody>${rows.map(x => `<tr${x.hard ? ' class="hard"' : ''}><td>${esc(x.lab)}${x.hard ? ' <i>hard</i>' : ''}</td><td>${esc(x.buy)}</td><td>${esc(x.sell)}</td></tr>`).join('')}</tbody></table>` : '<p class="na">No limits in this screen.</p>';
+  const never = `<li><b>Never sold</b>${ADJ.mk ? ` momentum ≥ ${ADJ.mk}` : ''}${ADJ.mk && ADJ.w ? ', or' : ''}${ADJ.w ? ` in profit${ADJ.t ? ` (until it is ${ADJ.t}% below its highest price since bought)` : ' (never cut a winner)'}` : ''}${!ADJ.mk && !ADJ.w ? ' – (protection off)' : ''}.</li>`;
+  const card = (k, title, ev, rows, extra) => { const c = SELC[k];
+    return `<div class="adjrc"><h3>${title}</h3><ul>
+      <li><b>Re-picked</b> ${per(ev)}${ev === 'W' ? ' (each weekly data date)' : ' (the month\'s first trading session)'}. Between re-picks nothing is sold or bought.</li>
+      <li><b>Bought</b> ${esc(scrName(k))} · ${esc(selText(k))}.</li>
+      <li><b>Off the list</b> when it misses a limit below by more than the ${fmt(sb.buf, 0)}% buffer (the Sold column), misses a hard limit, or ${c.n > 0 ? `ranks below the top ${Math.ceil(c.n * (sb.band || 2))} (N ${c.n} × ${sb.band || 2})` : 'leaves the list'}.</li>
+      ${never}
+      <li><b>Sold</b> when it is off the list and not protected; the money (less charges and ${TAX * 100}% tax on the profit) buys the next names on the list, one for one.</li>${extra}</ul>${lim(rows)}</div>`; };
+  const vExtra = SELC.value.n > 0 ? `<li><b>Money</b> each stock gets 1/${SELC.value.n} of the Value part; with fewer passing, all of it goes into those, and each new name later takes an equal share from all of them until ${SELC.value.n} are held.</li>` : '<li><b>Money</b> split equally over the stocks that pass.</li>';
+  const mExtra = `<li><b>Momentum score</b> = average percentile (among NIFTY 500, Smallcap 500 and Microcap 250) of the 1M, 3M, 6M and 12-1M returns, plus up to 10 for a rising staircase (1M &gt; 3M &gt; 6M &gt; 12M, each step a third), at most 100. Worked out again at each re-pick from the prices known then.</li>
+    <li><b>Money</b> split equally at the start; a replacement gets the money of the stock it replaces.</li>`;
+  return `<div class="adjrules">${card('value', 'Value' + (RU && RU.vLabel ? ` <small>${esc(RU.vLabel)}</small>` : ''), vEv, RU && RU.value, vExtra)}${card('mom', 'Momentum' + (RU && RU.mLabel ? ` <small>${esc(RU.mLabel)}</small>` : ''), mEv, RU && RU.mom, mExtra)}</div>
+    <div class="adjrc"><h3>Index ETFs</h3><ul>
+      <li><b>Checked</b> ${per(eEv)}. Each pair (${PAIRS.map(p => esc(p[0]) + ' vs ' + esc(p[1])).join(', ')}) holds the faster index only while its composite score (0.5 × 6M + 0.5 × 12-1M return) is above 0 and ${FAST_K} × its score beats ${esc(PAIRS[0][1])}'s; otherwise ${esc(PAIRS[0][1])}.</li>
+      <li><b>Always held</b> ${esc(ALWAYS.join(', '))}.</li>
+      <li><b>Switch</b> the whole slot is sold; what is left after charges and ${TAX * 100}% tax on the profit buys the other ETF. No rebalancing in between.</li></ul></div>`;
+}
+/* the How it works tab: plain bullets */
+function adjHowHtml(F, sb, mEv, vEv, eEv) {
+  const per = v => v === 'W' ? 'every week' : v === 1 ? 'every month' : `every ${v} months`;
+  return `<div class="adjhow">
+    <h3>What this is</h3><ul>
+      <li>One year of the PF Builder strategy, replayed with only what was known on each date: prices, momentum, circuit days, and the fundamentals of the latest snapshot before that day.</li>
+      <li>Rebalance: <b>Momentum ${per(mEv)}</b>, <b>Value ${per(vEv)}</b>, <b>Index ETFs ${per(eEv)}</b>. Monthly re-picks happen on the month's first trading session; weekly ones on each weekly data date.</li>
+      <li>The rules are the ones above; <a href="#" data-adjtab="rules">Selling rules</a> lists every limit with its buy and sell level.</li></ul>
+    <h3>How the money is split</h3><ul>
+      <li>${rsK(F)} split ${SPLIT.map(x => x[1] + ' ' + +(x[2] * 100).toFixed(1) + '%').join(' · ')}. No money is added later; each part lives on its own money.</li>
+      <li><b>Index ETFs</b>: one equal slot per pair and per always-held ETF. A switch moves the whole slot.</li>
+      <li><b>Value</b>: ${SELC.value.n > 0 ? `1/${SELC.value.n} of the part per stock; with fewer passing, everything goes into those; each new name later takes an equal share from all holdings until ${SELC.value.n} are held` : 'split equally over the stocks that pass'}.</li>
+      <li><b>Momentum</b>: split equally over the top ${SELC.mom.n || 'list'} at the start; afterwards each replacement gets the money of the stock it replaced.</li>
+      <li>Every buy and sale pays the Portfolio page's charges; every sale pays ${TAX * 100}% tax on its profit. What is left is reinvested in full.</li></ul>
+    <h3>Reading the chart</h3><ul>
+      <li><b>White line</b>: the portfolio's value on every trading day (or the part chosen in the dropdown, with its own money).</li>
+      <li><b>Faint line</b>: NIFTY 500 with the same starting money. <b>Dashed line</b>: the starting money.</li>
+      <li><b>Red area below</b>: how far the value is below its last peak (drawdown); the dashed red line is the average.</li>
+      <li>Stocks whose daily prices are not saved yet are drawn as a smooth line between re-picks; <i>Refresh chart</i> downloads them.</li></ul>
+    <h3>Reading the lists</h3><ul>
+      <li><b>Re-pick log</b>: each date where something changed: sold (with its return), kept (protected winners / strong momentum), bought, and how many are held after.</li>
+      <li><b>Held at the end</b>: today's holdings with the date bought and the return since.</li>
+      <li><b>Sold during the year</b>: every sale with buy and sell dates and its return (after charges, before tax).</li>
+      <li>Hover (or tap on a phone) any name for the reason it was bought, kept or sold.</li></ul>
+    <h3>Use it in your portfolio</h3><ul>
+      <li><i>Use these rules in my portfolio</i> copies the rebalance schedule and the never-sell rules to your account. The PF Builder check on the Portfolio page then sells and buys only on those re-pick dates, by the same rules.</li></ul></div>`;
 }
 /* finished Today / 1-year-back lists, kept in this browser (IndexedDB "hni-pb") until the user logs out. Reused while
    build_info.json's fingerprint (the CSVs + the screening code) is unchanged, so the page opens at once. */
@@ -1840,6 +1965,11 @@ $('#out').addEventListener('toggle', e => { const d = e.target; if (d.classList 
 $('#out').addEventListener('click', async e => {
   if (e.target.closest('#ltpGo')) { fetchLive(); return; }
   if (e.target.closest('#adjRef')) { adjRefresh(); return; }
+  const at = e.target.closest('[data-adjtab]');
+  if (at) { e.preventDefault(); ADJ.tab = at.dataset.adjtab; lsSet('pb_adj2', JSON.stringify(ADJ)); paint(); if (at.tagName === 'A') window.scrollTo({top: ($('.adjtabs') || document.body).getBoundingClientRect().top + scrollY - 70, behavior: 'smooth'}); return; }
+  if (e.target.closest('#adjUse')) { ADJ_ASK = true; paint(); return; }
+  if (e.target.closest('#adjNo')) { ADJ_ASK = false; paint(); return; }
+  if (e.target.closest('#adjYes')) { const b = e.target.closest('#adjYes'); b.disabled = true; b.textContent = 'Applying…'; await adjApply().catch(x => toast((x && x.message) || 'Could not apply.', 6000)); ADJ_ASK = false; paint(); return; }
   const pb = e.target.closest('[data-per]');
   if (pb) { PER = pb.dataset.per; lsSet('pb_per', PER); if (DATA && !perHas(PER)) { try { await ensurePer(PER); } catch (x) {} } paint(); readyLine(); return; }
   if (e.target.closest('#refreshChart')) { if (e.target.closest('#refreshChart').disabled) return; ensureDaily(backSyms(), true); return; }
