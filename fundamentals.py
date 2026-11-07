@@ -1450,6 +1450,11 @@ table.chk-t .pf-sym{cursor:pointer;color:var(--ink)}
 table.chk-t td small.chk-why{white-space:normal;line-height:1.35;margin-top:3px;color:var(--mute)}
 .chk-sb{margin:12px 0 2px;font-size:12px;color:var(--mute);line-height:1.8}
 .chk-t tr.chk-nf td{opacity:.55}
+.chk-rules{margin:12px 0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;line-height:1.55}
+.chk-rules ul{margin:6px 0 0;padding:0;list-style:none}
+.chk-rules li{display:flex;gap:10px;padding:3px 0}
+.chk-rules li span{flex:0 0 84px;color:var(--mute)}
+@media (max-width:520px){.chk-rules li{flex-direction:column;gap:0}}
 .chk-box .chk-sb input{width:58px!important;display:inline-block;height:26px;margin:0 3px;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:600 12px var(--mono);text-align:right}
 .chk-h .chk-cp{margin-left:auto;height:24px;padding:0 9px;font-size:11px;text-transform:none;letter-spacing:0}
 table.chk-t td.r,table.chk-t th.r{text-align:right;white-space:nowrap}
@@ -4197,7 +4202,39 @@ window.pbCfg = pbCfg; window.pbMomOk = pbMomOk;
 /* never cut the winners: a holding whose momentum score is mk or more (80; 0 = off), or that is in profit (win, on by default), is NOT
    sold when it leaves its list (any reason: rank, limits, circuit days …). trl > 0: a winner still goes once it is trl % below its
    highest price since you bought it (0 = never). Highest prices are remembered in your settings (FF.pk {"SYM|Part": peak}). */
-const SB = () => { const b = Object.assign({buf: 20, band: 2, win: true, trl: 0, mk: 80}, FF.sb || {}); delete b.trail; return b; };
+/* sync: the rules were copied from PF Builder's 1Y adj ("Use these rules in my portfolio"). Then cad = how often each part is re-picked
+   ({m: Momentum, v: Value, e: Index ETFs}: 'W' every weekly data date, or 1 / 2 / 3 / 6 / 12 months: the first weekly data date of
+   the month), and a holding off its list is sold at the next re-pick at once (no 2-week wait), exactly as in the backtest. */
+const SB = () => { const b = Object.assign({buf: 20, band: 2, win: true, trl: 0, mk: 80, cad: null, sync: false}, FF.sb || {}); delete b.trail; return b; };
+/* is a part due for its re-pick on this weekly data date? (cad 'W' = always; n months = the first data date of a month, every n months
+   counted from January) → {due, next: the month of the next re-pick} */
+function pbDue(c, wk) {
+  const t = Date.parse(wk), n = +c;
+  if (!n || c === 'W' || !wk || !isFinite(t)) return {due: true};
+  const d0 = new Date(t), y = d0.getUTCFullYear(), mo = d0.getUTCMonth(), dom = d0.getUTCDate(), on = m => m % n === 0;   // any date format
+  if (dom <= 7 && on(mo)) return {due: true};
+  let k = mo + 1; for (let i = 0; i < 24 && !on(k % 12); i++) k++;
+  const d = new Date(Date.UTC(y + Math.floor(k / 12), k % 12, 1));
+  return {due: false, next: d.toLocaleDateString('en-IN', {month: 'short', year: 'numeric', timeZone: 'UTC'})};
+}
+const pbEvery = c => !c || c === 'W' ? 'every week' : c === 1 ? 'every month' : `every ${c} months`;
+/* the selling rules of a screen, for the page: each limit with its buy level and its sell level (the buffer), hard exits marked */
+function pbRules(f, fb) {
+  const out = [];
+  Object.keys(f || {}).forEach(k => {
+    if (typeof f[k] === 'boolean' ? !f[k] : unsetF(f[k]) || (+f[k] === 0 && k !== 'maxCirc')) return;
+    const lab = PB_LAB[k] || k, mx = k.startsWith('max');
+    if (k === 'trap') out.push({lab: 'Value-trap flag', buy: 'not flagged', sell: 'sold once flagged', hard: true});
+    else if (k === 'graham') out.push({lab: 'Graham PE × PB', buy: 'passes', sell: 'sold once it fails', hard: true});
+    else if (k === 'minDy') out.push({lab, buy: `≥ ${f[k]}%`, sell: `sold below ${f[k]}%`, hard: true});
+    else if (k === 'maxCirc') out.push({lab: 'Circuit days (250 sessions)', buy: `≤ ${f[k]}`, sell: `sold above ${f[k]}`, hard: true});
+    else if (typeof f[k] === 'boolean') out.push({lab, buy: 'required', sell: 'sold once it fails', hard: true});
+    else out.push({lab, buy: `${mx ? '≤' : '≥'} ${f[k]}`, sell: `sold ${mx ? 'above' : 'below'} ${fb && fb[k] != null ? fb[k] : f[k]}`, hard: false});
+  });
+  return out;
+}
+window.pbRulesAll = () => { const P = pbCfg(), b = SB().buf / 100;
+  return JSON.stringify({value: pbRules(P.vf, pbBuffer(P.vf, b)), mom: pbRules(P.mf, pbBuffer(P.mf, b)), sb: SB(), vLabel: P.vLabel, mLabel: P.mLabel}); };
 const PB_BUF_MAX = ['maxPE', 'maxPB', 'maxPeg', 'maxPta', 'maxPfa', 'maxDe', 'maxDebitda', 'maxNpa', 'maxNnpa', 'maxMom'];
 const PB_BUF_MIN = ['minQ', 'minScore', 'minTrend', 'minMom', 'minFcf', 'minOe', 'minCc', 'minQ5', 'minUp', 'minCfo', 'minRoa', 'minPcr', 'minInv'];
 const PB_HARD = ['trap', 'maxCirc', 'minDy', 'graham'];
@@ -4309,9 +4346,12 @@ async function pfChkCalc() {
   const byName = new Map(); res.inn.forEach(x => byName.set(x.part + x.sym, x)); res.inn = [...byName.values()];
   /* sell signals for what left its list: Hold (inside the buffer) / Watch (first week outside) / Sell (2nd week, or a hard exit) */
   const sz = Object.assign({}, FF.sz || {}), seen = new Set(), wk = D.asOf, B = SB();
+  const CAD = B.sync && B.cad ? B.cad : null, DUE = {Value: pbDue(CAD && CAD.v, wk), Momentum: pbDue(CAD && CAD.m, wk), ETF: pbDue(CAD && CAD.e, wk)};
+  DUE['ETF pair'] = DUE.ETF; res.due = DUE; res.cad = CAD;
+  const wait = x => { const d = DUE[x.part]; if (d && !d.due && (x.stage === 'sell' || x.stage === 'watch')) { x.stage = 'wait'; x.why = `${x.part} re-picks ${pbEvery(CAD[x.part === 'Value' ? 'v' : x.part === 'Momentum' ? 'm' : 'e'])}: decided at the next re-pick (${d.next}) · ` + x.why; } };
   const pk = Object.assign({}, FF.pk || {}), pkSeen = new Set(), openBy = new Map(P.open.map(r => [r.sym, r]));
   res.out.forEach(x => {
-    if (x.part === 'ETF' || x.part === 'ETF pair') { x.stage = 'sell'; x.why = x.part === 'ETF pair' ? 'the slot now holds the other ETF' : 'no longer in the index part'; return; }
+    if (x.part === 'ETF' || x.part === 'ETF pair') { x.stage = 'sell'; x.why = x.part === 'ETF pair' ? 'the slot now holds the other ETF' : 'no longer in the index part'; wait(x); return; }
     const s0 = TODAY.get(x.sym), W = L.F && L.F[x.part] ? pbWhy(s0, L.F[x.part]) : {hard: false, why: []};
     const rank = L.rank && L.rank[x.part] ? L.rank[x.part].get(x.sym) : null, n = (L.C[x.part === 'Value' ? 'value' : 'mom'] || {}).n || 0;
     if (!W.why.length) W.why.push(rank ? `ranks ${rank}: outside the top ${n}` + (n ? ` (sell outside the top ${Math.ceil(n * B.band)})` : '') : 'not in the list (list / PSU / recent listing)');
@@ -4327,13 +4367,15 @@ async function pfChkCalc() {
       x.stage = 'sell'; x.trailExit = true; x.why = `gave back ${fmt(-off, 1)}% from its high since bought (${fmt(B.trl, 0)}%) · ` + x.why; return;
     }
     if (mm != null) x.why += ` · momentum ${Math.round(mm)}`;
-    if (W.hard) { x.stage = 'sell'; x.hardExit = true; return; }
+    if (W.hard) { x.stage = 'sell'; x.hardExit = true; wait(x); return; }
     if (L.keep && L.keep[x.part] && L.keep[x.part].has(x.sym)) { x.stage = 'hold'; return; }
+    if (B.sync) { x.stage = 'sell'; wait(x); return; }                       // 1Y adj rules: out of the buffer at a re-pick = sold, no 2-week wait
     const key = x.sym + '|' + x.part; seen.add(key);
     if (!sz[key]) sz[key] = wk;
     x.stage = sz[key] === wk ? 'watch' : 'sell';
     x.since = sz[key];
   });
+  res.inn.forEach(x => { const d = DUE[x.part]; if (d && !d.due) x.wait = d.next; });   // bought only at the part's re-pick
   Object.keys(sz).forEach(k => { if (!seen.has(k)) delete sz[k]; });
   /* peaks: also kept for winners still on the list (so the trail starts from their real high once they leave it) */
   rows.forEach(r0 => { const o = openBy.get(r0.sym); if (!o || !ok(o.ltp)) return;
@@ -4345,6 +4387,7 @@ async function pfChkCalc() {
   if (JSON.stringify(pk) !== JSON.stringify(FF.pk || {})) { FF.pk = pk; dirty = true; }
   if (dirty && !EMBED) ffSave();
   res.sell = res.out.filter(x => x.stage === 'sell'); res.watch = res.out.filter(x => x.stage === 'watch'); res.hold = res.out.filter(x => x.stage === 'hold');
+  res.wait = res.out.filter(x => x.stage === 'wait');
   return res;
 }
 const pbSelTxt = c => `${c.uni === 'all' ? 'All lists' : c.uni} · by ${PB_KEYS[c.key] || c.key}, ${c.dir === 'asc' ? 'low → high' : 'high → low'} · ${c.n > 0 ? 'top ' + c.n : 'all that pass'}`;
@@ -4373,7 +4416,7 @@ async function pfChkOpen() {
     const q = sum > 0 && tq[t] > 0 ? h.qty * tq[t] / sum : h.qty, v = q * px, ch = pfCharges('sell', q, px), tax = 0.2 * Math.max(0, (px - (h.avg || px)) * q);
     FUND[partOf(x)] = (FUND[partOf(x)] || 0) + v - ch - tax; NEED[partOf(x)] = (NEED[partOf(x)] || 0) + 1; });
   const FUNDED = new Map(), cnt = {};
-  (c.inn || []).forEach(x => { const k = partOf(x); if (!FUND[k] || (cnt[k] || 0) >= NEED[k]) return; cnt[k] = (cnt[k] || 0) + 1; FUNDED.set(k + '|' + x.sym, true); });
+  (c.inn || []).forEach(x => { const k = partOf(x); if (x.wait || !FUND[k] || (cnt[k] || 0) >= NEED[k]) return; cnt[k] = (cnt[k] || 0) + 1; FUNDED.set(k + '|' + x.sym, true); });
   /* Value with fewer than N held (N = the Value "how many" you added with): each further new Value name gets an equal share, taken
      equally from every Value holding you keep (charges and 20% tax on the profit of each part sold come off), until N are held */
   const TOP = {per: 0, take: 0, h: 0, ch: 0, tax: 0, names: new Set()};
@@ -4383,7 +4426,7 @@ async function pfChkOpen() {
     const keepV = P.open.filter(r0 => { const tq = r0.tq || {}; return tq.Value > 0 && !selling.has(r0.sym) && ok(r0.ltp) && r0.ltp > 0; });
     const share = r0 => { const tq = r0.tq || {}, sum = Object.values(tq).reduce((a, b) => a + b, 0); return sum > 0 ? tq.Value / sum : 1; };
     const h = keepV.length + (cnt.Value || 0), room = NV - h;
-    const extra = room > 0 ? (c.inn || []).filter(x => x.part === 'Value' && !FUNDED.has('Value|' + x.sym)).slice(0, room) : [];
+    const extra = room > 0 ? (c.inn || []).filter(x => x.part === 'Value' && !x.wait && !FUNDED.has('Value|' + x.sym)).slice(0, room) : [];
     if (extra.length && keepV.length) {
       const vt = keepV.reduce((t, r0) => t + r0.value * share(r0), 0) + (FUND.Value || 0);
       const take = vt * extra.length / (h + extra.length) / keepV.length;          // the same rupees from each holding
@@ -4405,7 +4448,7 @@ async function pfChkOpen() {
     return `<tr>${nm(x).replace('</small></td>', `</small>${x.why ? `<small class="chk-why">${esc(x.why)}${x.stage === 'sell' && x.since ? ' · outside since ' + esc(x.since) : ''}</small>` : ''}</td>`)}<td>${esc(x.part)}</td><td class="r">${r.qty != null ? fmt(r.qty, 0) : '–'}</td><td class="r ${ud(r.dayPct)}">${pc(r.dayPct)}</td>
       <td class="r ${ud(r.pnl)}">${r.priced ? (r.pnl > 0 ? '+' : r.pnl < 0 ? '−' : '') + '₹' + fmt(Math.abs(r.pnl), 0) : '–'}</td><td class="r ${ud(r.pnlPct)}">${r.priced ? pc(r.pnlPct) : '–'}</td></tr>`; };
   const rowIn = x => { const q = tent(x), px = pfLtp(x.sym);
-    return `<tr${q == null ? ' class="chk-nf"' : ''}>${nm(x).replace('</small></td>', TOP.names.has(x.sym) && x.part === 'Value' ? '</small><small class="chk-why">added toward ' + NV + ' Value holdings: money taken equally from all of them</small></td>' : '</small></td>')}<td>${esc(x.part)}</td><td class="r">${px > 0 ? fmt(px, 2) : '–'}</td><td class="r"${q == null ? ' title="Nothing of this part is on the Sell list (or the sales are spent on names above): not bought"' : ''}><b>${q != null ? fmt(q, 0) : '–'}</b></td></tr>`; };
+    return `<tr${q == null ? ' class="chk-nf"' : ''}>${nm(x).replace('</small></td>', TOP.names.has(x.sym) && x.part === 'Value' ? '</small><small class="chk-why">added toward ' + NV + ' Value holdings: money taken equally from all of them</small></td>' : '</small></td>')}<td>${esc(x.part)}</td><td class="r">${px > 0 ? fmt(px, 2) : '–'}</td><td class="r"${q == null ? ` title="${x.wait ? 'Bought only at this part\'s re-pick (' + esc(x.wait) + ')' : 'Nothing of this part is on the Sell list (or the sales are spent on names above): not bought'}"` : ''}><b>${q != null ? fmt(q, 0) : '–'}</b></td></tr>`; };
   const tbl = (t, a, cls, tip = '') => { const kind = cls === 'in' ? 'in' : 'out';
     return `<h4 class="chk-h ${cls}"${tip ? ` title="${esc(tip)}"` : ''}>${t} <span>${a.length}</span>${a.length ? `<button type="button" class="btn ghost chk-cp" data-cp="${cls}" title="Copy as a table: paste in Google Sheets">Copy</button>` : ''}</h4>` + (a.length
     ? `<div class="chk-tw"><table class="chk-t"><thead><tr>${kind === 'out'
@@ -4413,7 +4456,7 @@ async function pfChkOpen() {
         : '<th>Stock</th><th>Part</th><th class="r">LTP ₹</th><th class="r" title="The money from that part\'s Sell list (after sell charges and 20% tax on the profit), split over as many new names as were sold, whole shares after buy charges">Qty from sales</th>'}</tr></thead><tbody>${a.map(kind === 'out' ? rowOut : rowIn).join('')}</tbody></table></div>`
     : '<p class="na">None.</p>'); };
   const n2 = v => v == null || !isFinite(v) ? '' : String(Math.round(v * 100) / 100);
-  const LIST = {sell: c.sell || c.out, watch: c.watch || [], hold: c.hold || [], out: c.out};
+  const LIST = {sell: c.sell || c.out, watch: c.watch || [], hold: c.hold || [], wait: c.wait || [], out: c.out};
   const tsv = cls => cls !== 'in'
     ? ['Stock\tQty\tDay %\tP&L ₹\tP&L %\tWhy'].concat(LIST[cls].map(x => { const r = H.get(x.sym) || {};
         return ['NSE:' + x.sym, r.qty != null ? n2(r.qty) : '', r.dayPct != null ? n2(r.dayPct) + '%' : '', r.priced ? n2(r.pnl) : '', r.priced ? n2(r.pnlPct) + '%' : '', String(x.why || '').replace(/\t/g, ' ')].join('\t'); })).join('\n')
@@ -4437,11 +4480,17 @@ async function pfChkOpen() {
     : `<p class="chk-sub">Only the parts you added are checked (<b>${esc(checked)}</b>), against today's PF Builder lists worked out with the settings you added them with.</p>
        ${c.adds.length ? c.adds.slice(0, 4).map(addHtml).join('') : `<div class="chk-set">${c.C ? `<div><span>Value</span><b>${esc(pbSelTxt(c.C.value))}</b></div><div><span>Momentum</span><b>${esc(pbSelTxt(c.C.mom))}</b></div>` : ''}</div>`}
        ${c.pairs.length ? `<p class="chk-sub">${c.pairs.map(n => `${esc(n.c)} vs ${esc(n.d)}: ${esc(n.c)} ${ok(n.mc) ? fmt(n.mc, 1) : '–'} · ${esc(n.d)} ${ok(n.md) ? fmt(n.md, 1) : '–'} → slot holds <b>${esc(n.win)}</b>`).join('<br>')}</p>` : ''}
-       ${c.sell ? `<div class="chk-sb">Sell signals: hold while within <label><input type="number" min="0" max="100" step="5" data-sb="buf" value="${SB().buf}">%</label> of the screen's limits${(c.C && ((c.C.value || {}).n || (c.C.mom || {}).n)) ? ` and within the top <label><input type="number" min="1" max="10" step="0.5" data-sb="band" value="${SB().band}">× N</label>` : ''}; sell after 2 weeks outside (hard exits at once).
+       ${c.sell && SB().sync ? (() => { const B = SB(), cd = B.cad || {}, dl = (t, k) => `${t} ${pbEvery(cd[k])}${c.due && c.due[t === 'Index ETFs' ? 'ETF' : t] && !c.due[t === 'Index ETFs' ? 'ETF' : t].due ? ` <i>(next: ${esc(c.due[t === 'Index ETFs' ? 'ETF' : t].next)})</i>` : ' <i>(due now)</i>'}`;
+         return `<div class="chk-rules"><b>Rules from PF Builder → 1Y adj</b>${B.syncAt ? ` <i>(applied ${esc(dd(B.syncAt))})</i>` : ''}
+           <ul><li><span>Re-pick</span><div>${dl('Momentum', 'm')} · ${dl('Value', 'v')} · ${dl('Index ETFs', 'e')}. Between re-picks nothing is sold or bought.</div></li>
+           <li><span>Sold when</span><div>off its list at a re-pick: fails a screen limit even loosened ${B.buf}%, a hard limit (circuit days, trap …), or ranks below the top N × ${B.band}.</div></li>
+           <li><span>Never sold</span><div>${B.mk ? `momentum ≥ ${B.mk}` : ''}${B.mk && B.win ? ' · ' : ''}${B.win ? `in profit${B.trl ? ` (until ${B.trl}% below its high since bought)` : ''}` : ''}${!B.mk && !B.win ? 'off' : ''}.</div></li></ul></div>`; })() : ''}
+       ${c.sell ? `<div class="chk-sb">Sell signals: hold while within <label><input type="number" min="0" max="100" step="5" data-sb="buf" value="${SB().buf}">%</label> of the screen's limits${(c.C && ((c.C.value || {}).n || (c.C.mom || {}).n)) ? ` and within the top <label><input type="number" min="1" max="10" step="0.5" data-sb="band" value="${SB().band}">× N</label>` : ''}${SB().sync ? '; sold at the re-pick.' : '; sell after 2 weeks outside (hard exits at once).'}
          <br>Never sell momentum ≥ <label><input type="number" min="0" max="100" step="5" data-sb="mk" value="${SB().mk}"></label> (0 = off) ·
          <label><input type="checkbox" data-sb="win"${SB().win ? ' checked' : ''} style="width:auto!important;height:auto"> Never sell a winner</label> (in profit), unless <label><input type="number" min="0" max="60" step="5" data-sb="trl" value="${SB().trl}">%</label> below its high since bought (0 = never)</div>`
          + tbl('Sell list', c.sell, 'sell', 'Outside the buffer for 2 weekly data dates in a row, or a hard exit (value-trap flag, circuit days, dividend stopped, Graham test). ETFs: no longer in the index part')
-         + tbl('Watch: 1st week outside', c.watch, 'watch', 'Outside the buffer this week: on the Sell list next week if it is still outside')
+         + (c.wait && c.wait.length ? tbl('Waiting for the re-pick', c.wait, 'wait', 'Off the list now, but this part is re-picked only on its schedule: sold then if it is still off the list and not protected') : '')
+         + (SB().sync ? '' : tbl('Watch: 1st week outside', c.watch, 'watch', 'Outside the buffer this week: on the Sell list next week if it is still outside'))
          + tbl('Hold: off the list, but inside the buffer, strong momentum or a winner', c.hold, 'hold', 'Off today\'s buy list but still within the buffer, momentum at or above your limit, or in profit: no sell signal')
          : tbl('No longer on the list', c.out, 'out')}${TOP.names.size ? `<p class="chk-sub">Value holds ${TOP.h + (cnt.Value || 0)} of ${NV}: take <b>₹${fmt(TOP.take, 0)}</b> from each of your ${TOP.h} Value holdings (₹${fmt(TOP.take * TOP.h, 0)} in all; about ₹${fmt(TOP.ch, 0)} charges and ₹${fmt(TOP.tax, 0)} tax) and buy the new name${TOP.names.size > 1 ? 's' : ''} marked below.</p>` : ''}${tbl('New on the list (not held)', c.inn, 'in', 'Bought with the money its part\'s sales free up (as many as were sold), or, while Value holds fewer than its N, with an equal share taken from every Value holding; the rest are greyed out')}
        <p class="chk-note">Lists change with the weekly data update. This is information only, not a recommendation to buy or sell.</p>`;
