@@ -1464,6 +1464,7 @@ table.chk-t td small.chk-why{white-space:normal;line-height:1.35;margin-top:3px;
 .chk-rules li span{flex:0 0 84px;color:var(--mute)}
 @media (max-width:520px){.chk-rules li{flex-direction:column;gap:0}}
 .chk-box .chk-sb input{width:58px!important;display:inline-block;height:26px;margin:0 3px;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:600 12px var(--mono);text-align:right}
+.chk-t small.chk-of{display:block;font-size:10.5px;opacity:.6;font-weight:400}
 .chk-h .chk-cp{margin-left:auto;height:24px;padding:0 9px;font-size:11px;text-transform:none;letter-spacing:0}
 table.chk-t td.r,table.chk-t th.r{text-align:right;white-space:nowrap}
 table.chk-t .up{color:var(--good)} table.chk-t .dn{color:var(--bad)}
@@ -3885,14 +3886,14 @@ function pfTypesOf(x) {
 function pfReplay(txns) {
   const pos = {}, led = [], closed = [], lock = new Set();
   let cash = 0, payIn = 0, payOut = 0, charges = 0, realized = 0, bad = null;
-  const fresh = x => ({sym: x.sym, name: x.name, qty: 0, cost: 0, realized: 0, charges: 0, bQty: 0, bAmt: 0, sQty: 0, sAmt: 0, first: x.date, last: x.date, ids: [], srcs: [], tq: {}});
+  const fresh = x => ({sym: x.sym, name: x.name, qty: 0, cost: 0, realized: 0, charges: 0, bQty: 0, bAmt: 0, sQty: 0, sAmt: 0, first: x.date, last: x.date, ids: [], srcs: [], tq: {}, tc: {}});
   for (const x of pfSorted(txns)) {
     const amt = (x.qty || 0) * (x.px || 0), ch = +x.ch || 0;
     if (x.t === 'in') { cash += x.amt; payIn += x.amt; }
     else if (x.t === 'out') { cash -= x.amt; payOut += x.amt; }
     else {
       const p = pos[x.sym] = pos[x.sym] || fresh(x);
-      p.ids.push(x.id); if (x.name) p.name = x.name; if (x.t === 'buy') { const sr = pfSrcOf(x), ty = pfTypesOf(x); if (!p.srcs.includes(sr)) p.srcs.push(sr); ty.forEach(k => { p.tq[k] = (p.tq[k] || 0) + (+x.qty || 0) / ty.length; }); }   // Remark: where its buys came from p.charges += ch; charges += ch; p.last = x.date || p.last;
+      p.ids.push(x.id); if (x.name) p.name = x.name; if (x.t === 'buy') { const sr = pfSrcOf(x), ty = pfTypesOf(x); if (!p.srcs.includes(sr)) p.srcs.push(sr); ty.forEach(k => { p.tq[k] = (p.tq[k] || 0) + (+x.qty || 0) / ty.length; p.tc[k] = (p.tc[k] || 0) + amt / ty.length; }); }   // Remark: where its buys came from p.charges += ch; charges += ch; p.last = x.date || p.last;
       if (x.t === 'buy') { p.qty += x.qty; p.cost += amt; p.bQty += x.qty; p.bAmt += amt; cash -= amt + ch; }
       else {                                              // sell at average cost; never more than held at that date
         if (x.qty > p.qty + 1e-9) bad = bad || x;
@@ -4304,6 +4305,15 @@ function pbLists(C0) {                                        // today's PF Buil
     F: {Value: out.valueF, Momentum: out.momF}};
 }
 const PB_SCOPE = {all: 'All parts', index: 'Index ETFs only', value: 'Value only', mom: 'Momentum only'};
+/* one part of a holding (a stock can sit in Value AND Momentum): its qty = today's qty × that part's share of the buys,
+   its average = that part's own buys. A holding in one part only → the whole holding. */
+function pfPart(h, part) {
+  const tq = (h && h.tq) || {}, tc = (h && h.tc) || {}, t = part === 'ETF pair' ? 'ETF' : part, sum = Object.values(tq).reduce((a, b) => a + b, 0);
+  const own = sum > 0 && tq[t] > 0, sh = own ? tq[t] / sum : 1, avg = own && tc[t] > 0 ? tc[t] / tq[t] : h && h.avg;
+  const q = h && h.qty != null ? h.qty * sh : null, px = h && h.priced ? h.ltp : null;
+  const pnl = px != null && q != null && avg > 0 ? (px - avg) * q : null;
+  return {q, sh, avg, multi: own && sh < 0.9999, all: h && h.qty, pnl, pnlPct: pnl != null ? (px / avg - 1) * 100 : null};
+}
 async function pfChkCalc() {
   if (BACK || !PF.txns) return null;
   const P = pfSummary(PF.txns), srcsOf = r => (r.srcs || String(r.remark || '').split(' · ')).filter(Boolean);
@@ -4368,10 +4378,11 @@ async function pfChkCalc() {
     /* strong momentum (≥ mk) or a winner (in profit; with trl > 0 until trl % below its high since bought) → kept, whatever the exit */
     const o = openBy.get(x.sym), key0 = x.sym + '|' + x.part, mm = s0 && ok(s0.momS) ? s0.momS : null;
     if (B.mk > 0 && mm != null && mm >= B.mk) { x.stage = 'hold'; x.strong = true; x.why = `momentum ${Math.round(mm)} ≥ ${B.mk}: not touched · off the list: ` + x.why; return; }
-    if (B.win && o && ok(o.ltp) && ok(o.avg) && o.ltp > o.avg) {
-      const peak = Math.max(+pk[key0] || 0, o.avg, o.ltp); pk[key0] = +peak.toFixed(2); pkSeen.add(key0);
+    const pa = o ? pfPart(o, x.part) : null, avg = pa && ok(pa.avg) ? pa.avg : o && o.avg;   // this part's own buys
+    if (B.win && o && ok(o.ltp) && ok(avg) && o.ltp > avg) {
+      const peak = Math.max(+pk[key0] || 0, avg, o.ltp); pk[key0] = +peak.toFixed(2); pkSeen.add(key0);
       const off = (o.ltp / peak - 1) * 100;
-      x.gain = (o.ltp / o.avg - 1) * 100; x.offPeak = off;
+      x.gain = (o.ltp / avg - 1) * 100; x.offPeak = off;
       if (!(B.trl > 0) || off > -B.trl) { x.stage = 'hold'; x.winner = true; x.why = `winner +${fmt(x.gain, 1)}%${B.trl > 0 ? `, ${off > -0.05 ? 'at its high' : fmt(-off, 1) + '% below its high'} (sold at ${fmt(B.trl, 0)}% below)` : ': never cut'} · off the list: ` + x.why; return; }
       x.stage = 'sell'; x.trailExit = true; x.why = `gave back ${fmt(-off, 1)}% from its high since bought (${fmt(B.trl, 0)}%) · ` + x.why; return;
     }
@@ -4423,9 +4434,8 @@ async function pfChkOpen() {
      (each profit carries its share of the tax) */
   const FUND = {}, NEED = {}, SALES = [];
   (c.sell || []).forEach(x => { const h = H.get(x.sym); const px = pfLtp(x.sym); if (!h || !(px > 0)) return;
-    const tq = h.tq || {}, sum = Object.values(tq).reduce((a, b) => a + b, 0), t = x.part === 'ETF pair' ? 'ETF' : x.part;
-    const q = sum > 0 && tq[t] > 0 ? h.qty * tq[t] / sum : h.qty, v = q * px, ch = pfCharges('sell', q, px);
-    SALES.push({k: partOf(x), net: v - ch, g: (px - (h.avg || px)) * q - ch}); });
+    const pa = pfPart(h, x.part), q = pa.q, v = q * px, ch = pfCharges('sell', q, px);
+    SALES.push({k: partOf(x), net: v - ch, g: (px - (pa.avg || px)) * q - ch}); });
   const GP = SALES.reduce((a, x) => a + Math.max(0, x.g), 0), GL = SALES.reduce((a, x) => a + Math.max(0, -x.g), 0), TAXT = 0.2 * Math.max(0, GP - GL);
   SALES.forEach(x => { const tax = x.g > 0 && GP > 0 ? TAXT * x.g / GP : 0;
     FUND[x.k] = (FUND[x.k] || 0) + x.net - tax; NEED[x.k] = (NEED[x.k] || 0) + 1; });
@@ -4459,9 +4469,11 @@ async function pfChkOpen() {
   const nm = x => `<td><b data-news="${esc(x.sym)}" class="pf-sym" role="button">${esc(x.sym)}</b><small>${esc((TODAY.get(x.sym) || {}).name || '')}</small></td>`;
   const pc = v => v == null ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + fmt(Math.abs(v), 2) + '%';
   const ud = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'dn' : '';
-  const rowOut = x => { const r = H.get(x.sym) || {};
-    return `<tr>${nm(x).replace('</small></td>', `</small>${x.why ? `<small class="chk-why">${esc(x.why)}${x.stage === 'sell' && x.since ? ' · outside since ' + esc(x.since) : ''}</small>` : ''}</td>`)}<td>${esc(x.part)}</td><td class="r">${r.qty != null ? fmt(r.qty, 0) : '–'}</td><td class="r ${ud(r.dayPct)}">${pc(r.dayPct)}</td>
-      <td class="r ${ud(r.pnl)}">${r.priced ? (r.pnl > 0 ? '+' : r.pnl < 0 ? '−' : '') + '₹' + fmt(Math.abs(r.pnl), 0) : '–'}</td><td class="r ${ud(r.pnlPct)}">${r.priced ? pc(r.pnlPct) : '–'}</td></tr>`; };
+  const prt = x => { const r = H.get(x.sym) || {}, a = pfPart(r, x.part);       // only this part (a stock can be in Value and Momentum)
+    return {r, q: a.q != null ? Math.round(a.q) : null, all: a.all, multi: a.multi, pnl: r.priced ? (a.pnl != null ? a.pnl : r.pnl) : null, pnlPct: r.priced ? (a.pnlPct != null ? a.pnlPct : r.pnlPct) : null}; };
+  const rowOut = x => { const z = prt(x), r = z.r;
+    return `<tr>${nm(x).replace('</small></td>', `</small>${x.why ? `<small class="chk-why">${esc(x.why)}${x.stage === 'sell' && x.since ? ' · outside since ' + esc(x.since) : ''}</small>` : ''}</td>`)}<td>${esc(x.part)}</td><td class="r"${z.multi ? ` title="${esc(x.part)} part only: ${fmt(z.q, 0)} of the ${fmt(z.all, 0)} you hold"` : ''}>${z.q != null ? fmt(z.q, 0) : '–'}${z.multi ? `<small class="chk-of">of ${fmt(z.all, 0)}</small>` : ''}</td><td class="r ${ud(r.dayPct)}">${pc(r.dayPct)}</td>
+      <td class="r ${ud(z.pnl)}">${z.pnl != null ? (z.pnl > 0 ? '+' : z.pnl < 0 ? '−' : '') + '₹' + fmt(Math.abs(z.pnl), 0) : '–'}</td><td class="r ${ud(z.pnlPct)}">${z.pnl != null ? pc(z.pnlPct) : '–'}</td></tr>`; };
   const rowIn = x => { const q = tent(x), px = pfLtp(x.sym);
     return `<tr${q == null ? ' class="chk-nf"' : ''}>${nm(x).replace('</small></td>', TOP.names.has(x.sym) && x.part === 'Value' ? '</small><small class="chk-why">' + ('added toward ' + NV + ' Value holdings') + ': money taken equally from all of them</small></td>' : '</small></td>')}<td>${esc(x.part)}</td><td class="r">${px > 0 ? fmt(px, 2) : '–'}</td><td class="r"${q == null ? ` title="${x.wait ? 'Bought only at this part\'s re-pick (' + esc(x.wait) + ')' : 'Nothing of this part is on the Sell list (or the sales are spent on names above): not bought'}"` : ''}><b>${q != null ? fmt(q, 0) : '–'}</b></td></tr>`; };
   const tbl = (t, a, cls, tip = '') => { const kind = cls === 'in' ? 'in' : 'out';
@@ -4473,8 +4485,8 @@ async function pfChkOpen() {
   const n2 = v => v == null || !isFinite(v) ? '' : String(Math.round(v * 100) / 100);
   const LIST = {sell: c.sell || c.out, watch: c.watch || [], hold: c.hold || [], wait: c.wait || [], out: c.out};
   const tsv = cls => cls !== 'in'
-    ? ['Stock\tQty\tDay %\tP&L ₹\tP&L %\tWhy'].concat(LIST[cls].map(x => { const r = H.get(x.sym) || {};
-        return ['NSE:' + x.sym, r.qty != null ? n2(r.qty) : '', r.dayPct != null ? n2(r.dayPct) + '%' : '', r.priced ? n2(r.pnl) : '', r.priced ? n2(r.pnlPct) + '%' : '', String(x.why || '').replace(/\t/g, ' ')].join('\t'); })).join('\n')
+    ? ['Stock\tQty\tDay %\tP&L ₹\tP&L %\tWhy'].concat(LIST[cls].map(x => { const z = prt(x), r = z.r;
+        return ['NSE:' + x.sym, z.q != null ? n2(z.q) : '', r.dayPct != null ? n2(r.dayPct) + '%' : '', z.pnl != null ? n2(z.pnl) : '', z.pnl != null ? n2(z.pnlPct) + '%' : '', String(x.why || '').replace(/\t/g, ' ')].join('\t'); })).join('\n')
     : ['Stock\tQty'].concat(c.inn.filter(x => tent(x) != null).map(x => 'NSE:' + x.sym + '\t' + tent(x))).join('\n');
   const dd = x => { const m = /^(\d{4})-(\d\d)-(\d\d)/.exec(String(x || '')); return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString('en-IN', {day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'}) : String(x || ''); };
   const addHtml = g => {                                       // one "Add … to portfolio": when, which part, which settings
