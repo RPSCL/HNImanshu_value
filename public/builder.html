@@ -679,14 +679,16 @@ let ADJ = (() => { let v = {}; try { v = JSON.parse(lsGet('pb_adj2') || '{}') ||
     w: v.w === undefined ? true : !!v.w, t: ADJ_TR.includes(+v.t) ? +v.t : 0, mk: ADJ_MK.includes(+v.mk) ? +v.mk : 80,
     tab: ['res', 'rules', 'how'].includes(v.tab) ? v.tab : 'res', own: !!v.own,
     buf: ADJ_BUF.includes(+v.buf) ? +v.buf : 20, band: ADJ_BAND.includes(+v.band) ? +v.band : 2}; })();
-const adjSave = () => { ADJ.own = true; lsSet('pb_adj2', JSON.stringify(ADJ)); };
-/* this browser has not set 1Y adj rules yet → start from the ones your portfolio uses (if they were copied from here) */
+const adjSave = () => { ADJ.own = true; lsSet('pb_adj2', JSON.stringify(ADJ)); adjApply(true); };   // a rule changed here = your portfolio's exit rules change too
+/* the exit rules live in your ACCOUNT (FF.sb: Portfolio → Exit rules). This page always starts from them; a change here saves them back.
+   Rules set here before they were kept in the account (never applied) become the account's. */
 function adjFromAccount() {
-  if (ADJ.own) return;
-  try { const sb = JSON.parse(ENG_WIN.eval('JSON.stringify(SB())'));
-    if (sb && sb.sync && sb.cad) Object.assign(ADJ, {m: sb.cad.m, v: sb.cad.v, e: sb.cad.e, mk: +sb.mk || 0, w: !!sb.win, t: +sb.trl || 0});
-    if (sb && ADJ_BUF.includes(+sb.buf)) ADJ.buf = +sb.buf;
-    if (sb && ADJ_BAND.includes(+sb.band)) ADJ.band = +sb.band; } catch (e) {}
+  let sb = null; try { sb = JSON.parse(ENG_WIN.eval('JSON.stringify(SB())')); } catch (e) { return; }
+  if (!sb) return;
+  if (!sb.sync && ADJ.own) { adjApply(true); return; }
+  const cd = Object.assign({m: 1, v: 3, e: 'W'}, sb.cad || {}), cv = x => x === 'W' ? 'W' : +x;
+  Object.assign(ADJ, {m: cv(cd.m), v: cv(cd.v), e: cv(cd.e), mk: +sb.mk || 0, w: !!sb.win, t: +sb.trl || 0, buf: +sb.buf || 0, band: +sb.band || 1});
+  lsSet('pb_adj2', JSON.stringify(ADJ));
 }
 /* Value holds at most N stocks: its "how many", or VAL_CAP when it is "all that pass". Below N, each new name is bought with money
    taken equally from every holding (no money is ever added); at N, a new name comes in only in place of one sold. */
@@ -929,19 +931,19 @@ let ENG_WIN = null, ADJ_ASK = false, ADJ_RULES = null;
 const accSB = () => { try { return ENG_WIN ? JSON.parse(ENG_WIN.eval('JSON.stringify(SB())')) : null; } catch (e) { return null; } };
 const adjSame = sb => !!(sb && sb.sync && sb.cad && String(sb.cad.m) === String(ADJ.m) && String(sb.cad.v) === String(ADJ.v) && String(sb.cad.e) === String(ADJ.e)
   && +sb.mk === +ADJ.mk && !!sb.win === !!ADJ.w && (+sb.trl || 0) === (+ADJ.t || 0) && +sb.buf === +ADJ.buf && +sb.band === +ADJ.band);
-/* "Use these rules in my portfolio": the 1Y adj settings → your account (FF.sb), read by the PF Builder check */
-async function adjApply() {
+/* the 1Y adj rules → your account (FF.sb): Portfolio → Exit rules and the PF Builder check read them */
+async function adjApply(quiet) {
   const w = ENG_WIN || await engine();
   const sb = Object.assign(JSON.parse(w.eval('JSON.stringify(SB())')), {buf: ADJ.buf, band: ADJ.band, mk: ADJ.mk, win: ADJ.w, trl: ADJ.t, cad: {m: ADJ.m, v: ADJ.v, e: ADJ.e}, sync: true,
     syncAt: new Date(Date.now() + 19800000).toISOString().slice(0, 10)});
   const all = JSON.parse(w.eval(`FF.sb = ${JSON.stringify(sb)}; FF._at = Date.now(); lsSet('ff', JSON.stringify(FF)); JSON.stringify(FF)`));
-  try { if (window.hniStore && window.hniStore.saveFF) await window.hniStore.saveFF(all); toast('Done: the Portfolio page now checks your holdings with these rules.', 6000); }
-  catch (e) { toast('Saved in this browser; the account copy did not save (' + ((e && e.message) || 'error') + ').', 8000); }
+  try { if (window.hniStore && window.hniStore.saveFF) await window.hniStore.saveFF(all); if (!quiet) toast('Saved as your portfolio\'s exit rules.', 5000); }
+  catch (e) { toast('Exit rules saved in this browser; the account copy did not save (' + ((e && e.message) || 'error') + ').', 8000); }
 }
 function paintAdj(fund) {
   const out = $('#out');
   PF = null;
-  const opt = (id, vals, cur, lab) => `<select id="${id}">${vals.map(v => `<option value="${v}"${String(v) === String(cur) ? ' selected' : ''}>${lab(v)}</option>`).join('')}</select>`;
+  const opt = (id, vals, cur, lab) => `<select id="${id}">${(vals.some(v => String(v) === String(cur)) ? vals : vals.concat([cur])).map(v => `<option value="${v}"${String(v) === String(cur) ? ' selected' : ''}>${lab(v)}</option>`).join('')}</select>`;
   const per = v => v === 'W' ? 'every week' : v === 1 ? 'every month' : `every ${v} months`;
   const asb = accSB(), same = adjSame(asb);
   const set = `<div class="adjcard">
@@ -955,11 +957,9 @@ function paintAdj(fund) {
     <div class="adjgrp"><h4>Never sell</h4><div class="adjrow">
       <label title="A stock with this momentum score or more is never sold (Value and Momentum)"><span>Momentum ≥</span>${opt('adjK', ADJ_MK, ADJ.mk, v => v ? String(v) : 'off')}</label>
       <label class="ck" title="A holding in profit is never sold, unless you pick a fall from its highest price since bought"><span><input type="checkbox" id="adjW"${ADJ.w ? ' checked' : ''}> A winner (in profit)</span>${ADJ.w ? opt('adjT', ADJ_TR, ADJ.t, v => v ? `unless ${v}% off its high` : 'never') : ''}</label></div></div>
-    <div class="adjact">${ADJ_ASK ? `<span class="adjq">Your portfolio's re-pick schedule and selling rules will be replaced by the ones above.</span>
-        <button type="button" class="btn sm primary" id="adjYes">Apply to portfolio</button><button type="button" class="btn sm" id="adjNo">Cancel</button>`
-      : `<span class="adjsync ${same ? 'on' : ''}">${same ? '✓ Your portfolio uses these rules' : asb && asb.sync ? 'Your portfolio uses different rules' : 'Your portfolio uses the default rules'}</span>
-        ${same ? '' : '<button type="button" class="btn sm primary" id="adjUse">Use these rules in my portfolio</button>'}
-        <button type="button" class="btn sm" id="adjRef" title="Load the latest month-by-month prices and daily closes and build this backtest again">Refresh</button>`}</div>
+    <div class="adjact"><span class="adjsync ${same ? 'on' : ''}">${same ? '✓ Your portfolio\'s exit rules (Portfolio → Exit rules): a change here changes them there too' : !asb ? 'Your portfolio\'s exit rules are loading…' : 'Not saved to your portfolio yet'}</span>
+        ${same || !asb ? '' : '<button type="button" class="btn sm primary" id="adjUse">Save as my exit rules</button>'}
+        <button type="button" class="btn sm" id="adjRef" title="Load the latest month-by-month prices and daily closes and build this backtest again">Refresh</button></div>
   </div>`;
   const tabs = `<div class="adjtabs" role="tablist">${[['res', 'Results'], ['rules', 'Selling rules'], ['how', 'How it works']].map(([k, l]) => `<button type="button" role="tab" data-adjtab="${k}" class="${ADJ.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   const head = perBar() + set + tabs;
@@ -2004,9 +2004,7 @@ $('#out').addEventListener('click', async e => {
   if (e.target.closest('#adjRef')) { adjRefresh(); return; }
   const at = e.target.closest('[data-adjtab]');
   if (at) { e.preventDefault(); ADJ.tab = at.dataset.adjtab; lsSet('pb_adj2', JSON.stringify(ADJ)); paint(); if (at.tagName === 'A') window.scrollTo({top: ($('.adjtabs') || document.body).getBoundingClientRect().top + scrollY - 70, behavior: 'smooth'}); return; }
-  if (e.target.closest('#adjUse')) { ADJ_ASK = true; paint(); return; }
-  if (e.target.closest('#adjNo')) { ADJ_ASK = false; paint(); return; }
-  if (e.target.closest('#adjYes')) { const b = e.target.closest('#adjYes'); b.disabled = true; b.textContent = 'Applying…'; await adjApply().catch(x => toast((x && x.message) || 'Could not apply.', 6000)); ADJ_ASK = false; paint(); return; }
+  if (e.target.closest('#adjUse')) { const b = e.target.closest('#adjUse'); b.disabled = true; b.textContent = 'Saving…'; await adjApply().catch(x => toast((x && x.message) || 'Could not save.', 6000)); paint(); return; }
   const pb = e.target.closest('[data-per]');
   if (pb) { PER = pb.dataset.per; lsSet('pb_per', PER); if (DATA && !perHas(PER)) { try { await ensurePer(PER); } catch (x) {} } paint(); readyLine(); return; }
   if (e.target.closest('#refreshChart')) { if (e.target.closest('#refreshChart').disabled) return; ensureDaily(backSyms(), true); return; }
