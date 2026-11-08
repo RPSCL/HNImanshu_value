@@ -62,7 +62,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           H=1; [ "${{ github.event.schedule }}" = "30 0 * * 0" ] && H=2
-          bash .github/oracle_guard.sh others.yml 135 "^Others half ($H|all)"
+          bash .github/oracle_guard.sh others.yml 1080 "^Others half ($H|all)"
 
   others:
     needs: guard

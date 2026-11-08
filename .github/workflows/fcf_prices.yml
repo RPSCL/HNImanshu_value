@@ -60,7 +60,7 @@ jobs:
         id: g
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash .github/oracle_guard.sh fcf_prices.yml 135 "^Yearly prices part ${{ steps.p.outputs.part }}"
+        run: bash .github/oracle_guard.sh fcf_prices.yml 1080 "^Yearly prices part ${{ steps.p.outputs.part }}"
 
   yearly:
     needs: guard

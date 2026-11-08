@@ -21,7 +21,9 @@ on:
   # 📰 News from the Oracle server (oracle/news.sh, every 30 min on weekdays, 2 h at weekends): its push of
   #    multi_stock_news.csv → build + deploy only. This workflow's own commits never start it again ([skip ci]).
   # 🛟 BACK-UP (GitHub's own clock, UTC): each time below checks whether the Oracle server started that job; only if it
-  #    didn't (server off, trigger failed) does this run do the job itself. Weekly jobs are checked 2 hours late.
+  #    didn't (server off, trigger failed) does this run do the job itself. GitHub often starts these 30-90 min late, so
+  #    each check looks back over a wide window (anchored to "today", not to when GitHub got round to it):
+  #    news 2 h 45 min · daily build 6 h · full scrape 18 h · each price part 24 h (the crontab runs them Fri, Sat and Sun).
   schedule:
     - cron: "15 */2 * * *"     # news: no news build from Oracle in the last 2 h 45 min → fetch news here + build
     - cron: "30 20 * * 6"      # Sunday 02:00 IST: the 00:00 full scrape (mode 1) not started → full scrape
@@ -29,7 +31,7 @@ on:
     - cron: "30 17 * * 5"      # Friday 23:00 IST: prices part 2 (Oracle 21:00) not started → part 2
     - cron: "30 18 * * 5"      # Sat 00:00 IST:    prices part 3 (Oracle 22:00) not started → part 3
     - cron: "30 19 * * 5"      # Sat 01:00 IST:    prices part 4 (Oracle 23:00) not started → part 4
-    - cron: "30 20 * * 0-5"    # Mon-Sat 02:00 IST: no build at all since 23:45 → build + deploy (mode 3)
+    - cron: "30 20 * * 0-5"    # Mon-Sat 02:00 IST: no build at all in the last 6 h → build + deploy (mode 3)
   push:
     branches: [main]
     paths: [multi_stock_news.csv]
@@ -88,12 +90,12 @@ jobs:
         run: |
           case "${{ github.event.schedule }}" in
             "15 */2 * * *")  echo "mode=newsrun" >> $GITHUB_OUTPUT; echo "min=165" >> $GITHUB_OUTPUT; echo "rx=^News build" >> $GITHUB_OUTPUT ;;
-            "30 20 * * 6")   echo "mode=full"    >> $GITHUB_OUTPUT; echo "min=135" >> $GITHUB_OUTPUT; echo "rx=^Mode 1 " >> $GITHUB_OUTPUT ;;
-            "30 16 * * 5")   echo "mode=prices"  >> $GITHUB_OUTPUT; echo "part=1" >> $GITHUB_OUTPUT; echo "min=135" >> $GITHUB_OUTPUT; echo "rx=^Mode 2 part 1" >> $GITHUB_OUTPUT ;;
-            "30 17 * * 5")   echo "mode=prices"  >> $GITHUB_OUTPUT; echo "part=2" >> $GITHUB_OUTPUT; echo "min=135" >> $GITHUB_OUTPUT; echo "rx=^Mode 2 part 2" >> $GITHUB_OUTPUT ;;
-            "30 18 * * 5")   echo "mode=prices"  >> $GITHUB_OUTPUT; echo "part=3" >> $GITHUB_OUTPUT; echo "min=135" >> $GITHUB_OUTPUT; echo "rx=^Mode 2 part 3" >> $GITHUB_OUTPUT ;;
-            "30 19 * * 5")   echo "mode=prices"  >> $GITHUB_OUTPUT; echo "part=4" >> $GITHUB_OUTPUT; echo "min=135" >> $GITHUB_OUTPUT; echo "rx=^Mode 2 part 4" >> $GITHUB_OUTPUT ;;
-            "30 20 * * 0-5") echo "mode=light"   >> $GITHUB_OUTPUT; echo "min=135" >> $GITHUB_OUTPUT; echo "rx=^(Mode (0|1|3|-1) |News build)" >> $GITHUB_OUTPUT ;;
+            "30 20 * * 6")   echo "mode=full"    >> $GITHUB_OUTPUT; echo "min=1080" >> $GITHUB_OUTPUT; echo "rx=^Mode 1 " >> $GITHUB_OUTPUT ;;
+            "30 16 * * 5")   echo "mode=prices"  >> $GITHUB_OUTPUT; echo "part=1" >> $GITHUB_OUTPUT; echo "min=1440" >> $GITHUB_OUTPUT; echo "rx=^Mode 2 part 1" >> $GITHUB_OUTPUT ;;
+            "30 17 * * 5")   echo "mode=prices"  >> $GITHUB_OUTPUT; echo "part=2" >> $GITHUB_OUTPUT; echo "min=1440" >> $GITHUB_OUTPUT; echo "rx=^Mode 2 part 2" >> $GITHUB_OUTPUT ;;
+            "30 18 * * 5")   echo "mode=prices"  >> $GITHUB_OUTPUT; echo "part=3" >> $GITHUB_OUTPUT; echo "min=1440" >> $GITHUB_OUTPUT; echo "rx=^Mode 2 part 3" >> $GITHUB_OUTPUT ;;
+            "30 19 * * 5")   echo "mode=prices"  >> $GITHUB_OUTPUT; echo "part=4" >> $GITHUB_OUTPUT; echo "min=1440" >> $GITHUB_OUTPUT; echo "rx=^Mode 2 part 4" >> $GITHUB_OUTPUT ;;
+            "30 20 * * 0-5") echo "mode=light"   >> $GITHUB_OUTPUT; echo "min=360" >> $GITHUB_OUTPUT; echo "rx=^(Mode (0|1|3|-1) |News build)" >> $GITHUB_OUTPUT ;;
             *)               echo "mode=light"   >> $GITHUB_OUTPUT; echo "min=135" >> $GITHUB_OUTPUT; echo "rx=^(Mode (0|1|3|-1) |News build)" >> $GITHUB_OUTPUT ;;
           esac
       - uses: actions/checkout@v5
@@ -243,7 +245,7 @@ jobs:
         id: fetchpx
         if: steps.mode.outputs.mode == 'prices' && hashFiles('fetch_prices.py') != ''
         continue-on-error: true
-        timeout-minutes: 120         # ≈ 1.2 s per symbol: ~600 symbols per third ≈ 12–15 min
+        timeout-minutes: 130        # fetch_prices.py stops itself at 110 min and saves; this is the hard stop
         env:
           ANGEL_API_KEY:     ${{ secrets.ANGEL_API_KEY }}
           ANGEL_CLIENT_CODE: ${{ secrets.ANGEL_CLIENT_CODE }}
