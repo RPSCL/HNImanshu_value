@@ -1465,6 +1465,26 @@ table.chk-t td small.chk-why{white-space:normal;line-height:1.35;margin-top:3px;
 @media (max-width:520px){.chk-rules li{flex-direction:column;gap:0}}
 .chk-box .chk-sb input{width:58px!important;display:inline-block;height:26px;margin:0 3px;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:600 12px var(--mono);text-align:right}
 .chk-t small.chk-of{display:block;font-size:10.5px;opacity:.6;font-weight:400}
+.chk-more{margin:-2px 0 8px;font-size:12px}
+.chk-more summary{cursor:pointer;color:var(--mute);padding:2px 0}
+.chk-exl{display:flex;align-items:center;gap:10px;margin:10px 0;padding:8px 12px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;line-height:1.5}
+.chk-exl>div{flex:1;min-width:0}
+.chk-exl span{display:block;font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--brass);margin-bottom:2px}
+.chk-exl b{font-weight:600}
+.chk-exl .btn{flex:0 0 auto}
+.pf-acts .btn.pf-exit{gap:6px;color:var(--ink)}
+.pf-acts .btn.pf-exit svg{display:block;color:var(--brass)}
+.wip-box.ex-box{width:min(600px,100%)}
+.exr .exg{margin:10px 0;padding:10px 12px 12px;border:1px solid var(--line);border-radius:10px}
+.exr .exg h4{margin:0 0 8px;font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--brass)}
+.exr .exg h4 small{margin-left:6px;font:italic 400 11px var(--sans);letter-spacing:0;text-transform:none;color:var(--mute)}
+.exr .exrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px 12px}
+.exr .exrow label{display:flex;flex-direction:column;gap:4px;min-width:0}
+.exr .exrow label[hidden]{display:none}
+.exr .exrow label>span{font-size:12px;color:var(--mute)}
+.exr .exrow select{height:36px;padding:0 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:500 13px var(--sans);width:100%}
+.exr .exrow small{font-size:11px;color:var(--mute)}
+.exr .ex-sum{margin:12px 0 4px}
 .chk-h .chk-cp{margin-left:auto;height:24px;padding:0 9px;font-size:11px;text-transform:none;letter-spacing:0}
 table.chk-t td.r,table.chk-t th.r{text-align:right;white-space:nowrap}
 table.chk-t .up{color:var(--good)} table.chk-t .dn{color:var(--bad)}
@@ -4114,7 +4134,7 @@ function portfolioView() {
 /* the action buttons and "Delete all" (desktop and phone) */
 function pfWireTop() {
   view.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => {
-    const k = b.dataset.open; k === 'trade' ? pfTradeForm({}) : k === 'rates' ? pfRatesForm() : k === 'ltp' ? pfRefresh(b) : k === 'chk' ? pfChkOpen() : pfCashForm({t: 'in'});   // cash: Pay in / out picked inside
+    const k = b.dataset.open; k === 'trade' ? pfTradeForm({}) : k === 'rates' ? pfRatesForm() : k === 'ltp' ? pfRefresh(b) : k === 'chk' ? pfChkOpen() : k === 'exit' ? pfExitOpen() : pfCashForm({t: 'in'});   // cash: Pay in / out picked inside
   }));
   pfChkRun();
   const wipe = $('#pfWipe');
@@ -4129,6 +4149,7 @@ const pfActsHtml = () => `<div class="pf-top"><div class="pf-acts">
     <button type="button" class="btn" data-open="cash">Pay in / out</button>
     <button type="button" class="btn ghost ico" data-open="rates" title="Charges &amp; taxes on each trade" aria-label="Charges and taxes">${IC_TAX}</button>
     ${pfChkBtn()}
+    <button type="button" class="btn ghost pf-exit" data-open="exit" title="When your Value, Momentum and Index ETF holdings are sold (same rules as PF Builder → 1Y adj)">${IC_EXIT} Exit rules</button>
     ${pfAsOf().short ? `<span class="pf-upd" title="Live prices are pushed in by themselves during market hours">*Last updated at ${esc(pfAsOf().today ? pfAsOf().short : pfAsOf().full)}</span>` : ''}
   </div>${pfIdxHtml()}</div>`;
 /* ---------- (i) PF Builder check: your PF Builder holdings vs the PF Builder lists as they stand today ----------
@@ -4144,6 +4165,7 @@ const PB_SEL_DEF = {value: {uni: 'all', key: 'score', dir: 'desc', n: 0}, mom: {
 const PB_KEYS = {score: 'Value score', mom: 'Momentum score', pe: 'PE', pb: 'PB', mcap: 'Market cap', cagr: 'EPS CAGR', vs52: 'Vs 52-week high'};
 let PF_CHK = null, PF_CHK_SIG = '', PF_CHK_P = null, PB_ETF = null;
 const IC_INFO = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r=".6" fill="currentColor"/></svg>';
+const IC_EXIT = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h4.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H14"/><path d="M10 8l-4 4 4 4M6 12h10"/></svg>';
 function pfChkBtn() {
   // red count = Value / Momentum holdings on the Sell list (confirmed: 2 weeks outside, or a hard exit). Watch, Hold, ETFs and new names: not counted
   const c = PF_CHK, n = c && c.ok && c.sell ? c.sell.filter(x => x.part === 'Value' || x.part === 'Momentum').length : 0;
@@ -4215,6 +4237,63 @@ window.pbCfg = pbCfg; window.pbMomOk = pbMomOk;
    ({m: Momentum, v: Value, e: Index ETFs}: 'W' every weekly data date, or 1 / 2 / 3 / 6 / 12 months: the first weekly data date of
    the month), and a holding off its list is sold at the next re-pick at once (no 2-week wait), exactly as in the backtest. */
 const SB = () => { const b = Object.assign({buf: 20, band: 2, win: true, trl: 0, mk: 80, cad: null, sync: false}, FF.sb || {}); delete b.trail; return b; };
+/* the exit rules' choices = PF Builder → 1Y adj's (builder.html ADJ_*), and its starting re-pick schedule */
+const EX_M = ['W', 1, 2, 3, 6], EX_V = ['W', 1, 3, 6, 12], EX_E = ['W', 1, 3, 6], EX_BUF = [0, 10, 15, 20, 25, 30], EX_BAND = [1, 1.5, 2, 2.5, 3],
+  EX_MK = [0, 60, 70, 80, 90], EX_TR = [0, 10, 15, 20, 25, 30, 40], EX_CAD = {m: 1, v: 3, e: 'W'};
+const exCad = B => Object.assign({}, EX_CAD, B.cad || {});
+/* the rules in plain words (Exit rules window and the PF Builder check) */
+function exPlain(B) {
+  const cd = exCad(B);
+  return {
+    repick: `Momentum ${pbEvery(cd.m)} · Value ${pbEvery(cd.v)} · Index ETFs ${pbEvery(cd.e)}. Between re-picks nothing is sold or bought.`,
+    sold: `off its list at a re-pick: fails a screen limit${B.buf ? ` even loosened ${B.buf}%` : ''}, a hard limit (circuit days, value trap …), or ranks below the top N${B.band > 1 ? ' × ' + B.band : ''}.`,
+    never: [B.mk ? `momentum ≥ ${B.mk}` : '', B.win ? `in profit${B.trl ? ` (until ${B.trl}% below its high since bought)` : ' (never cut)'}` : ''].filter(Boolean).join(' · ') || 'nothing: every holding off its list is sold',
+    etf: 'Index ETFs: a pair slot switches to the other ETF when it leads; the always-held ETFs go only if they leave the index part.'};
+}
+/* Exit rules window (Portfolio page): change them here or in PF Builder → 1Y adj; both read the same account copy */
+function pfExitOpen() {
+  const B = SB(), cd = exCad(B), wk = D.asOf;
+  const opts = (vals, cur, lab) => { const L = vals.slice(); if (!L.some(v => String(v) === String(cur))) L.push(cur);
+    return L.map(v => `<option value="${v}"${String(v) === String(cur) ? ' selected' : ''}>${esc(lab(v))}</option>`).join(''); };
+  const per = v => v === 'W' ? 'Every week' : +v === 1 ? 'Every month' : `Every ${v} months`;
+  const due = c => { const d = pbDue(c, wk); return d.due ? 'due now' : 'next: ' + d.next; };
+  const sel = (name, vals, cur, lab, label, note) => `<label><span>${label}</span><select name="${name}">${opts(vals, cur, lab)}</select>${note != null ? `<small data-due="${name}">${esc(note)}</small>` : ''}</label>`;
+  const w = modal('Exit rules', `<form class="pf-form exr" autocomplete="off">
+    <p class="pf-calc">One set of rules for your PF Builder holdings, saved in your account. <b>PF Builder → 1Y adj</b> backtests these same rules: change them here or there and both follow.</p>
+    <div class="exg"><h4>Re-pick <small>when each part's list is checked</small></h4><div class="exrow">
+      ${sel('m', EX_M, cd.m, per, 'Momentum', due(cd.m))}${sel('v', EX_V, cd.v, per, 'Value', due(cd.v))}${sel('e', EX_E, cd.e, per, 'Index ETFs', due(cd.e))}</div></div>
+    <div class="exg"><h4>Hold <small>off the list, not sold yet</small></h4><div class="exrow">
+      ${sel('buf', EX_BUF, B.buf, v => +v ? `Limits loosened ${v}%` : 'Exact limits (no buffer)', 'Still passes the screen')}
+      ${sel('band', EX_BAND, B.band, v => +v === 1 ? 'Top N (no band)' : `Top N × ${v}`, 'Still ranks within')}</div></div>
+    <div class="exg"><h4>Never sell</h4><div class="exrow">
+      ${sel('mk', EX_MK, B.mk, v => +v ? `Momentum ≥ ${v}` : 'Off', 'Strong momentum')}
+      ${sel('win', [1, 0], B.win ? 1 : 0, v => +v ? 'Yes, while in profit' : 'No', 'A winner')}
+      <label class="ex-tr"${B.win ? '' : ' hidden'}><span>Unless it falls</span><select name="trl">${opts(EX_TR, B.trl, v => +v ? `${v}% off its high` : 'Never cut')}</select></label></div></div>
+    <div class="chk-rules ex-sum"></div>
+    <div class="pf-btns"><button type="button" class="btn ghost" data-def>Defaults</button><button type="submit" class="btn primary">Save</button></div></form>`, {noFocus: true, cls: 'ex-box'});
+  const f = $('form', w);
+  const read = () => ({m: f.m.value === 'W' ? 'W' : +f.m.value, v: f.v.value === 'W' ? 'W' : +f.v.value, e: f.e.value === 'W' ? 'W' : +f.e.value,
+    buf: +f.buf.value, band: +f.band.value, mk: +f.mk.value, win: f.win.value === '1', trl: +f.trl.value});
+  const show = () => { const x = read(), P = exPlain({buf: x.buf, band: x.band, mk: x.mk, win: x.win, trl: x.trl, cad: {m: x.m, v: x.v, e: x.e}});
+    $('.ex-tr', w).hidden = !x.win;
+    ['m', 'v', 'e'].forEach(k => { const el = w.querySelector(`[data-due="${k}"]`); if (el) el.textContent = due(x[k]); });
+    $('.ex-sum', w).innerHTML = `<b>In plain words</b><ul><li><span>Re-pick</span><div>${esc(P.repick)}</div></li><li><span>Sold when</span><div>${esc(P.sold)}</div></li>
+      <li><span>Never sold</span><div>${esc(P.never)}.</div></li><li><span>ETFs</span><div>${esc(P.etf)}</div></li></ul>`; };
+  f.addEventListener('change', show); show();
+  $('[data-def]', w).addEventListener('click', () => { f.m.value = String(EX_CAD.m); f.v.value = String(EX_CAD.v); f.e.value = EX_CAD.e;
+    f.buf.value = '20'; f.band.value = '2'; f.mk.value = '80'; f.win.value = '1'; f.trl.value = '0'; show(); });
+  f.addEventListener('submit', async e => { e.preventDefault(); const x = read();
+    FF.sb = Object.assign({}, SB(), {buf: x.buf, band: x.band, mk: x.mk, win: x.win, trl: x.trl, cad: {m: x.m, v: x.v, e: x.e}, sync: true,
+      syncAt: new Date(Date.now() + 19800000).toISOString().slice(0, 10)});
+    ffSave(); w._close(); toast('Exit rules saved: PF Builder → 1Y adj uses them too');
+    await pfChkRefresh(); });
+}
+/* rules changed: work the PF Builder check out again and redraw its button */
+async function pfChkRefresh() {
+  PF_CHK = null; PF_CHK_SIG = ''; PF_CHK = await pfChkCalc().catch(() => null);
+  document.querySelectorAll('.pf-chk').forEach(b => { b.outerHTML = pfChkBtn(); });
+  document.querySelectorAll('[data-open="chk"]').forEach(b => b.addEventListener('click', pfChkOpen));
+}
 /* is a part due for its re-pick on this weekly data date? (cad 'W' = always; n months = the first data date of a month, every n months
    counted from January) → {due, next: the month of the next re-pick} */
 function pbDue(c, wk) {
@@ -4505,22 +4584,11 @@ async function pfChkOpen() {
     : !c.parts.length ? '<p class="na">No holdings came from PF Builder, so there is nothing to compare. Add stocks with “Add all stocks to portfolio” in PF Builder to use this check.</p>'
     : !c.ok ? `<p class="na">This check works only when every holding came from PF Builder. ${c.other.length} came from elsewhere: ${c.other.map(esc).join(', ')}.</p>`
     : `<p class="chk-sub">Only the parts you added are checked (<b>${esc(checked)}</b>), against today's PF Builder lists worked out with the settings you added them with.</p>
-       ${c.adds.length ? c.adds.slice(0, 4).map(addHtml).join('') : `<div class="chk-set">${c.C ? `<div><span>Value</span><b>${esc(pbSelTxt(c.C.value))}</b></div><div><span>Momentum</span><b>${esc(pbSelTxt(c.C.mom))}</b></div>` : ''}</div>`}
+       ${c.adds.length ? addHtml(c.adds[0]) + (c.adds.length > 1 ? `<details class="chk-more"><summary>${c.adds.length - 1} earlier add${c.adds.length > 2 ? 's' : ''}</summary>${c.adds.slice(1, 4).map(addHtml).join('')}</details>` : '') : `<div class="chk-set">${c.C ? `<div><span>Value</span><b>${esc(pbSelTxt(c.C.value))}</b></div><div><span>Momentum</span><b>${esc(pbSelTxt(c.C.mom))}</b></div>` : ''}</div>`}
        ${c.pairs.length ? `<p class="chk-sub">${c.pairs.map(n => `${esc(n.c)} vs ${esc(n.d)}: ${esc(n.c)} ${ok(n.mc) ? fmt(n.mc, 1) : '–'} · ${esc(n.d)} ${ok(n.md) ? fmt(n.md, 1) : '–'} → slot holds <b>${esc(n.win)}</b>`).join('<br>')}</p>` : ''}
-       ${c.sell && SB().sync ? (() => { const B = SB(), cd = B.cad || {}, dl = (t, k) => `${t} ${pbEvery(cd[k])}${c.due && c.due[t === 'Index ETFs' ? 'ETF' : t] && !c.due[t === 'Index ETFs' ? 'ETF' : t].due ? ` <i>(next: ${esc(c.due[t === 'Index ETFs' ? 'ETF' : t].next)})</i>` : ' <i>(due now)</i>'}`;
-         return `<div class="chk-rules"><b>Rules from PF Builder → 1Y adj</b>${B.syncAt ? ` <i>(applied ${esc(dd(B.syncAt))})</i>` : ''}
-           <ul><li><span>Re-pick</span><div>${dl('Momentum', 'm')} · ${dl('Value', 'v')} · ${dl('Index ETFs', 'e')}. Between re-picks nothing is sold or bought.</div></li>
-           <li><span>Sold when</span><div>off its list at a re-pick: fails a screen limit even loosened ${B.buf}%, a hard limit (circuit days, trap …), or ranks below the top N × ${B.band}.</div></li>
-           <li><span>Never sold</span><div>${B.mk ? `momentum ≥ ${B.mk}` : ''}${B.mk && B.win ? ' · ' : ''}${B.win ? `in profit${B.trl ? ` (until ${B.trl}% below its high since bought)` : ''}` : ''}${!B.mk && !B.win ? 'off' : ''}.</div></li></ul></div>`; })() : ''}
-       ${c.sell ? (() => { const B = SB(), topN = c.C && ((c.C.value || {}).n || (c.C.mom || {}).n);
-         const num = (k, v, mn, mx, st) => `<input type="number" min="${mn}" max="${mx}" step="${st}" data-sb="${k}" value="${v}">`;
-         return `<div class="chk-set chk-sbx"><div class="chk-sbh">Sell rules <i>(saved in your account; change them here or in PF Builder → 1Y adj)</i></div>
-           <div><span>Keep while within</span><b>${num('buf', B.buf, 0, 100, 5)} % of the screen's limits</b></div>
-           ${topN ? `<div><span>Keep while ranked</span><b>in the top ${num('band', B.band, 1, 10, 0.5)} × N</b></div>` : ''}
-           <div><span>Never sell if momentum</span><b>≥ ${num('mk', B.mk, 0, 100, 5)} <i>(0 = off)</i></b></div>
-           <div><span>Never sell a winner</span><b><select data-sb="win"><option value="1"${B.win ? ' selected' : ''}>Yes (in profit)</option><option value="0"${B.win ? '' : ' selected'}>No</option></select>
-             ${B.win ? `unless ${num('trl', B.trl, 0, 60, 5)} % below its high since bought <i>(0 = never)</i>` : ''}</b></div>
-           <div><span>When</span><b>${B.sync ? 'sold at the part\'s re-pick' : 'sold after 2 weekly data dates outside; hard exits at once'}</b></div></div>`; })()
+       ${c.sell ? (() => { const B = SB(), P = exPlain(B);
+         return `<div class="chk-exl"><div><span>Exit rules</span>${B.sync ? `<b>Re-pick</b> ${esc(P.repick.split('. Between')[0])} · <b>Never sold</b> ${esc(P.never)}`
+           : 'Not set yet: a holding off its list is sold after 2 weekly data dates outside the buffer'}</div><button type="button" class="btn sm" data-exit>${B.sync ? 'Change' : 'Set'}</button></div>`; })()
          + tbl('Sell list', c.sell, 'sell', 'Outside the buffer for 2 weekly data dates in a row, or a hard exit (value-trap flag, circuit days, dividend stopped, Graham test). ETFs: no longer in the index part')
          + (c.wait && c.wait.length ? tbl('Waiting for the re-pick', c.wait, 'wait', 'Off the list now, but this part is re-picked only on its schedule: sold then if it is still off the list and not protected') : '')
          + (SB().sync ? '' : tbl('Watch: 1st week outside', c.watch, 'watch', 'Outside the buffer this week: on the Sell list next week if it is still outside'))
@@ -4528,14 +4596,7 @@ async function pfChkOpen() {
          : tbl('No longer on the list', c.out, 'out')}${TOP.names.size ? `<p class="chk-sub">Value holds ${TOP.h + (cnt.Value || 0)} of ${NV}: take <b>₹${fmt(TOP.take, 0)}</b> from each of your ${TOP.h} Value holdings (₹${fmt(TOP.take * TOP.h, 0)} in all; about ₹${fmt(TOP.ch, 0)} charges and ₹${fmt(TOP.tax, 0)} tax) and buy the new name${TOP.names.size > 1 ? 's' : ''} marked below.</p>` : ''}${tbl('New on the list (not held)', c.inn, 'in', 'Bought with the money its part\'s sales free up (as many as were sold), or, while Value holds fewer than its N, with an equal share taken from every Value holding; the rest are greyed out')}
        <p class="chk-note">Lists change with the weekly data update. This is information only, not a recommendation to buy or sell.</p>`;
   const w = modal('PF Builder check', body, {noFocus: true, cls: 'chk-box'});
-  w.querySelectorAll('[data-sb]').forEach(i => i.addEventListener('change', async () => {          // buffer / rank band: kept in your settings
-    if (w._gone) return;
-    const v = i.tagName === 'SELECT' ? i.value === '1' : i.type === 'checkbox' ? i.checked : +i.value; if (i.tagName !== 'SELECT' && i.type !== 'checkbox' && !(v >= (i.dataset.sb === 'band' ? 1 : 0))) return;
-    FF.sb = Object.assign({}, SB(), {[i.dataset.sb]: v}); ffSave();
-    w._close(); PF_CHK = null; PF_CHK_SIG = ''; PF_CHK = await pfChkCalc().catch(() => null); pfChkOpen();
-    document.querySelectorAll('.pf-chk').forEach(b => { b.outerHTML = pfChkBtn(); });
-    document.querySelectorAll('[data-open="chk"]').forEach(b => b.addEventListener('click', pfChkOpen));
-  }));
+  const ex = w.querySelector('[data-exit]'); if (ex) ex.addEventListener('click', () => { w._close(); pfExitOpen(); });
   w.querySelectorAll('[data-cp]').forEach(b => b.addEventListener('click', async () => {
     const txt = tsv(b.dataset.cp), n = txt.split('\n').length - 1;
     let done = false;
