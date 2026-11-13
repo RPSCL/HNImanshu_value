@@ -700,7 +700,7 @@ function pageNow() {                                                    // which
 let navBox = null;
 function mountNav() {                                                   // the button, just left of the avatar / Login button
   const ph = document.querySelector(".hni-navbtn.au-ph");                // hdr.js drew it already: take it over (no redraw)
-  if (ph) { ph.classList.remove("au-ph"); ph.setAttribute("aria-haspopup", "dialog"); ph.addEventListener("click", (e) => { e.stopPropagation(); openNav(); }); hoverNav(ph);
+  if (ph) { ph.classList.remove("au-ph"); ph.setAttribute("aria-haspopup", "dialog"); ph.addEventListener("click", (e) => { e.stopPropagation(); openNav(); }); mountEdges();
     const av = document.querySelector(".au-user"); if (av && ph.nextElementSibling !== av) av.parentNode.insertBefore(ph, av);
     document.documentElement.classList.add("hni-nav"); return; }
   if (document.querySelector(".hni-navbtn") || document.documentElement.dataset.page === "home") return;   // the landing page has its own links
@@ -710,7 +710,7 @@ function mountNav() {                                                   // the b
   b.type = "button"; b.className = "hni-navbtn"; b.title = "Navigate to"; b.setAttribute("aria-label", "Navigate to");
   b.setAttribute("aria-haspopup", "dialog"); b.innerHTML = FORK + "<span>Navigate</span>";
   b.addEventListener("click", (e) => { e.stopPropagation(); openNav(); });
-  av.parentNode.insertBefore(b, av); hoverNav(b);
+  av.parentNode.insertBefore(b, av); mountEdges();
   document.documentElement.classList.add("hni-nav");
 }
 function closeNav() { if (navBox) { navBox.classList.remove("open"); syncLock(); } }
@@ -726,51 +726,57 @@ function navPick(e, k, close) {
   }
   close();                                                              // a link: the browser follows it (same tab)
 }
-/* ---------- computers (mouse): hover Navigate → the 4 pages slide down, side by side, in the overlay's order ----------
-   Built on the first hover only (nothing at page load). Hovering a page fetches its file in the background once
-   (rel=prefetch, low priority), so the click opens it from the browser's cache. Phones / touch: unchanged (the overlay). */
+/* ---------- computers (mouse): two small pull tabs, half see-through, outside the page's own buttons ----------
+   top centre  \__v__/  → hover: the 4 pages drop down from the top, side by side (the Navigate order)
+   left edge    >       → hover: the 4 pages slide in from the side, top to bottom
+   Built once the header is in; the pages' list is drawn on each opening. Hovering a page fetches its file in the background once
+   (rel=prefetch, low priority) so the click opens it from the browser's cache. Phones / touch screens: not shown (Navigate as before). */
 const HOVER_OK = !!(window.matchMedia && matchMedia("(hover: hover) and (pointer: fine)").matches);
-let hovBox = null, hovT = 0;
-const ahead = new Set();
+const CHEV = SVG('<path d="M6 9.5l6 6 6-6"/>', 'class="hni-chev"');
+const ahead = new Set(), EDGES = [];
 function fetchAhead(href) {
   const f = String(href || "").split("#")[0]; if (!f || ahead.has(f)) return; ahead.add(f);
   const l = document.createElement("link"); l.rel = "prefetch"; l.href = f; document.head.appendChild(l);
 }
-function closeHov() { clearTimeout(hovT); if (hovBox) hovBox.classList.remove("open"); }
-function hoverNav(btn) {
-  if (!HOVER_OK || btn._hov) return; btn._hov = true;
-  btn.addEventListener("mouseenter", () => { clearTimeout(hovT); hovT = setTimeout(() => openHov(btn), 70); });
-  btn.addEventListener("mouseleave", () => { clearTimeout(hovT); hovT = setTimeout(closeHov, 240); });
-  btn.addEventListener("click", closeHov);                              // a click still opens the full overlay
-}
-function openHov(btn) {
-  if ((navBox && navBox.classList.contains("open")) || document.querySelector(".au-back.open")) return;
-  if (!hovBox) {
-    hovBox = document.createElement("div"); hovBox.className = "hni-hov"; hovBox.setAttribute("role", "navigation"); hovBox.setAttribute("aria-label", "Pages");
-    document.body.appendChild(hovBox);
-    hovBox.addEventListener("mouseenter", () => clearTimeout(hovT));
-    hovBox.addEventListener("mouseleave", () => { clearTimeout(hovT); hovT = setTimeout(closeHov, 240); });
-    hovBox.addEventListener("mouseover", (e) => { const a = e.target.closest("a.hni-hv"); if (a && !a.classList.contains("lock") && !a.classList.contains("here")) fetchAhead(a.getAttribute("href")); });
-    hovBox.addEventListener("click", (e) => { const it = e.target.closest(".hni-hv"); if (!it) return;
-      if (it.classList.contains("here")) { e.preventDefault(); closeHov(); return; }
-      navPick(e, it.dataset.k, closeHov); });
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeHov(); });
-    window.addEventListener("scroll", closeHov, { passive: true }); window.addEventListener("resize", closeHov); window.addEventListener("hashchange", closeHov);
-  }
+function shutEdges() { EDGES.forEach((e) => e.shut()); }
+function edgeTiles(w) {                                                // top: icon + name in one line · side: icon only, name pops out on hover
   const here = pageNow();
-  hovBox.innerHTML = NAV.filter((n) => n.href).map((n) => {
-    const lock = n.prime && !PRO_NOW, on = n.k === here;
-    return `<a href="${n.href}" class="hni-hv${on ? " here" : ""}${lock ? " lock" : ""}" data-k="${n.k}"${on ? ' aria-current="page"' : ""}>
-      <span class="ic">${NAV_ICON[n.k]}</span><b>${esc(n.t)}</b><small>${esc(on ? "You are here" : lock ? (current ? "Part of Prime · see plans" : "Part of Prime · log in first") : n.s)}</small>
-      ${lock ? CROWN.replace('class="au-crown"', 'class="cr"') : ""}</a>`;
+  return NAV.filter((n) => n.href).map((n) => {
+    const lock = n.prime && !PRO_NOW, on = n.k === here, tip = n.t + (on ? " · you are here" : lock ? " · Prime" : "");
+    return `<a href="${n.href}" class="hni-hv${on ? " here" : ""}${lock ? " lock" : ""}" data-k="${n.k}"${on ? ' aria-current="page"' : ""} aria-label="${esc(tip)}"${w === "side" ? ` data-tip="${esc(tip)}"` : ""}>
+      <span class="ic">${NAV_ICON[n.k]}</span>${w === "top" ? `<b>${esc(n.t)}</b>` : ""}${lock ? CROWN.replace('class="au-crown"', 'class="cr"') : ""}</a>`;
   }).join("");
-  const r = btn.getBoundingClientRect(), w = hovBox.offsetWidth;
-  hovBox.style.top = Math.round(r.bottom + 8) + "px";
-  hovBox.style.left = Math.round(Math.max(8, Math.min(r.right - w, innerWidth - w - 8))) + "px";   // right edge under the button, kept on screen
-  hovBox.classList.add("open");
+}
+function mountEdges() {
+  if (!HOVER_OK || EDGES.length || document.documentElement.dataset.page === "home") return;
+  ["top", "side"].forEach((w) => {
+    const h = document.createElement("button"), p = document.createElement("div");
+    h.type = "button"; h.className = "hni-edge hni-edge-" + w; h.setAttribute("aria-label", "Pages"); h.innerHTML = CHEV;
+    p.className = "hni-pan hni-pan-" + w; p.setAttribute("role", "navigation"); p.setAttribute("aria-label", "Pages");
+    p.innerHTML = `<div class="hni-pl"></div><span class="hni-lip" aria-hidden="true">${CHEV}</span>`;
+    document.body.append(h, p);
+    let t = 0;
+    const blocked = () => document.querySelector(".au-back.open, .wip-back") || (navBox && navBox.classList.contains("open"));
+    const open = () => { clearTimeout(t); if (blocked()) return; EDGES.forEach((e) => { if (e.p !== p) e.shut(); });
+      p.querySelector(".hni-pl").innerHTML = edgeTiles(w); p.classList.add("open"); h.classList.add("on"); };
+    const shut = () => { clearTimeout(t); p.classList.remove("open"); h.classList.remove("on"); };
+    const later = () => { clearTimeout(t); t = setTimeout(shut, 260); };
+    h.addEventListener("mouseenter", () => { clearTimeout(t); t = setTimeout(open, 60); });
+    h.addEventListener("mouseleave", later);
+    h.addEventListener("click", () => (p.classList.contains("open") ? shut() : open()));    // keyboard: Enter / Space
+    p.addEventListener("mouseenter", () => clearTimeout(t));
+    p.addEventListener("mouseleave", later);
+    p.addEventListener("mouseover", (e) => { const a = e.target.closest("a.hni-hv"); if (a && !a.classList.contains("lock") && !a.classList.contains("here")) fetchAhead(a.getAttribute("href")); });
+    p.addEventListener("click", (e) => { const it = e.target.closest(".hni-hv"); if (!it) return;
+      if (it.classList.contains("here")) { e.preventDefault(); shut(); return; }
+      navPick(e, it.dataset.k, shut); });
+    EDGES.push({ p, shut });
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") shutEdges(); });
+  window.addEventListener("hashchange", shutEdges);
 }
 function openNav() {
-  closeHov();
+  shutEdges();
   document.querySelectorAll(".au-user.open").forEach((el) => el.classList.remove("open"));   // the user menu closes when Navigate opens
   if (!navBox) {
     navBox = document.createElement("div");

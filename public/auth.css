@@ -229,30 +229,64 @@ html.hni-nav .hnav, html.hni-nav #pf-btn, html.hni-nav #fund-btn, html.hni-nav #
   html.hni-nav body.pf-mode header.top .global{grid-template-areas:none;row-gap:0}
 }
 .au-slot .hni-navbtn{margin-right:10px}
-/* computers: hover Navigate → the 4 pages slide down side by side (auth.js hoverNav; built on the first hover) */
-.hni-hov{position:fixed;top:0;left:0;z-index:330;display:flex;align-items:stretch;gap:8px;margin:0;width:auto;height:auto;padding:8px;background:var(--au-bg);border:1px solid var(--au-line);border-radius:14px;
-  box-shadow:0 18px 44px rgba(0,0,0,.35);visibility:hidden;opacity:0;clip-path:inset(0 0 100% 0 round 14px);transform:translateY(-6px);
-  transition:clip-path .2s ease-in,opacity .15s,transform .2s,visibility 0s linear .2s}
-.hni-hov.open{visibility:visible;opacity:1;clip-path:inset(0 0 0 0 round 14px);transform:none;
-  transition:clip-path .28s cubic-bezier(.2,.8,.2,1),opacity .12s,transform .28s cubic-bezier(.2,.8,.2,1),visibility 0s}
-.hni-hv{position:relative;display:flex;flex-direction:column;gap:6px;width:166px;padding:12px;border:1px solid var(--au-line);border-radius:10px;
-  background:var(--au-field);color:var(--au-ink);text-decoration:none;transition:border-color .12s,transform .12s}
-.hni-hov.open .hni-hv{animation:hni-crawl .3s cubic-bezier(.2,.8,.2,1) both}
-.hni-hov.open .hni-hv:nth-child(2){animation-delay:.04s}.hni-hov.open .hni-hv:nth-child(3){animation-delay:.08s}.hni-hov.open .hni-hv:nth-child(4){animation-delay:.12s}
-@keyframes hni-crawl{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+/* computers: two pull tabs (auth.js mountEdges). Top centre \__v__/ → pages drop down side by side; left edge → slide in, stacked */
+.hni-edge{position:fixed;z-index:290;display:grid;place-items:center;padding:0;border:0;cursor:pointer;color:var(--au-bg);
+  background:var(--au-acc);opacity:.5;transition:opacity .15s}
+.hni-edge:hover,.hni-edge:focus-visible,.hni-edge.on{opacity:1;outline:none}
+.hni-edge .hni-chev{width:14px;height:14px;stroke-width:2.6}
+.hni-edge-top{top:0;left:50%;width:76px;height:17px;transform:translateX(-50%);clip-path:polygon(0 0,100% 0,84% 100%,16% 100%)}
+.hni-edge-side{left:0;top:50%;width:17px;height:76px;transform:translateY(-50%);clip-path:polygon(0 0,100% 16%,100% 84%,0 100%)}
+.hni-edge-side .hni-chev{transform:rotate(-90deg)}
+.hni-pan{position:fixed;z-index:295;background:var(--au-bg);border:1px solid var(--au-line);box-shadow:0 14px 36px rgba(0,0,0,.32);
+  visibility:hidden;transition:transform .2s ease-in,visibility 0s linear .2s}
+.hni-pan.open{visibility:visible;transition:transform .28s cubic-bezier(.2,.8,.2,1),visibility 0s}
+/* top: one line, drops down from the top centre */
+.hni-pan-top{top:0;left:50%;width:max-content;max-width:calc(100vw - 32px);border-top:0;border-radius:0 0 12px 12px;transform:translate(-50%,calc(-100% - 20px))}
+.hni-pan-top.open{transform:translate(-50%,0)}
+/* side: a rail of icons, slides in from the left edge */
+.hni-pan-side{left:0;top:50%;border-left:0;border-radius:0 12px 12px 0;transform:translate(calc(-100% - 20px),-50%)}
+.hni-pan-side.open{transform:translate(0,-50%)}
+.hni-pl{display:flex}
+.hni-pan-side .hni-pl{flex-direction:column}
+/* the lip: the same tab on the panel's edge (chevron turned: pull back) */
+.hni-lip{position:absolute;display:grid;place-items:center;color:var(--au-bg);background:var(--au-acc)}
+.hni-lip .hni-chev{width:14px;height:14px;stroke-width:2.6}
+.hni-pan-top .hni-lip{left:50%;bottom:-17px;width:76px;height:17px;transform:translateX(-50%);clip-path:polygon(0 0,100% 0,84% 100%,16% 100%)}
+.hni-pan-top .hni-lip .hni-chev{transform:rotate(180deg)}
+.hni-pan-side .hni-lip{right:-17px;top:50%;width:17px;height:76px;transform:translateY(-50%);clip-path:polygon(0 0,100% 16%,100% 84%,0 100%)}
+.hni-pan-side .hni-lip .hni-chev{transform:rotate(90deg)}
+/* the pages */
+.hni-hv{position:relative;display:flex;align-items:center;gap:8px;color:var(--au-ink);transition:background .12s}
 .hni-hv,.hni-hv:hover,.hni-hv *{text-decoration:none!important}
-.hni-hv:hover,.hni-hv:focus-visible{border-color:var(--au-acc);outline:none;transform:translateY(-1px)}
-.hni-hv .ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;background:var(--au-bg);color:var(--au-acc)}
-.hni-hv .ic svg{width:16px;height:16px}
-.hni-hv b{font:600 13.5px var(--au-sans)}
-.hni-hv small{display:block;font:400 11.5px/1.35 var(--au-sans);white-space:normal;overflow:visible;letter-spacing:0;text-transform:none;color:var(--au-faint)}
-.hni-hv.here{border-color:color-mix(in srgb,var(--au-acc) 55%,var(--au-line));cursor:default;transform:none}
-.hni-hv.here small{color:var(--au-acc);font-weight:600}
-.hni-hv.lock{border-color:#5b2d9c}
-.hni-hv.lock:hover{border-color:#8b5cf6}
-.hni-hv .cr{position:absolute;top:11px;right:11px;width:15px;height:15px;color:#a78bfa}
-@media (max-width:700px),(hover:none){.hni-hov{display:none}}
-@media (prefers-reduced-motion:reduce){.hni-hov,.hni-hov.open{transition:none;clip-path:none}.hni-hov.open .hni-hv{animation:none}}
+.hni-pan-top .hni-hv{padding:10px 16px;white-space:nowrap}
+.hni-pan-top .hni-hv+.hni-hv{border-left:1px solid var(--au-line)}
+.hni-pan-top .hni-hv:first-child{border-bottom-left-radius:12px}.hni-pan-top .hni-hv:last-child{border-bottom-right-radius:12px}
+.hni-pan-side .hni-hv{justify-content:center;width:48px;height:48px}
+.hni-pan-side .hni-hv+.hni-hv{border-top:1px solid var(--au-line)}
+.hni-pan-side .hni-hv:first-child{border-top-right-radius:12px}.hni-pan-side .hni-hv:last-child{border-bottom-right-radius:12px}
+.hni-hv:hover,.hni-hv:focus-visible{background:var(--au-field);outline:none}
+.hni-pan.open .hni-hv{animation:hni-crawl .28s ease-out both}
+.hni-pan.open .hni-hv:nth-child(2){animation-delay:.04s}.hni-pan.open .hni-hv:nth-child(3){animation-delay:.08s}.hni-pan.open .hni-hv:nth-child(4){animation-delay:.12s}
+@keyframes hni-crawl{from{opacity:0}to{opacity:1}}
+.hni-hv .ic{flex:none;width:26px;height:26px;border-radius:7px;display:grid;place-items:center;background:var(--au-field);color:var(--au-acc)}
+.hni-hv:hover .ic{background:var(--au-bg)}
+.hni-hv .ic svg{width:15px;height:15px}
+.hni-hv b{font:600 13px var(--au-sans)}
+.hni-hv .cr{flex:none;width:14px;height:14px;color:#a78bfa}
+.hni-pan-side .hni-hv .cr{position:absolute;top:4px;right:4px;width:11px;height:11px}
+/* the page you are on: an accent line (under it on top, beside it on the side) */
+.hni-hv.here{cursor:default;box-shadow:inset 0 -2px 0 var(--au-acc)}
+.hni-hv.here b{color:var(--au-acc)}
+.hni-pan-side .hni-hv.here{box-shadow:inset 3px 0 0 var(--au-acc)}
+/* side: the page's name pops out beside its icon */
+.hni-pan-side .hni-hv[data-tip]::after{content:attr(data-tip);position:absolute;left:calc(100% + 26px);top:50%;transform:translate(-4px,-50%);opacity:0;pointer-events:none;
+  padding:6px 10px;border:1px solid var(--au-line);border-radius:8px;background:var(--au-bg);color:var(--au-ink);font:600 12.5px var(--au-sans);white-space:nowrap;
+  box-shadow:0 8px 22px rgba(0,0,0,.28);transition:opacity .12s,transform .12s}
+.hni-pan-side .hni-hv[data-tip]:hover::after,.hni-pan-side .hni-hv[data-tip]:focus-visible::after{opacity:1;transform:translate(0,-50%)}
+html.pop-open .hni-edge,html.pop-open .hni-pan{display:none}
+@media (max-width:700px),(hover:none){.hni-edge,.hni-pan{display:none}}
+@media print{.hni-edge,.hni-pan{display:none}}
+@media (prefers-reduced-motion:reduce){.hni-pan,.hni-pan.open{transition:none}.hni-pan.open .hni-hv{animation:none}}
 .hni-navsheet .au-box{width:min(400px,100%);padding:18px 16px 14px}
 .hni-navsheet .au-title{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding-left:4px}
 .hni-navsheet .au-title svg{width:16px;height:16px;color:var(--au-acc)}
