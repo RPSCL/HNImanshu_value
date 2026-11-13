@@ -700,7 +700,7 @@ function pageNow() {                                                    // which
 let navBox = null;
 function mountNav() {                                                   // the button, just left of the avatar / Login button
   const ph = document.querySelector(".hni-navbtn.au-ph");                // hdr.js drew it already: take it over (no redraw)
-  if (ph) { ph.classList.remove("au-ph"); ph.setAttribute("aria-haspopup", "dialog"); ph.addEventListener("click", (e) => { e.stopPropagation(); openNav(); });
+  if (ph) { ph.classList.remove("au-ph"); ph.setAttribute("aria-haspopup", "dialog"); ph.addEventListener("click", (e) => { e.stopPropagation(); openNav(); }); hoverNav(ph);
     const av = document.querySelector(".au-user"); if (av && ph.nextElementSibling !== av) av.parentNode.insertBefore(ph, av);
     document.documentElement.classList.add("hni-nav"); return; }
   if (document.querySelector(".hni-navbtn") || document.documentElement.dataset.page === "home") return;   // the landing page has its own links
@@ -710,11 +710,67 @@ function mountNav() {                                                   // the b
   b.type = "button"; b.className = "hni-navbtn"; b.title = "Navigate to"; b.setAttribute("aria-label", "Navigate to");
   b.setAttribute("aria-haspopup", "dialog"); b.innerHTML = FORK + "<span>Navigate</span>";
   b.addEventListener("click", (e) => { e.stopPropagation(); openNav(); });
-  av.parentNode.insertBefore(b, av);
+  av.parentNode.insertBefore(b, av); hoverNav(b);
   document.documentElement.classList.add("hni-nav");
 }
 function closeNav() { if (navBox) { navBox.classList.remove("open"); syncLock(); } }
+/* a page picked (overlay or drop-down): logged out → log in first; Prime page on a free account → the plans; else the link is followed */
+function navPick(e, k, close) {
+  const n = NAV.find((x) => x.k === k); if (!n) return;
+  if (!current && !n.open) { e.preventDefault(); close(); setTimeout(() => openPopup(n.href || "factor#/"), 160); return; }
+  if (n.prime && !PRO_NOW) { e.preventDefault(); close(); setTimeout(() => openPlans(n.k === "builder" ? n.href : null), 160); return; }
+  if (n.k === "weekly") {
+    e.preventDefault(); close();
+    setTimeout(() => { const w = document.getElementById("weeklyBtn"); if (w) w.click(); else weeklyNote(); }, 160);
+    return;
+  }
+  close();                                                              // a link: the browser follows it (same tab)
+}
+/* ---------- computers (mouse): hover Navigate → the 4 pages slide down, side by side, in the overlay's order ----------
+   Built on the first hover only (nothing at page load). Hovering a page fetches its file in the background once
+   (rel=prefetch, low priority), so the click opens it from the browser's cache. Phones / touch: unchanged (the overlay). */
+const HOVER_OK = !!(window.matchMedia && matchMedia("(hover: hover) and (pointer: fine)").matches);
+let hovBox = null, hovT = 0;
+const ahead = new Set();
+function fetchAhead(href) {
+  const f = String(href || "").split("#")[0]; if (!f || ahead.has(f)) return; ahead.add(f);
+  const l = document.createElement("link"); l.rel = "prefetch"; l.href = f; document.head.appendChild(l);
+}
+function closeHov() { clearTimeout(hovT); if (hovBox) hovBox.classList.remove("open"); }
+function hoverNav(btn) {
+  if (!HOVER_OK || btn._hov) return; btn._hov = true;
+  btn.addEventListener("mouseenter", () => { clearTimeout(hovT); hovT = setTimeout(() => openHov(btn), 70); });
+  btn.addEventListener("mouseleave", () => { clearTimeout(hovT); hovT = setTimeout(closeHov, 240); });
+  btn.addEventListener("click", closeHov);                              // a click still opens the full overlay
+}
+function openHov(btn) {
+  if ((navBox && navBox.classList.contains("open")) || document.querySelector(".au-back.open")) return;
+  if (!hovBox) {
+    hovBox = document.createElement("div"); hovBox.className = "hni-hov"; hovBox.setAttribute("role", "navigation"); hovBox.setAttribute("aria-label", "Pages");
+    document.body.appendChild(hovBox);
+    hovBox.addEventListener("mouseenter", () => clearTimeout(hovT));
+    hovBox.addEventListener("mouseleave", () => { clearTimeout(hovT); hovT = setTimeout(closeHov, 240); });
+    hovBox.addEventListener("mouseover", (e) => { const a = e.target.closest("a.hni-hv"); if (a && !a.classList.contains("lock") && !a.classList.contains("here")) fetchAhead(a.getAttribute("href")); });
+    hovBox.addEventListener("click", (e) => { const it = e.target.closest(".hni-hv"); if (!it) return;
+      if (it.classList.contains("here")) { e.preventDefault(); closeHov(); return; }
+      navPick(e, it.dataset.k, closeHov); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeHov(); });
+    window.addEventListener("scroll", closeHov, { passive: true }); window.addEventListener("resize", closeHov); window.addEventListener("hashchange", closeHov);
+  }
+  const here = pageNow();
+  hovBox.innerHTML = NAV.filter((n) => n.href).map((n) => {
+    const lock = n.prime && !PRO_NOW, on = n.k === here;
+    return `<a href="${n.href}" class="hni-hv${on ? " here" : ""}${lock ? " lock" : ""}" data-k="${n.k}"${on ? ' aria-current="page"' : ""}>
+      <span class="ic">${NAV_ICON[n.k]}</span><b>${esc(n.t)}</b><small>${esc(on ? "You are here" : lock ? (current ? "Part of Prime · see plans" : "Part of Prime · log in first") : n.s)}</small>
+      ${lock ? CROWN.replace('class="au-crown"', 'class="cr"') : ""}</a>`;
+  }).join("");
+  const r = btn.getBoundingClientRect(), w = hovBox.offsetWidth;
+  hovBox.style.top = Math.round(r.bottom + 8) + "px";
+  hovBox.style.left = Math.round(Math.max(8, Math.min(r.right - w, innerWidth - w - 8))) + "px";   // right edge under the button, kept on screen
+  hovBox.classList.add("open");
+}
 function openNav() {
+  closeHov();
   document.querySelectorAll(".au-user.open").forEach((el) => el.classList.remove("open"));   // the user menu closes when Navigate opens
   if (!navBox) {
     navBox = document.createElement("div");
@@ -726,19 +782,7 @@ function openNav() {
     navBox.addEventListener("click", (e) => {                           // outside the box or ×: close
       if (e.target === navBox || e.target.closest(".au-x")) return closeNav();
       const it = e.target.closest(".hni-nv"); if (!it) return;
-      const n = NAV.find((x) => x.k === it.dataset.k);
-      if (!current && !n.open) {                                        // not logged in: log in first, then that page
-        e.preventDefault(); closeNav(); setTimeout(() => openPopup(n.href || "factor#/"), 160); return;
-      }
-      if (n.prime && !PRO_NOW) {                                        // Prime page, free account: close this first, then the plans
-        e.preventDefault(); closeNav(); setTimeout(() => openPlans(n.k === "builder" ? n.href : null), 160); return;
-      }
-      if (n.k === "weekly") {
-        e.preventDefault(); closeNav();
-        setTimeout(() => { const w = document.getElementById("weeklyBtn"); if (w) w.click(); else weeklyNote(); }, 160);
-        return;
-      }
-      closeNav();                                                       // a link: the browser follows it (same tab)
+      navPick(e, it.dataset.k, closeNav);
     });
     navBox.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") closeNav(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && navBox.classList.contains("open")) closeNav(); });

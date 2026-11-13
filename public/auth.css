@@ -229,6 +229,30 @@ html.hni-nav .hnav, html.hni-nav #pf-btn, html.hni-nav #fund-btn, html.hni-nav #
   html.hni-nav body.pf-mode header.top .global{grid-template-areas:none;row-gap:0}
 }
 .au-slot .hni-navbtn{margin-right:10px}
+/* computers: hover Navigate → the 4 pages slide down side by side (auth.js hoverNav; built on the first hover) */
+.hni-hov{position:fixed;top:0;left:0;z-index:330;display:flex;align-items:stretch;gap:8px;margin:0;width:auto;height:auto;padding:8px;background:var(--au-bg);border:1px solid var(--au-line);border-radius:14px;
+  box-shadow:0 18px 44px rgba(0,0,0,.35);visibility:hidden;opacity:0;clip-path:inset(0 0 100% 0 round 14px);transform:translateY(-6px);
+  transition:clip-path .2s ease-in,opacity .15s,transform .2s,visibility 0s linear .2s}
+.hni-hov.open{visibility:visible;opacity:1;clip-path:inset(0 0 0 0 round 14px);transform:none;
+  transition:clip-path .28s cubic-bezier(.2,.8,.2,1),opacity .12s,transform .28s cubic-bezier(.2,.8,.2,1),visibility 0s}
+.hni-hv{position:relative;display:flex;flex-direction:column;gap:6px;width:166px;padding:12px;border:1px solid var(--au-line);border-radius:10px;
+  background:var(--au-field);color:var(--au-ink);text-decoration:none;transition:border-color .12s,transform .12s}
+.hni-hov.open .hni-hv{animation:hni-crawl .3s cubic-bezier(.2,.8,.2,1) both}
+.hni-hov.open .hni-hv:nth-child(2){animation-delay:.04s}.hni-hov.open .hni-hv:nth-child(3){animation-delay:.08s}.hni-hov.open .hni-hv:nth-child(4){animation-delay:.12s}
+@keyframes hni-crawl{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+.hni-hv,.hni-hv:hover,.hni-hv *{text-decoration:none!important}
+.hni-hv:hover,.hni-hv:focus-visible{border-color:var(--au-acc);outline:none;transform:translateY(-1px)}
+.hni-hv .ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;background:var(--au-bg);color:var(--au-acc)}
+.hni-hv .ic svg{width:16px;height:16px}
+.hni-hv b{font:600 13.5px var(--au-sans)}
+.hni-hv small{display:block;font:400 11.5px/1.35 var(--au-sans);white-space:normal;overflow:visible;letter-spacing:0;text-transform:none;color:var(--au-faint)}
+.hni-hv.here{border-color:color-mix(in srgb,var(--au-acc) 55%,var(--au-line));cursor:default;transform:none}
+.hni-hv.here small{color:var(--au-acc);font-weight:600}
+.hni-hv.lock{border-color:#5b2d9c}
+.hni-hv.lock:hover{border-color:#8b5cf6}
+.hni-hv .cr{position:absolute;top:11px;right:11px;width:15px;height:15px;color:#a78bfa}
+@media (max-width:700px),(hover:none){.hni-hov{display:none}}
+@media (prefers-reduced-motion:reduce){.hni-hov,.hni-hov.open{transition:none;clip-path:none}.hni-hov.open .hni-hv{animation:none}}
 .hni-navsheet .au-box{width:min(400px,100%);padding:18px 16px 14px}
 .hni-navsheet .au-title{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding-left:4px}
 .hni-navsheet .au-title svg{width:16px;height:16px;color:var(--au-acc)}
