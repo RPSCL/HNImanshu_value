@@ -757,15 +757,19 @@ function mountEdges() {
     document.body.append(h, p);
     let t = 0;
     const blocked = () => document.querySelector(".au-back.open, .wip-back") || (navBox && navBox.classList.contains("open"));
-    const open = () => { clearTimeout(t); if (blocked()) return; EDGES.forEach((e) => { if (e.p !== p) e.shut(); });
-      p.querySelector(".hni-pl").innerHTML = edgeTiles(w); p.classList.add("open"); h.classList.add("on"); };
+    let t0 = 0;                                                         // when the mouse came onto the tab
+    const open = () => { clearTimeout(t); if (blocked() || p.classList.contains("open")) return; EDGES.forEach((e) => { if (e.p !== p) e.shut(); });
+      p.classList.remove("quick"); p.querySelector(".hni-pl").innerHTML = edgeTiles(w); p.classList.add("open"); h.classList.add("on"); };
     const shut = () => { clearTimeout(t); p.classList.remove("open"); h.classList.remove("on"); };
     const later = () => { clearTimeout(t); t = setTimeout(shut, 260); };
-    h.addEventListener("mouseenter", () => { clearTimeout(t); t = setTimeout(open, 60); });
-    h.addEventListener("mouseleave", later);
+    h.addEventListener("mouseenter", () => { t0 = performance.now(); open(); });     // at once
+    /* the mouse left the tab and its panel: brushed past (under 100 ms since it came onto the tab) → gone fast; meant it → the usual slide away */
+    const away = (e) => { if (e.relatedTarget && (p.contains(e.relatedTarget) || h.contains(e.relatedTarget))) return clearTimeout(t);
+      if (performance.now() - t0 < 100) { p.classList.add("quick"); shut(); } else later(); };
+    h.addEventListener("mouseleave", away);
     h.addEventListener("click", () => (p.classList.contains("open") ? shut() : open()));    // keyboard: Enter / Space
     p.addEventListener("mouseenter", () => clearTimeout(t));
-    p.addEventListener("mouseleave", later);
+    p.addEventListener("mouseleave", away);
     p.addEventListener("mouseover", (e) => { const a = e.target.closest("a.hni-hv"); if (a && !a.classList.contains("lock") && !a.classList.contains("here")) fetchAhead(a.getAttribute("href")); });
     p.addEventListener("click", (e) => { const it = e.target.closest(".hni-hv"); if (!it) return;
       if (it.classList.contains("here")) { e.preventDefault(); shut(); return; }

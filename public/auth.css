@@ -230,16 +230,18 @@ html.hni-nav .hnav, html.hni-nav #pf-btn, html.hni-nav #fund-btn, html.hni-nav #
 }
 .au-slot .hni-navbtn{margin-right:10px}
 /* computers: two pull tabs (auth.js mountEdges). Top centre \__v__/ → pages drop down side by side; left edge → slide in, stacked */
-.hni-edge{position:fixed;z-index:290;display:grid;place-items:center;padding:0;border:0;cursor:pointer;color:var(--au-bg);
-  background:var(--au-acc);opacity:.5;transition:opacity .15s}
-.hni-edge:hover,.hni-edge:focus-visible,.hni-edge.on{opacity:1;outline:none}
-.hni-edge .hni-chev{width:14px;height:14px;stroke-width:2.6}
-.hni-edge-top{top:0;left:50%;width:76px;height:17px;transform:translateX(-50%);clip-path:polygon(0 0,100% 0,84% 100%,16% 100%)}
-.hni-edge-side{left:0;top:50%;width:17px;height:76px;transform:translateY(-50%);clip-path:polygon(0 0,100% 16%,100% 84%,0 100%)}
+/* light: a faint tint of the accent with the accent chevron; a little stronger on hover */
+.hni-edge{position:fixed;z-index:290;display:grid;place-items:center;padding:0;border:0;cursor:pointer;color:var(--au-acc);
+  background:color-mix(in srgb,var(--au-acc) 22%,transparent);opacity:.6;transition:opacity .12s,background .12s}
+.hni-edge:hover,.hni-edge:focus-visible,.hni-edge.on{opacity:1;background:color-mix(in srgb,var(--au-acc) 34%,transparent);outline:none}
+.hni-edge .hni-chev{width:12px;height:12px;stroke-width:2.4}
+.hni-edge-top{top:0;left:50%;width:64px;height:13px;transform:translateX(-50%);clip-path:polygon(0 0,100% 0,84% 100%,16% 100%)}
+.hni-edge-side{left:0;top:50%;width:13px;height:64px;transform:translateY(-50%);clip-path:polygon(0 0,100% 16%,100% 84%,0 100%)}
 .hni-edge-side .hni-chev{transform:rotate(-90deg)}
 .hni-pan{position:fixed;z-index:295;background:var(--au-bg);border:1px solid var(--au-line);box-shadow:0 14px 36px rgba(0,0,0,.32);
   visibility:hidden;transition:transform .2s ease-in,visibility 0s linear .2s}
 .hni-pan.open{visibility:visible;transition:transform .28s cubic-bezier(.2,.8,.2,1),visibility 0s}
+.hni-pan.quick{transition:transform .07s ease-in,visibility 0s linear .07s}       /* brushed past the tab: away at once */
 /* top: one line, drops down from the top centre */
 .hni-pan-top{top:0;left:50%;width:max-content;max-width:calc(100vw - 32px);border-top:0;border-radius:0 0 12px 12px;transform:translate(-50%,calc(-100% - 20px))}
 .hni-pan-top.open{transform:translate(-50%,0)}
@@ -249,11 +251,11 @@ html.hni-nav .hnav, html.hni-nav #pf-btn, html.hni-nav #fund-btn, html.hni-nav #
 .hni-pl{display:flex}
 .hni-pan-side .hni-pl{flex-direction:column}
 /* the lip: the same tab on the panel's edge (chevron turned: pull back) */
-.hni-lip{position:absolute;display:grid;place-items:center;color:var(--au-bg);background:var(--au-acc)}
-.hni-lip .hni-chev{width:14px;height:14px;stroke-width:2.6}
-.hni-pan-top .hni-lip{left:50%;bottom:-17px;width:76px;height:17px;transform:translateX(-50%);clip-path:polygon(0 0,100% 0,84% 100%,16% 100%)}
+.hni-lip{position:absolute;display:grid;place-items:center;color:var(--au-acc);background:color-mix(in srgb,var(--au-acc) 34%,var(--au-bg))}
+.hni-lip .hni-chev{width:12px;height:12px;stroke-width:2.4}
+.hni-pan-top .hni-lip{left:50%;bottom:-13px;width:64px;height:13px;transform:translateX(-50%);clip-path:polygon(0 0,100% 0,84% 100%,16% 100%)}
 .hni-pan-top .hni-lip .hni-chev{transform:rotate(180deg)}
-.hni-pan-side .hni-lip{right:-17px;top:50%;width:17px;height:76px;transform:translateY(-50%);clip-path:polygon(0 0,100% 16%,100% 84%,0 100%)}
+.hni-pan-side .hni-lip{right:-13px;top:50%;width:13px;height:64px;transform:translateY(-50%);clip-path:polygon(0 0,100% 16%,100% 84%,0 100%)}
 .hni-pan-side .hni-lip .hni-chev{transform:rotate(90deg)}
 /* the pages */
 .hni-hv{position:relative;display:flex;align-items:center;gap:8px;color:var(--au-ink);transition:background .12s}
