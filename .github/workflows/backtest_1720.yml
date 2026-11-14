@@ -1,0 +1,29 @@
+# Backtest 2017-2020 (rough): Actions → "Backtest 2017-2020" → Run workflow. Takes ~5 min.
+# The result table shows on the run's page (Summary); the weekly curve CSV is under Artifacts.
+name: Backtest 2017-2020
+run-name: Backtest 2017-2020
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install pandas numpy
+      - name: Get the price data (eod2_data, ~570 MB)
+        run: git clone --depth 1 https://github.com/BennyThadikaran/eod2_data.git
+      - name: Run
+        run: python backtests/bt1720.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backtest-2017-2020
+          path: |
+            backtests/bt1720_curve.csv
+            backtests/bt1720_result.md
