@@ -1095,6 +1095,23 @@ def write_builder_etf(out: Path) -> int:
 ETF_SYMS_B = ["GOLDBEES", "ITBEES", "ALPHA", "JUNIORBEES", "MON100", "HNGSNGBEES", "FMCGIETF"]   # 4-decimal columns in builder_daily.json
 
 
+def write_builder_switch(out: Path) -> int:
+    """etf_prices/switch_weekly.json (fetch_prices.py: weekly closes of the Smallcap 250 index + LIQUIDBEES, GILT5YBEES, NIFTYBEES,
+    GOLDBEES) → public/builder_switch.json for the market switch (PF Builder 1Y adj + the Portfolio check). Returns the weeks written."""
+    src = BASE / "etf_prices" / "switch_weekly.json"
+    if not src.exists():
+        print("  builder_switch.json: etf_prices/switch_weekly.json not there yet — run fetch_prices.py --switch-only (or price part 1) once")
+        return 0
+    try:
+        data = json.loads(src.read_text(encoding="utf-8"))
+        out.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
+        print(f"  builder_switch.json: {len(data.get('dates', []))} weeks of {', '.join(data.get('s', {}))} (to {data.get('asOf')})")
+        return len(data.get("dates", []))
+    except Exception as e:
+        print(f"  [WARN] builder_switch.json not written ({e})")
+        return 0
+
+
 def write_builder_daily(out: Path) -> int:
     """etf_prices/daily_close.csv (saved by fetch_prices.py, committed to the repo) → public/builder_daily.json for the
     Portfolio Builder's day-by-day portfolio chart:
@@ -1169,6 +1186,7 @@ def build(deploy=False):
     n_nse = write_nse_list(OUTPUT.parent / "nse_all.json")
     write_builder_etf(OUTPUT.parent / "builder_etf.json")   # Portfolio Builder: ETF prices / 3-month returns
     write_builder_daily(OUTPUT.parent / "builder_daily.json")   # Portfolio Builder: saved daily ETF closes (backtest charts)
+    write_builder_switch(OUTPUT.parent / "builder_switch.json")   # market switch: Smallcap 250 weekly closes + the 4 waiting places
     try:
         write_builder_monthly(OUTPUT.parent)                    # Portfolio Builder 1Y adj: month-by-month prices of every stock
     except Exception:

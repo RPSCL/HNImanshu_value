@@ -87,6 +87,13 @@ ETF_SYMS    = ["GOLDBEES", "ITBEES", "ALPHA", "JUNIORBEES", "MON100", "HNGSNGBEE
 #   and every stock of the page's 1-year-back list day by day. build.py turns daily_close.csv into public/builder_daily.json.
 ETF_DIR     = BASE / "etf_prices"
 DAILY_CSV   = ETF_DIR / "daily_close.csv"
+# Market switch (PF Builder → Momentum): weekly closes of the Smallcap 250 index (the signal: its 20-week average) and of the 4 places
+# the Momentum money can wait in (cash, bonds, Nifty, gold). ~3 years, oldest first → etf_prices/switch_weekly.json (build.py copies it
+# to public/builder_switch.json). Fetched with part 1 and --etf-only; --switch-only fetches just these.
+SWITCH_JSON  = ETF_DIR / "switch_weekly.json"
+SWITCH_INDEX = {"^SMLCAP250": {"niftysmlcap250", "niftysmallcap250"}}   # Angel index names, spaces removed, lower case
+SWITCH_ETFS  = ["LIQUIDBEES", "GILT5YBEES", "NIFTYBEES", "GOLDBEES"]
+SWITCH_DAYS  = 1100
 DAILY_LEAD  = 10                          # extra days kept before (data date − 365)
 BACK_DAYS   = 365                         # must match fundamentals.BACK_DAYS
 KEEP_ASKED_DAYS = 60                      # PF Builder stocks nobody asked for in this many days leave the saved prices (ETFs + NIFTY 500 never do)
@@ -234,6 +241,13 @@ def build_token_map(master):
 		if any(n.replace(" ", "").lower() in BENCH_NAMES for n in names):
 			out[BENCH_SYM] = (str(m.get("symbol")), str(m["token"]))
 			break
+	for m in nse:                                                    # market switch index (Smallcap 250)
+		if str(m.get("instrumenttype", "")).upper() != "AMXIDX":
+			continue
+		names = {str(m.get("symbol", "")).replace(" ", "").lower(), str(m.get("name", "")).replace(" ", "").lower()}
+		for k, want in SWITCH_INDEX.items():
+			if k not in out and names & want:
+				out[k] = (str(m.get("symbol")), str(m["token"]))
 	return out
 
 
@@ -702,6 +716,40 @@ def run_yearly(limit=0, symbols_arg="", part=0):
 	return 0 if n_ok else 1
 
 
+def fetch_switch(tmap, api=None):
+	"""Weekly closes (last session of each week, split-adjusted) of the Smallcap 250 index + LIQUIDBEES, GILT5YBEES, NIFTYBEES,
+	GOLDBEES for ~3 years → etf_prices/switch_weekly.json {"asOf", "dates": [last session date of each week], "s": {SYM: [close]}}.
+	Never fatal: a failure keeps the last saved file."""
+	try:
+		api = api or Angel()
+		end = datetime.now(IST).date(); start = end - timedelta(days=SWITCH_DAYS)
+		weekly = {}
+		for s in list(SWITCH_INDEX) + SWITCH_ETFS:
+			if s not in tmap:
+				log(f"  Market switch: {s} not found in Angel's list"); continue
+			try:
+				c = api.candles(tmap[s][1], start, end)
+			except Exception as ex:
+				log(f"  Market switch: {s} failed ({ex})"); continue
+			if not c:
+				continue
+			ser = pd.Series({pd.Timestamp(d): v for d, v in adjusted_closes(c)}).sort_index()
+			last = ser.groupby(ser.index.to_period("W-FRI")).tail(1)                    # the last session of each week
+			weekly[file_name(s)] = {str(t.to_period("W-FRI").end_time.date()): (str(t.date()), float(v)) for t, v in last.items()}
+		if "SMLCAP250" not in weekly:
+			log("  Market switch: Smallcap 250 index not fetched — switch_weekly.json kept as it was"); return False
+		weeks = sorted(weekly["SMLCAP250"])
+		data = {"asOf": weekly["SMLCAP250"][weeks[-1]][0], "dates": [weekly["SMLCAP250"][w][0] for w in weeks],
+		        "s": {k: [round(v[w][1], 4) if w in v else None for w in weeks] for k, v in weekly.items()}}
+		ETF_DIR.mkdir(parents=True, exist_ok=True)
+		SWITCH_JSON.write_text(json.dumps(data, separators=(",", ":")))
+		log(f"  Market switch: {len(weeks)} weeks ({data['dates'][0]} … {data['asOf']}) of {', '.join(weekly)} → {SWITCH_JSON.relative_to(BASE)}")
+		return True
+	except Exception as ex:
+		log(f"  [WARN] Market switch series not saved: {ex}")
+		return False
+
+
 def prices_age_days():
 	"""Age of prices.csv in days from its newest FETCHED_AT (file times are reset by every git checkout),
 	falling back to the last git commit of the file. None = no usable prices.csv yet."""
@@ -766,7 +814,11 @@ def main():
 	ap.add_argument("--yearly", action="store_true",
 	                help="prices_yearly.csv: split-adjusted close on 1 July of each year since 2019 (3 lists + NIFTY 500), "
 	                     "for the Valuation page's owner-earnings backtest. --limit / --symbols for a partial run")
+	ap.add_argument("--switch-only", action="store_true",
+	                help="only the market switch series (Smallcap 250 index + LIQUIDBEES, GILT5YBEES, NIFTYBEES, GOLDBEES weekly) → etf_prices/switch_weekly.json")
 	a = ap.parse_args()
+	if a.switch_only:
+		return 0 if fetch_switch(build_token_map(scrip_master())) else 1
 	if a.yearly:
 		return run_yearly(a.limit, a.symbols, a.part or 0)
 	if a.history:
@@ -843,6 +895,8 @@ def main():
 			log(f"{n0 - len(todo)} of {n0} symbols were fetched in the last {FRESH_HOURS:g} h: kept as they are (--refetch to fetch them again)")
 		if not todo:
 			log("Nothing to fetch: every symbol of this part is recent.")
+			if a.part in (None, 1):
+				fetch_switch(tmap)                                   # the market switch series: every part-1 run
 			return 0
 
 	api = Angel()
@@ -978,6 +1032,8 @@ def main():
 			save_etf_history(etf_raw, etf_close, asof)
 		except Exception as ex:
 			log(f"  [WARN] etf_prices/ not saved: {ex}")
+	if a.etf_only or a.part in (None, 1):
+		fetch_switch(tmap, api)                                      # market switch: Smallcap 250 index + the 4 waiting places, weekly
 	n_ca = int(out["CORP_ACTIONS"].fillna("").str.len().gt(0).sum())
 	log(f"Done → {OUT_CSV.name}: {n_ok} ok, {n_fail} failed / not mapped, {n_ca} with a split / bonus detected")
 	return 0 if n_ok else 1

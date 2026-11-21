@@ -1486,6 +1486,16 @@ table.chk-t td small.chk-why{white-space:normal;line-height:1.35;margin-top:3px;
 .exr .exrow select{height:36px;padding:0 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:500 13px var(--sans);width:100%}
 .exr .exrow small{font-size:11px;color:var(--mute)}
 .exr .ex-sum{margin:12px 0 4px}
+.exr .exrow.ms{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;font-size:13px;color:var(--ink)}
+.exr .exrow.ms input[type=number]{width:64px;height:34px;padding:0 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:600 13px var(--mono);text-align:right}
+.exr .exrow.ms select{width:auto;max-width:100%}
+.exr .exrow.ms.off > :not(.ex-ck){opacity:.45}
+.exr .ex-ck{display:inline-flex!important;flex-direction:row!important;align-items:center;gap:8px;font-weight:600;cursor:pointer}
+.exr .ex-ck input{width:16px;height:16px;accent-color:var(--brass)}
+.exr .ex-msnow,.chk-ms{margin:10px 0 0;font:500 12px var(--mono);color:var(--mute);line-height:1.5}
+.exr .ex-msnow b.o,.chk-ms b.o{color:#e07a5f}.exr .ex-msnow b.i,.chk-ms b.i{color:var(--good)}
+.chk-ms{margin:10px 0;padding:8px 12px;border:1px solid var(--line);border-radius:10px}
+.chk-ms.o{border-color:#e07a5f}
 .chk-h .chk-cp{margin-left:auto;height:24px;padding:0 9px;font-size:11px;text-transform:none;letter-spacing:0}
 table.chk-t td.r,table.chk-t th.r{text-align:right;white-space:nowrap}
 table.chk-t .up{color:var(--good)} table.chk-t .dn{color:var(--bad)}
@@ -4242,6 +4252,36 @@ window.pbCfg = pbCfg; window.pbMomOk = pbMomOk;
    ({m: Momentum, v: Value, e: Index ETFs}: 'W' every weekly data date, or 1 / 2 / 3 / 6 / 12 months: the first weekly data date of
    the month), and a holding off its list is sold at the next re-pick at once (no 2-week wait), exactly as in the backtest. */
 const SB = () => { const b = Object.assign({buf: 20, band: 2, win: true, trl: 0, mk: 80, cad: null, sync: false}, FF.sb || {}); delete b.trail; return b; };
+/* ---------- market switch (Momentum) = builder.html MS_* / msCalc ----------
+   Smallcap 250 weekly close vs its wk-week average: dn % below → every Momentum stock is sold and the money waits in 'to'
+   (cash / bonds / Nifty / gold, or each week the strongest of the 4 by 0.5 x 6M + 0.5 x 12M); back when it closes up % above.
+   Weekly closes: builder_switch.json (fetch_prices.py). Kept in your account with the exit rules (FF.sb.ms). */
+const MS_DEF = {on: false, dn: 3, wk: 20, to: 'GOLDBEES', up: 1};
+const MS_TO = [['LIQUIDBEES', 'Cash (LIQUIDBEES)'], ['GILT5YBEES', 'Bonds (GILT5YBEES)'], ['NIFTYBEES', 'Nifty 50 (NIFTYBEES)'], ['GOLDBEES', 'Gold (GOLDBEES)'], ['BEST', 'The strongest of these 4, every week']];
+const MS_ALT = ['LIQUIDBEES', 'GILT5YBEES', 'NIFTYBEES', 'GOLDBEES'], MS_CASH = 6.5;
+function msNorm(v) { v = v && typeof v === 'object' ? v : {}; const n = (x, d, lo, hi) => { x = +x; return Number.isFinite(x) && x >= lo && x <= hi ? x : d; };
+  return {on: !!v.on, dn: n(v.dn, MS_DEF.dn, 0, 30), wk: Math.round(n(v.wk, MS_DEF.wk, 4, 60)), to: MS_TO.some(t => t[0] === v.to) ? v.to : MS_DEF.to, up: n(v.up, MS_DEF.up, 0, 30)}; }
+let PB_SW = null;
+function msCalc(S, c) {
+  if (!S || !Array.isArray(S.dates) || !S.s || !S.s.SMLCAP250) return null;
+  const n = S.dates.length, cl = S.s.SMLCAP250, t0 = Date.parse(S.dates[0]);
+  const px = {}; MS_ALT.forEach(k => { px[k] = k === 'LIQUIDBEES' ? S.dates.map(d => 1000 * Math.pow(1 + MS_CASH / 100, (Date.parse(d) - t0) / 3.15576e10)) : (S.s[k] || []).slice(); });
+  const ma = [], gap = [], out = [], best = [], sc = {}; MS_ALT.forEach(k => sc[k] = []);
+  let o = false;
+  for (let i = 0; i < n; i++) {
+    let m = null; if (i >= c.wk - 1) { let t = 0, k = 0; for (let j = i - c.wk + 1; j <= i; j++) if (ok(cl[j])) { t += cl[j]; k++; } m = k === c.wk ? t / k : null; }
+    ma.push(m); const g = ok(cl[i]) && m ? (cl[i] / m - 1) * 100 : null; gap.push(g);
+    if (g != null) { if (!o && g < -c.dn) o = true; else if (o && g > c.up) o = false; }
+    out.push(o);
+    let bk = null, bv = -Infinity;
+    MS_ALT.forEach(k => { const p = px[k], a = p[i], b6 = p[i - 26], b12 = p[i - 52];
+      const v = ok(a) && ok(b6) ? (ok(b12) ? 0.5 * (a / b6 - 1) * 100 + 0.5 * (a / b12 - 1) * 100 : (a / b6 - 1) * 100) : null;
+      sc[k].push(v); if (v != null && v > bv) { bv = v; bk = k; } });
+    best.push(bk || 'GOLDBEES');
+  }
+  return {S, c, n, cl, ma, gap, out, best, sc, px, to: i => c.to === 'BEST' ? best[i] : c.to};
+}
+const msTxt = m => m && m.on ? `Market switch: Smallcap 250 ${m.dn}% under its ${m.wk}-week average → Momentum to ${(MS_TO.find(t => t[0] === m.to) || [, m.to])[1]}; back at ${m.up}% above` : '';
 /* the exit rules' choices = PF Builder → 1Y adj's (builder.html ADJ_*), and its starting re-pick schedule */
 const EX_M = ['W', 1, 2, 3, 6], EX_V = ['W', 1, 3, 6, 12], EX_E = ['W', 1, 3, 6], EX_BUF = [0, 10, 15, 20, 25, 30], EX_BAND = [1, 1.5, 2, 2.5, 3],
   EX_MK = [0, 60, 70, 80, 90], EX_TR = [0, 10, 15, 20, 25, 30, 40], EX_CAD = {m: 1, v: 3, e: 'W'};
@@ -4253,11 +4293,13 @@ function exPlain(B) {
     repick: `Momentum ${pbEvery(cd.m)} · Value ${pbEvery(cd.v)} · Index ETFs ${pbEvery(cd.e)}. Between re-picks nothing is sold or bought.`,
     sold: `off its list at a re-pick: fails a screen limit${B.buf ? ` even loosened ${B.buf}%` : ''}, a hard limit (circuit days, value trap …), or ranks below the top N${B.band > 1 ? ' × ' + B.band : ''}.`,
     never: [B.mk ? `momentum ≥ ${B.mk}` : '', B.win ? `in profit${B.trl ? ` (until ${B.trl}% below its high since bought)` : ' (never cut)'}` : ''].filter(Boolean).join(' · ') || 'nothing: every holding off its list is sold',
-    etf: 'Index ETFs: a pair slot switches to the other ETF when it leads; the always-held ETFs go only if they leave the index part.'};
+    etf: 'Index ETFs: a pair slot switches to the other ETF when it leads; the always-held ETFs go only if they leave the index part.',
+    ms: msTxt(msNorm(B.ms))};
 }
 /* Exit rules window (Portfolio page): change them here or in PF Builder → 1Y adj; both read the same account copy */
-function pfExitOpen() {
-  const B = SB(), cd = exCad(B), wk = D.asOf;
+async function pfExitOpen() {
+  const B = SB(), cd = exCad(B), wk = D.asOf, MS0 = msNorm(B.ms);
+  try { PB_SW = PB_SW || await fetch('builder_switch.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null); } catch (e) { PB_SW = null; }
   const opts = (vals, cur, lab) => { const L = vals.slice(); if (!L.some(v => String(v) === String(cur))) L.push(cur);
     return L.map(v => `<option value="${v}"${String(v) === String(cur) ? ' selected' : ''}>${esc(lab(v))}</option>`).join(''); };
   const per = v => v === 'W' ? 'Every week' : +v === 1 ? 'Every month' : `Every ${v} months`;
@@ -4274,21 +4316,35 @@ function pfExitOpen() {
       ${sel('mk', EX_MK, B.mk, v => +v ? `Momentum ≥ ${v}` : 'Off', 'Strong momentum')}
       ${sel('win', [1, 0], B.win ? 1 : 0, v => +v ? 'Yes, while in profit' : 'No', 'A winner')}
       <label class="ex-tr"${B.win ? '' : ' hidden'}><span>Unless it falls</span><select name="trl">${opts(EX_TR, B.trl, v => +v ? `${v}% off its high` : 'Never cut')}</select></label></div></div>
+    <div class="exg"><h4>Market switch <small>Momentum only · checked every week</small></h4><div class="exrow ms">
+      <label class="ex-ck"><input type="checkbox" name="mson"${MS0.on ? ' checked' : ''}> On</label>
+      <span>When the weekly close of the Smallcap 250 index falls</span><input type="number" name="msdn" value="${MS0.dn}" min="0" max="30" step="0.5"><span>% below its</span>
+      <input type="number" name="mswk" value="${MS0.wk}" min="4" max="60" step="1"><span>-week average, move the Momentum money to</span>
+      <select name="msto">${MS_TO.map(([v, t]) => `<option value="${v}"${v === MS0.to ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>
+      <span>Back to the Momentum stocks when it closes</span><input type="number" name="msup" value="${MS0.up}" min="0" max="30" step="0.5"><span>% above the average.</span></div>
+      <p class="ex-msnow"></p></div>
     <div class="chk-rules ex-sum"></div>
     <div class="pf-btns"><button type="button" class="btn ghost" data-def>Defaults</button><button type="submit" class="btn primary">Save</button></div></form>`, {noFocus: true, cls: 'ex-box'});
   const f = $('form', w);
   const read = () => ({m: f.m.value === 'W' ? 'W' : +f.m.value, v: f.v.value === 'W' ? 'W' : +f.v.value, e: f.e.value === 'W' ? 'W' : +f.e.value,
-    buf: +f.buf.value, band: +f.band.value, mk: +f.mk.value, win: f.win.value === '1', trl: +f.trl.value});
-  const show = () => { const x = read(), P = exPlain({buf: x.buf, band: x.band, mk: x.mk, win: x.win, trl: x.trl, cad: {m: x.m, v: x.v, e: x.e}});
+    buf: +f.buf.value, band: +f.band.value, mk: +f.mk.value, win: f.win.value === '1', trl: +f.trl.value,
+    ms: msNorm({on: f.mson.checked, dn: f.msdn.value, wk: f.mswk.value, to: f.msto.value, up: f.msup.value})});
+  const show = () => { const x = read(), P = exPlain({buf: x.buf, band: x.band, mk: x.mk, win: x.win, trl: x.trl, cad: {m: x.m, v: x.v, e: x.e}, ms: x.ms});
+    w.querySelector('.exrow.ms').classList.toggle('off', !x.ms.on);
+    const C = msCalc(PB_SW, x.ms), mi = C ? C.n - 1 : -1;
+    w.querySelector('.ex-msnow').innerHTML = !C ? 'Smallcap 250 weekly closes are not in yet (they come with the weekly price update).'
+      : `Week of ${esc(PB_SW.dates[mi])}: Smallcap 250 ${fmt(C.cl[mi], 0)} · ${x.ms.wk}-week avg ${C.ma[mi] ? fmt(C.ma[mi], 0) : '–'} (${C.gap[mi] == null ? '–' : (C.gap[mi] > 0 ? '+' : '') + fmt(C.gap[mi], 1) + '%'}) → `
+        + (C.out[mi] ? `<b class="o">OUT: Momentum waits in ${esc(C.to(mi))}</b>` : '<b class="i">IN: Momentum stocks</b>') + (x.ms.on ? '' : ' <i>(switch is off)</i>');
     $('.ex-tr', w).hidden = !x.win;
     ['m', 'v', 'e'].forEach(k => { const el = w.querySelector(`[data-due="${k}"]`); if (el) el.textContent = due(x[k]); });
     $('.ex-sum', w).innerHTML = `<b>In plain words</b><ul><li><span>Re-pick</span><div>${esc(P.repick)}</div></li><li><span>Sold when</span><div>${esc(P.sold)}</div></li>
-      <li><span>Never sold</span><div>${esc(P.never)}.</div></li><li><span>ETFs</span><div>${esc(P.etf)}</div></li></ul>`; };
+      <li><span>Never sold</span><div>${esc(P.never)}.</div></li>${P.ms ? `<li><span>Switch</span><div>${esc(P.ms)}. Every Momentum stock is sold then, whatever the rules above.</div></li>` : ''}<li><span>ETFs</span><div>${esc(P.etf)}</div></li></ul>`; };
   f.addEventListener('change', show); show();
   $('[data-def]', w).addEventListener('click', () => { f.m.value = String(EX_CAD.m); f.v.value = String(EX_CAD.v); f.e.value = EX_CAD.e;
-    f.buf.value = '20'; f.band.value = '2'; f.mk.value = '80'; f.win.value = '1'; f.trl.value = '0'; show(); });
+    f.buf.value = '20'; f.band.value = '2'; f.mk.value = '80'; f.win.value = '1'; f.trl.value = '0';
+    f.mson.checked = false; f.msdn.value = MS_DEF.dn; f.mswk.value = MS_DEF.wk; f.msto.value = MS_DEF.to; f.msup.value = MS_DEF.up; show(); });
   f.addEventListener('submit', async e => { e.preventDefault(); const x = read();
-    FF.sb = Object.assign({}, SB(), {buf: x.buf, band: x.band, mk: x.mk, win: x.win, trl: x.trl, cad: {m: x.m, v: x.v, e: x.e}, sync: true,
+    FF.sb = Object.assign({}, SB(), {buf: x.buf, band: x.band, mk: x.mk, win: x.win, trl: x.trl, cad: {m: x.m, v: x.v, e: x.e}, ms: x.ms, sync: true,
       syncAt: new Date(Date.now() + 19800000).toISOString().slice(0, 10)});
     ffSave(); w._close(); toast('Exit rules saved: PF Builder → 1Y adj uses them too');
     await pfChkRefresh(); });
@@ -4438,12 +4494,48 @@ async function pfChkCalc() {
     Object.keys(E).forEach(k => { const m = E[k].mom || []; sc[k] = ok(m[1]) && ok(m[2]) ? 0.5 * m[1] + 0.5 * m[2] : null; });
     if (Object.keys(E).length) {
       const pk = pbEtfPick(sc); res.pairs = pk.notes;
-      if (parts.includes('ETF pair')) diff('ETF pair', [...new Set(pk.notes.map(n => n.win))], 'ETF pairs: composite 6M/12M momentum');
+      if (parts.includes('ETF pair')) {
+        /* pair slots, counted by value: the index part = one equal slot per pair + one per always-held ETF. GOLDBEES can fill both
+           pair slots, ALPHA one pair slot on top of its always-held one. A slot that moved to the other ETF = that slot's share sold
+           (not the whole holding) and the other ETF bought with it. */
+        const nSlot = PB_PAIRS.length + PB_ALWAYS.length, etfV = r0 => r0 && (r0.tq || {}).ETF > 0 ? (r0.value || 0) * pfPart(r0, 'ETF').sh : 0;
+        const sv = P.open.reduce((t, r0) => t + etfV(r0), 0) / nSlot, want = {};
+        pk.notes.forEach(n => { want[n.win] = (want[n.win] || 0) + 1; });
+        const pairWhy = pk.notes.map(n => `${n.c} vs ${n.d} → ${n.win}`).join(' · ');
+        if (!(sv > 0)) diff('ETF pair', [...new Set(pk.notes.map(n => n.win))], 'ETF pairs: composite 6M/12M momentum');
+        else [...new Set(PB_PAIRS.flat())].forEach(sym => {
+          const r0 = P.open.find(o => o.sym === sym), al = PB_ALWAYS.includes(sym) ? 1 : 0, all = r0 ? Math.max(1, Math.round(etfV(r0) / sv)) : 0;
+          const heldN = r0 ? Math.max(0, all - al) : 0, w = want[sym] || 0;
+          if (heldN > w && r0) {
+            const q = Math.round(pfPart(r0, 'ETF').q * (heldN - w) / (heldN + al));
+            if (q > 0) res.out.push({sym, part: 'ETF pair', qty: q, slots: heldN - w,
+              why: `${heldN} pair slot${heldN > 1 ? 's' : ''} held, ${w} wanted now (${pairWhy}): sell ${heldN - w} slot${heldN - w > 1 ? 's' : ''}`});
+          } else if (w > heldN) res.inn.push({sym, part: 'ETF pair', slots: w - heldN, note: `${w - heldN} pair slot${w - heldN > 1 ? 's' : ''} to fill (${pairWhy})`});
+        });
+      }
       if (parts.includes('ETF')) {                                         // ETFs held all the time: out only if no longer anywhere in the index part
         const all = new Set(pk.list);
         has('ETF').forEach(r => { if (!all.has(r.sym)) res.out.push({sym: r.sym, part: 'ETF'}); });
         PB_ALWAYS.forEach(x => { if (!held.has(x)) res.inn.push({sym: x, part: 'ETF'}); });
       }
+    }
+  }
+  /* market switch (Momentum, your exit rules): OUT = every Momentum stock sold, the money waits in one ETF; back IN = that ETF sold */
+  const MS = msNorm(SB().ms);
+  if (MS.on && parts.includes('Momentum')) {
+    try { PB_SW = PB_SW || await fetch('builder_switch.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null); } catch (e) { PB_SW = null; }
+    const C = msCalc(PB_SW, MS);
+    if (C) {
+      const i = C.n - 1, to = C.to(i), g = C.gap[i], gTxt = g == null ? '–' : (g > 0 ? '+' : '') + fmt(g, 1) + '%';
+      res.ms = {C, i, out: C.out[i], to, gap: g, cfg: MS, date: PB_SW.dates[i]};
+      const held = has('Momentum');
+      if (C.out[i]) {
+        res.out = res.out.filter(x => x.part !== 'Momentum'); res.inn = res.inn.filter(x => x.part !== 'Momentum');
+        held.forEach(r0 => { if (r0.sym !== to) res.out.push({sym: r0.sym, part: 'Momentum', force: true,
+          why: `Market switch OUT: the Smallcap 250 closed more than ${MS.dn}% under its ${MS.wk}-week average (now ${gTxt}; back above +${MS.up}%) · the Momentum money waits in ${to}`}); });
+        if (!held.some(r0 => r0.sym === to)) res.inn.push({sym: to, part: 'Momentum', msAlt: true, note: 'Market switch OUT: all the Momentum money waits here'});
+      } else res.out.forEach(x => { if (x.part === 'Momentum' && MS_ALT.includes(x.sym)) { x.force = true; x.msIn = true;
+        x.why = `Market switch back IN: Smallcap 250 ${gTxt} vs its ${MS.wk}-week average (back above +${MS.up}%) · sell, then buy the Momentum list`; } });
     }
   }
   const byName = new Map(); res.inn.forEach(x => byName.set(x.part + x.sym, x)); res.inn = [...byName.values()];
@@ -4454,7 +4546,8 @@ async function pfChkCalc() {
   const wait = x => { const d = DUE[x.part]; if (d && !d.due && (x.stage === 'sell' || x.stage === 'watch')) { x.stage = 'wait'; x.why = `${x.part} re-picks ${pbEvery(CAD[x.part === 'Value' ? 'v' : x.part === 'Momentum' ? 'm' : 'e'])}: decided at the next re-pick (${d.next}) · ` + x.why; } };
   const pk = Object.assign({}, FF.pk || {}), pkSeen = new Set(), openBy = new Map(P.open.map(r => [r.sym, r]));
   res.out.forEach(x => {
-    if (x.part === 'ETF' || x.part === 'ETF pair') { x.stage = 'sell'; x.why = x.part === 'ETF pair' ? 'the slot now holds the other ETF' : 'no longer in the index part'; wait(x); return; }
+    if (x.force) { x.stage = 'sell'; return; }                          // market switch: weekly, no hold rules, no re-pick wait
+    if (x.part === 'ETF' || x.part === 'ETF pair') { x.stage = 'sell'; x.why = x.why || (x.part === 'ETF pair' ? 'the slot now holds the other ETF' : 'no longer in the index part'); wait(x); return; }
     const s0 = TODAY.get(x.sym), W = L.F && L.F[x.part] ? pbWhy(s0, L.F[x.part]) : {hard: false, why: []};
     const rank = L.rank && L.rank[x.part] ? L.rank[x.part].get(x.sym) : null, n = (L.C[x.part === 'Value' ? 'value' : 'mom'] || {}).n || 0;
     if (!W.why.length) W.why.push(rank ? `ranks ${rank}: outside the top ${n}` + (n ? ` (sell outside the top ${Math.ceil(n * B.band)})` : '') : 'not in the list (list / PSU / recent listing)');
@@ -4479,7 +4572,8 @@ async function pfChkCalc() {
     x.stage = sz[key] === wk ? 'watch' : 'sell';
     x.since = sz[key];
   });
-  res.inn.forEach(x => { const d = DUE[x.part]; if (d && !d.due) x.wait = d.next; });   // bought only at the part's re-pick
+  const msNow = res.ms && (res.ms.out || res.out.some(x => x.msIn));    // the market switch acts every week: its buys never wait
+  res.inn.forEach(x => { const d = DUE[x.part]; if (d && !d.due && !(msNow && x.part === 'Momentum')) x.wait = d.next; });   // bought only at the part's re-pick
   Object.keys(sz).forEach(k => { if (!seen.has(k)) delete sz[k]; });
   /* peaks: also kept for winners still on the list (so the trail starts from their real high once they leave it) */
   rows.forEach(r0 => { const o = openBy.get(r0.sym); if (!o || !ok(o.ltp)) return;
@@ -4518,11 +4612,11 @@ async function pfChkOpen() {
      (each profit carries its share of the tax) */
   const FUND = {}, NEED = {}, SALES = [];
   (c.sell || []).forEach(x => { const h = H.get(x.sym); const px = pfLtp(x.sym); if (!h || !(px > 0)) return;
-    const pa = pfPart(h, x.part), q = pa.q, v = q * px, ch = pfCharges('sell', q, px);
-    SALES.push({k: partOf(x), net: v - ch, g: (px - (pa.avg || px)) * q - ch}); });
+    const pa = pfPart(h, x.part), q = x.qty != null ? x.qty : pa.q, v = q * px, ch = pfCharges('sell', q, px);   // qty: a pair slot's share only
+    SALES.push({k: partOf(x), net: v - ch, g: (px - (pa.avg || px)) * q - ch, n: x.msIn ? Math.max(1, (c.C && c.C.mom && c.C.mom.n) || 20) : 1}); });
   const GP = SALES.reduce((a, x) => a + Math.max(0, x.g), 0), GL = SALES.reduce((a, x) => a + Math.max(0, -x.g), 0), TAXT = 0.2 * Math.max(0, GP - GL);
   SALES.forEach(x => { const tax = x.g > 0 && GP > 0 ? TAXT * x.g / GP : 0;
-    FUND[x.k] = (FUND[x.k] || 0) + x.net - tax; NEED[x.k] = (NEED[x.k] || 0) + 1; });
+    FUND[x.k] = (FUND[x.k] || 0) + x.net - tax; NEED[x.k] = (NEED[x.k] || 0) + x.n; });   // back IN from the switch: the whole list
   const FUNDED = new Map(), cnt = {};
   (c.inn || []).forEach(x => { const k = partOf(x); if (x.wait || !FUND[k] || (cnt[k] || 0) >= NEED[k]) return; cnt[k] = (cnt[k] || 0) + 1; FUNDED.set(k + '|' + x.sym, true); });
   /* Value with fewer than N held (N = the Value "how many" you added with): each further new Value name gets an equal share, taken
@@ -4554,12 +4648,14 @@ async function pfChkOpen() {
   const pc = v => v == null ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + fmt(Math.abs(v), 2) + '%';
   const ud = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'dn' : '';
   const prt = x => { const r = H.get(x.sym) || {}, a = pfPart(r, x.part);       // only this part (a stock can be in Value and Momentum)
+    if (x.qty != null) { const pnl = r.priced && ok(a.avg) ? (r.ltp - a.avg) * x.qty : null;   // a pair slot's share of the holding
+      return {r, q: x.qty, all: r.qty, multi: x.qty < (r.qty || 0), pnl, pnlPct: pnl != null ? (r.ltp / a.avg - 1) * 100 : null}; }
     return {r, q: a.q != null ? Math.round(a.q) : null, all: a.all, multi: a.multi, pnl: r.priced ? (a.pnl != null ? a.pnl : r.pnl) : null, pnlPct: r.priced ? (a.pnlPct != null ? a.pnlPct : r.pnlPct) : null}; };
   const rowOut = x => { const z = prt(x), r = z.r;
     return `<tr>${nm(x).replace('</small></td>', `</small>${x.why ? `<small class="chk-why">${esc(x.why)}${x.stage === 'sell' && x.since ? ' · outside since ' + esc(x.since) : ''}</small>` : ''}</td>`)}<td>${esc(x.part)}</td><td class="r"${z.multi ? ` title="${esc(x.part)} part only: ${fmt(z.q, 0)} of the ${fmt(z.all, 0)} you hold"` : ''}>${z.q != null ? fmt(z.q, 0) : '–'}${z.multi ? `<small class="chk-of">of ${fmt(z.all, 0)}</small>` : ''}</td><td class="r ${ud(r.dayPct)}">${pc(r.dayPct)}</td>
       <td class="r ${ud(z.pnl)}">${z.pnl != null ? (z.pnl > 0 ? '+' : z.pnl < 0 ? '−' : '') + '₹' + fmt(Math.abs(z.pnl), 0) : '–'}</td><td class="r ${ud(z.pnlPct)}">${z.pnl != null ? pc(z.pnlPct) : '–'}</td></tr>`; };
   const rowIn = x => { const q = tent(x), px = pfLtp(x.sym);
-    return `<tr${q == null ? ' class="chk-nf"' : ''}>${nm(x).replace('</small></td>', TOP.names.has(x.sym) && x.part === 'Value' ? '</small><small class="chk-why">' + ('added toward ' + NV + ' Value holdings') + ': money taken equally from all of them</small></td>' : '</small></td>')}<td>${esc(x.part)}</td><td class="r">${px > 0 ? fmt(px, 2) : '–'}</td><td class="r"${q == null ? ` title="${x.wait ? 'Bought only at this part\'s re-pick (' + esc(x.wait) + ')' : 'Nothing of this part is on the Sell list (or the sales are spent on names above): not bought'}"` : ''}><b>${q != null ? fmt(q, 0) : '–'}</b></td></tr>`; };
+    return `<tr${q == null ? ' class="chk-nf"' : ''}>${nm(x).replace('</small></td>', TOP.names.has(x.sym) && x.part === 'Value' ? '</small><small class="chk-why">' + ('added toward ' + NV + ' Value holdings') + ': money taken equally from all of them</small></td>' : x.note ? '</small><small class="chk-why">' + esc(x.note) + '</small></td>' : '</small></td>')}<td>${esc(x.part)}</td><td class="r">${px > 0 ? fmt(px, 2) : '–'}</td><td class="r"${q == null ? ` title="${x.wait ? 'Bought only at this part\'s re-pick (' + esc(x.wait) + ')' : 'Nothing of this part is on the Sell list (or the sales are spent on names above): not bought'}"` : ''}><b>${q != null ? fmt(q, 0) : '–'}</b></td></tr>`; };
   const tbl = (t, a, cls, tip = '') => { const kind = cls === 'in' ? 'in' : 'out';
     return `<h4 class="chk-h ${cls}"${tip ? ` title="${esc(tip)}"` : ''}>${t} <span>${a.length}</span>${a.length ? `<button type="button" class="btn ghost chk-cp" data-cp="${cls}" title="Copy as a table: paste in Google Sheets">Copy</button>` : ''}</h4>` + (a.length
     ? `<div class="chk-tw"><table class="chk-t"><thead><tr>${kind === 'out'
@@ -4591,8 +4687,11 @@ async function pfChkOpen() {
     : `<p class="chk-sub">Only the parts you added are checked (<b>${esc(checked)}</b>), against today's PF Builder lists worked out with the settings you added them with.</p>
        ${c.adds.length ? addHtml(c.adds[0]) + (c.adds.length > 1 ? `<details class="chk-more"><summary>${c.adds.length - 1} earlier add${c.adds.length > 2 ? 's' : ''}</summary>${c.adds.slice(1, 4).map(addHtml).join('')}</details>` : '') : `<div class="chk-set">${c.C ? `<div><span>Value</span><b>${esc(pbSelTxt(c.C.value))}</b></div><div><span>Momentum</span><b>${esc(pbSelTxt(c.C.mom))}</b></div>` : ''}</div>`}
        ${c.pairs.length ? `<p class="chk-sub">${c.pairs.map(n => `${esc(n.c)} vs ${esc(n.d)}: ${esc(n.c)} ${ok(n.mc) ? fmt(n.mc, 1) : '–'} · ${esc(n.d)} ${ok(n.md) ? fmt(n.md, 1) : '–'} → slot holds <b>${esc(n.win)}</b>`).join('<br>')}</p>` : ''}
+       ${c.ms ? (() => { const m = c.ms, C = m.C, i = m.i;
+         return `<div class="chk-ms${m.out ? ' o' : ''}"><b>Market switch (Momentum)</b> · week of ${esc(m.date)}: Smallcap 250 ${fmt(C.cl[i], 0)} · ${m.cfg.wk}-week avg ${C.ma[i] ? fmt(C.ma[i], 0) : '–'} (${m.gap == null ? '–' : (m.gap > 0 ? '+' : '') + fmt(m.gap, 1) + '%'})
+           → ${m.out ? `<b class="o">OUT: sell every Momentum stock, the money waits in ${esc(m.to)}</b>` : '<b class="i">IN: Momentum stocks</b>'} · out below −${m.cfg.dn}%, back above +${m.cfg.up}%${m.cfg.to === 'BEST' ? '<br>Waiting places (0.5 × 6M + 0.5 × 12M): ' + MS_ALT.map(k => `${k} ${C.sc[k][i] == null ? '–' : fmt(C.sc[k][i], 1)}`).join(' · ') : ''}</div>`; })() : ''}
        ${c.sell ? (() => { const B = SB(), P = exPlain(B);
-         return `<div class="chk-exl"><div><span>Exit rules</span>${B.sync ? `<b>Re-pick</b> ${esc(P.repick.split('. Between')[0])} · <b>Never sold</b> ${esc(P.never)}`
+         return `<div class="chk-exl"><div><span>Exit rules</span>${B.sync ? `<b>Re-pick</b> ${esc(P.repick.split('. Between')[0])} · <b>Never sold</b> ${esc(P.never)}${P.ms ? ' · <b>' + esc(P.ms) + '</b>' : ''}`
            : 'Not set yet: a holding off its list is sold after 2 weekly data dates outside the buffer'}</div><button type="button" class="btn sm" data-exit>${B.sync ? 'Change' : 'Set'}</button></div>`; })()
          + tbl('Sell list', c.sell, 'sell', 'Outside the buffer for 2 weekly data dates in a row, or a hard exit (value-trap flag, circuit days, dividend stopped, Graham test). ETFs: no longer in the index part')
          + (c.wait && c.wait.length ? tbl('Waiting for the re-pick', c.wait, 'wait', 'Off the list now, but this part is re-picked only on its schedule: sold then if it is still off the list and not protected') : '')
