@@ -1312,6 +1312,7 @@ if __name__ == "__main__":
     if args.etf_only:
         n = write_builder_etf(OUTPUT.parent / "builder_etf.json")
         write_builder_daily(OUTPUT.parent / "builder_daily.json")
+        write_builder_switch(OUTPUT.parent / "builder_switch.json")   # market switch: Smallcap 250 weekly closes (fetched with the ETFs)
         sys.exit(0 if n else 1)          # no ETF priced → fail, so a stale file is never redeployed as "updated"
     build(args.deploy)
     write_build_info(OUTPUT.parent / "build_info.json")
