@@ -690,6 +690,13 @@ const SNAPK = {12: '1Y', 9: '9M', 6: '6M', 3: '3M', 1: '1M'}, SNAPS = [1, 3, 6, 
    'to' (cash / bonds / Nifty / gold, or every week the strongest of the 4); up % above it → back into the Momentum list.
    Kept in your account with the exit rules (FF.sb.ms; = fundamentals.py MS_*). Weekly closes: builder_switch.json (fetch_prices.py). */
 const MS_DEF = {on: false, dn: 3, wk: 20, to: 'GOLDBEES', up: 1};
+/* ETF pair switch (your exit rules, FF.sb.ep; = fundamentals.py EP_*): a pair slot holds the challenger when
+   [k × its score beats Gold's, and (pos) its score is above 0]  OR  [it leads Gold's score by gap points or more (gap 0 = off)] */
+const EP_DEF = {k: 0.8, pos: true, gap: 4};
+function epNorm(v) { v = v && typeof v === 'object' ? v : {}; const k = +v.k, g = +v.gap;
+  return {k: Number.isFinite(k) && k > 0 && k <= 2 ? k : EP_DEF.k, pos: v.pos === undefined ? EP_DEF.pos : !!v.pos, gap: Number.isFinite(g) && g >= 0 && g <= 50 ? g : EP_DEF.gap}; }
+const epWins = (mc, md, e) => num(mc) && (!num(md) || ((!e.pos || mc > 0) && e.k * mc > md) || (e.gap > 0 && mc - md >= e.gap));
+const epTxt = e => `${e.k} × its score beats Gold's${e.pos ? ' and its score is above 0' : ''}${e.gap > 0 ? `, or it leads Gold by ${e.gap} points or more` : ''}`;
 const MS_TO = [['LIQUIDBEES', 'Cash (LIQUIDBEES)'], ['GILT5YBEES', 'Bonds (GILT5YBEES)'], ['NIFTYBEES', 'Nifty 50 (NIFTYBEES)'], ['GOLDBEES', 'Gold (GOLDBEES)'], ['BEST', 'The strongest of these 4, every week']];
 const MS_ALT = ['LIQUIDBEES', 'GILT5YBEES', 'NIFTYBEES', 'GOLDBEES'], MS_CASH = 6.5;   // cash grows ~6.5% a year (LIQUIDBEES' price stays ~1,000)
 function msNorm(v) { v = v && typeof v === 'object' ? v : {}; const n = (x, d, lo, hi) => { x = +x; return Number.isFinite(x) && x >= lo && x <= hi ? x : d; };
@@ -721,7 +728,7 @@ let ADJ = (() => { let v = {}; try { v = JSON.parse(lsGet('pb_adj2') || '{}') ||
   return {m: v.m === 'W' ? 'W' : ADJ_MOM.includes(+v.m) ? +v.m : 1, e: v.e === 'W' || v.e === undefined ? 'W' : ADJ_ETF.includes(+v.e) ? +v.e : 'W', v: v.v === 'W' ? 'W' : ADJ_VAL.includes(+v.v) ? +v.v : 3,
     w: v.w === undefined ? true : !!v.w, t: ADJ_TR.includes(+v.t) ? +v.t : 0, mk: ADJ_MK.includes(+v.mk) ? +v.mk : 80,
     tab: ['res', 'rules', 'how'].includes(v.tab) ? v.tab : 'res', own: !!v.own,
-    buf: ADJ_BUF.includes(+v.buf) ? +v.buf : 20, band: ADJ_BAND.includes(+v.band) ? +v.band : 2, ms: msNorm(v.ms)}; })();
+    buf: ADJ_BUF.includes(+v.buf) ? +v.buf : 20, band: ADJ_BAND.includes(+v.band) ? +v.band : 2, ms: msNorm(v.ms), ep: epNorm(v.ep)}; })();
 const adjSave = () => { ADJ.own = true; lsSet('pb_adj2', JSON.stringify(ADJ)); adjApply(true); };   // a rule changed here = your portfolio's exit rules change too
 /* the exit rules live in your ACCOUNT (FF.sb: Portfolio → Exit rules). This page always starts from them; a change here saves them back.
    Rules set here before they were kept in the account (never applied) become the account's. */
@@ -730,7 +737,7 @@ function adjFromAccount() {
   if (!sb) return;
   if (!sb.sync && ADJ.own) { adjApply(true); return; }
   const cd = Object.assign({m: 1, v: 3, e: 'W'}, sb.cad || {}), cv = x => x === 'W' ? 'W' : +x;
-  Object.assign(ADJ, {m: cv(cd.m), v: cv(cd.v), e: cv(cd.e), mk: +sb.mk || 0, w: !!sb.win, t: +sb.trl || 0, buf: +sb.buf || 0, band: +sb.band || 1, ms: msNorm(sb.ms)});
+  Object.assign(ADJ, {m: cv(cd.m), v: cv(cd.v), e: cv(cd.e), mk: +sb.mk || 0, w: !!sb.win, t: +sb.trl || 0, buf: +sb.buf || 0, band: +sb.band || 1, ms: msNorm(sb.ms), ep: epNorm(sb.ep)});
   lsSet('pb_adj2', JSON.stringify(ADJ));
 }
 /* Value holds at most N stocks: its "how many", or VAL_CAP when it is "all that pass". Below N, each new name is bought with money
@@ -1028,11 +1035,11 @@ let ENG_WIN = null, ADJ_ASK = false, ADJ_RULES = null;
 const accSB = () => { try { return ENG_WIN ? JSON.parse(ENG_WIN.eval('JSON.stringify(SB())')) : null; } catch (e) { return null; } };
 const adjSame = sb => !!(sb && sb.sync && sb.cad && String(sb.cad.m) === String(ADJ.m) && String(sb.cad.v) === String(ADJ.v) && String(sb.cad.e) === String(ADJ.e)
   && +sb.mk === +ADJ.mk && !!sb.win === !!ADJ.w && (+sb.trl || 0) === (+ADJ.t || 0) && +sb.buf === +ADJ.buf && +sb.band === +ADJ.band
-  && JSON.stringify(msNorm(sb.ms)) === JSON.stringify(msNorm(ADJ.ms)));
+  && JSON.stringify(msNorm(sb.ms)) === JSON.stringify(msNorm(ADJ.ms)) && JSON.stringify(epNorm(sb.ep)) === JSON.stringify(epNorm(ADJ.ep)));
 /* the 1Y adj rules → your account (FF.sb): Portfolio → Exit rules and the PF Builder check read them */
 async function adjApply(quiet) {
   const w = ENG_WIN || await engine();
-  const sb = Object.assign(JSON.parse(w.eval('JSON.stringify(SB())')), {buf: ADJ.buf, band: ADJ.band, mk: ADJ.mk, win: ADJ.w, trl: ADJ.t, cad: {m: ADJ.m, v: ADJ.v, e: ADJ.e}, ms: msNorm(ADJ.ms), sync: true,
+  const sb = Object.assign(JSON.parse(w.eval('JSON.stringify(SB())')), {buf: ADJ.buf, band: ADJ.band, mk: ADJ.mk, win: ADJ.w, trl: ADJ.t, cad: {m: ADJ.m, v: ADJ.v, e: ADJ.e}, ms: msNorm(ADJ.ms), ep: epNorm(ADJ.ep), sync: true,
     syncAt: new Date(Date.now() + 19800000).toISOString().slice(0, 10)});
   const all = JSON.parse(w.eval(`FF.sb = ${JSON.stringify(sb)}; FF._at = Date.now(); lsSet('ff', JSON.stringify(FF)); JSON.stringify(FF)`));
   try { if (window.hniStore && window.hniStore.saveFF) await window.hniStore.saveFF(all); if (!quiet) toast('Saved as your portfolio\'s exit rules.', 5000); }
@@ -1165,7 +1172,7 @@ function adjRulesHtml(sb, mEv, vEv, eEv) {
     ${ADJ.ms.on ? `<li><b>Market switch</b> checked every week: when the Smallcap 250 index closes more than ${ADJ.ms.dn}% under its ${ADJ.ms.wk}-week average, every Momentum stock is sold (whatever the rules above) and the money waits in ${esc((MS_TO.find(t => t[0] === ADJ.ms.to) || [, ADJ.ms.to])[1])}${ADJ.ms.to === 'LIQUIDBEES' ? ` (counted at ${MS_CASH}% a year)` : ''}; when it closes ${ADJ.ms.up}% above the average, that ETF is sold and the list of that week is bought. Set in Lists &amp; sorting.</li>` : ''}`;
   return `<div class="adjrules">${card('value', 'Value' + (RU && RU.vLabel ? ` <small>${esc(RU.vLabel)}</small>` : ''), vEv, RU && RU.value, vExtra)}${card('mom', 'Momentum' + (RU && RU.mLabel ? ` <small>${esc(RU.mLabel)}</small>` : ''), mEv, RU && RU.mom, mExtra)}</div>
     <div class="adjrc"><h3>Index ETFs</h3><ul>
-      <li><b>Checked</b> ${per(eEv)}. Each pair (${PAIRS.map(p => esc(p[0]) + ' vs ' + esc(p[1])).join(', ')}) holds the faster index only while its composite score (0.5 × 6M + 0.5 × 12-1M return) is above 0 and ${FAST_K} × its score beats ${esc(PAIRS[0][1])}'s; otherwise ${esc(PAIRS[0][1])}.</li>
+      <li><b>Checked</b> ${per(eEv)}. Each pair (${PAIRS.map(p => esc(p[0]) + ' vs ' + esc(p[1])).join(', ')}) holds the faster index only while ${esc(epTxt(ADJ.ep))} (composite score = 0.5 × 6M + 0.5 × 12-1M return); otherwise ${esc(PAIRS[0][1])}.</li>
       <li><b>Always held</b> ${esc(ALWAYS.join(', '))}.</li>
       <li><b>Switch</b> the whole slot is sold; what is left after charges and ${TAX * 100}% tax on the profit buys the other ETF. No rebalancing in between.</li></ul></div>`;
 }
@@ -1313,7 +1320,7 @@ function etfPick(sc) {
   const notes = [], rows = [], seen = new Set();
   PAIRS.forEach(([c, d]) => {
     const mc = sc[c], md = sc[d];
-    const win = num(mc) && mc > 0 && (!num(md) || FAST_K * mc > md) ? c : d;    // absolute (>0) and relative (FAST_K × challenger > default)
+    const win = epWins(mc, md, ADJ.ep) ? c : d;                        // your pair switch rule (Lists & sorting / Exit rules)
     notes.push({c, d, mc, md, win, label: win === d ? `${d} (${PAIR_TAG[c] || c}/Gold)` : win});
   });
   notes.forEach(n => { if (n.win === n.d) rows.push({sym: n.d, label: n.label}); });                 // default ETF: once per slot holding it
@@ -1687,7 +1694,7 @@ function symCell(x) {
 }
 const ms = v => num(v) ? fmt(v, 1) : '–';
 function pairNotes(pk) {
-  return `<div class="pairs">${pk.notes.map(n => `<span>Composite 6M/12M ${esc(n.c)} ${ms(n.mc)} vs ${esc(n.d)} ${ms(n.md)}${' (needs > 0 and ' + FAST_K + ' × ' + esc(n.c) + ' > ' + esc(n.d) + ')'} → <b>${esc(n.label)}</b></span>`).join('')}
+  return `<div class="pairs">${pk.notes.map(n => `<span>Composite 6M/12M ${esc(n.c)} ${ms(n.mc)} vs ${esc(n.d)} ${ms(n.md)}${` (switches when ${ADJ.ep.k} × ${esc(n.c)} > ${esc(n.d)}${ADJ.ep.pos ? ` and ${esc(n.c)} > 0` : ''}${ADJ.ep.gap > 0 ? `, or ${esc(n.c)} − ${esc(n.d)} ≥ ${ADJ.ep.gap}` : ''})`} → <b>${esc(n.label)}</b></span>`).join('')}
     <span>Always: ${ALWAYS.map(esc).join(', ')} · each ETF once, equal weight (Gold once per slot holding it)</span></div>`;
 }
 /* one collapsible section; open state survives repaints */
@@ -1701,10 +1708,10 @@ function indexBack(BT, sh) {
     .map(([s, h]) => `<tr${heldTr({sym: s})}><td>${symCell({sym: s})}</td><td class="nm">${esc(ETF_NAME[s] || s)}</td><td class="r">${WK ? h.weeks : h.months} of ${of}</td><td class="r">${pill((h.g - 1) * 100)}</td></tr>`).join('');
   const monthRows = BT.rows.map(x => `<tr><td>${esc(WK ? fdate(x.date, true) + (x.first ? ' (start)' : x.now ? ' (now)' : '') : (x.date || ('−' + x.k + ' mo')))}</td>${x.notes.map(n => `<td>${cell(n)}</td>`).join('')}<td class="r">${x.rows.length}</td><td class="r">${x.ret == null ? '–' : pill(x.ret)}</td></tr>`).join('');
   const cov = !WK && BT.scored < BT.M ? `<p class="note">Composite scores were available for ${BT.scored} of ${BT.M} months; in the others the default (${esc(PAIRS[0][1])}) is held.</p>` : '';
-  if (WK) return `<p class="rule">Composite Dual Momentum (score = 0.5 × 6M + 0.5 × 12-1M return), checked every ${everyTxt(BT.every)}${BT.every === 'W' ? ' like your portfolio' : ''}: a slot holds the faster index only while its score is above 0 and ${FAST_K} × its score is above ${esc(PAIRS[0][1])}'s, otherwise ${esc(PAIRS[0][1])} (held twice when both slots pick it). Each slot keeps its ETF until it switches; then the whole slot is sold and everything left after charges and ${TAX * 100}% tax on the profit buys the new ETF. ${esc(ALWAYS.join(', '))} are always held, never rebalanced. Charges ${fmt(BT.chargesPct, 2)}% and tax ${fmt(BT.taxPaid, 2)}% of the starting amount; ${BT.switches} switch${BT.switches === 1 ? '' : 'es'} in ${BT.nChecks - 1} checks.</p>
+  if (WK) return `<p class="rule">Composite Dual Momentum (score = 0.5 × 6M + 0.5 × 12-1M return), checked every ${everyTxt(BT.every)}${BT.every === 'W' ? ' like your portfolio' : ''}: a slot holds the faster index only while ${esc(epTxt(ADJ.ep))}, otherwise ${esc(PAIRS[0][1])} (held twice when both slots pick it). Each slot keeps its ETF until it switches; then the whole slot is sold and everything left after charges and ${TAX * 100}% tax on the profit buys the new ETF. ${esc(ALWAYS.join(', '))} are always held, never rebalanced. Charges ${fmt(BT.chargesPct, 2)}% and tax ${fmt(BT.taxPaid, 2)}% of the starting amount; ${BT.switches} switch${BT.switches === 1 ? '' : 'es'} in ${BT.nChecks - 1} checks.</p>
     <div class="tw"><table><thead><tr><th>Switch on</th>${PAIRS.map(([c, d], i) => `<th>Slot ${i + 1}: ${esc(c)} vs ${esc(d)}</th>`).join('')}<th class="r">Holdings</th><th class="r">Return since last row</th></tr></thead><tbody>${monthRows}</tbody></table></div>
     <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">${BT.every === 'W' ? 'Weeks' : 'Checks'} held</th><th class="r">Return while held</th></tr></thead><tbody>${heldRows}</tbody></table></div>`;
-  return `<p class="rule">Composite Dual Momentum (score = 0.5 × 6M + 0.5 × 12M return): each month a slot holds the challenger only if its score is above 0 and ${FAST_K} × its score is above ${esc(PAIRS[0][1])}'s, otherwise ${esc(PAIRS[0][1])}. When both slots hold ${esc(PAIRS[0][1])} it is held twice (2× weight). After every switch the sold ETF's profit is taxed at ${TAX * 100}% (tax paid over the ${BT.M === 12 ? 'year' : BT.M + ' month' + (BT.M > 1 ? 's' : '')}: ${fmt(BT.taxPaid, 2)}% of the starting amount). ${esc(ALWAYS.join(', '))} are always held; each other ETF once, rebalanced monthly.</p>${cov}
+  return `<p class="rule">Composite Dual Momentum (score = 0.5 × 6M + 0.5 × 12M return): each month a slot holds the challenger only while ${esc(epTxt(ADJ.ep))}, otherwise ${esc(PAIRS[0][1])}. When both slots hold ${esc(PAIRS[0][1])} it is held twice (2× weight). After every switch the sold ETF's profit is taxed at ${TAX * 100}% (tax paid over the ${BT.M === 12 ? 'year' : BT.M + ' month' + (BT.M > 1 ? 's' : '')}: ${fmt(BT.taxPaid, 2)}% of the starting amount). ${esc(ALWAYS.join(', '))} are always held; each other ETF once, rebalanced monthly.</p>${cov}
     <div class="tw"><table><thead><tr><th>Month</th>${PAIRS.map(([c, d], i) => `<th>Slot ${i + 1}: ${esc(c)} vs ${esc(d)}</th>`).join('')}<th class="r">Holdings</th><th class="r">Sleeve return</th></tr></thead><tbody>${monthRows}</tbody></table></div>
     <div class="tw"><table><thead><tr><th>Symbol</th><th class="nm">Name</th><th class="r">Months held</th><th class="r">Return while held</th></tr></thead><tbody>${heldRows}</tbody></table></div>`;
 }
@@ -2203,7 +2210,17 @@ function paintSel() {
         <label>Top<input data-f="n" inputmode="numeric" placeholder="all" value="${c.n > 0 ? c.n : ''}" aria-label="How many stocks, blank = all"></label>
       </div></div>`;
   };
-  $('#sel').innerHTML = row('value', 'Value stocks') + row('mom', 'Momentum') + msRow();
+  $('#sel').innerHTML = row('value', 'Value stocks') + row('mom', 'Momentum') + msRow() + epRow();
+}
+/* Lists & sorting → Index ETFs' pair switch (your account's exit rules, = Portfolio → Exit rules) */
+function epRow() {
+  const e = ADJ.ep;
+  return `<div class="selrow msrow eprow"><div class="sh"><b>Index ETFs · pair switch</b><span>your exit rules (also Portfolio → Exit rules)</span></div>
+    <div class="sg ms"><span>A pair slot (${PAIRS.map(p => esc(p[0]) + ' vs ' + esc(p[1])).join(', ')}) holds the challenger when</span>
+      <input type="number" data-ep="k" value="${e.k}" min="0.1" max="2" step="0.05" aria-label="factor"><span>× its score beats Gold's</span>
+      <label class="ck"><input type="checkbox" data-ep="pos"${e.pos ? ' checked' : ''}> and its score is above 0</label>
+      <span>— or when it leads Gold by</span><input type="number" data-ep="gap" value="${e.gap}" min="0" max="50" step="0.5" aria-label="lead"><span>points or more (0 = off), whatever the sign.</span></div>
+    <p class="mst">Score = 0.5 × 6M + 0.5 × 12-1M return. Today: ${(() => { try { const pk = lists('now').pk; return pk.notes.map(n => `${esc(n.c)} ${n.mc == null ? '–' : fmt(n.mc, 1)} vs ${esc(n.d)} ${n.md == null ? '–' : fmt(n.md, 1)} → <b>${esc(n.win)}</b>`).join(' · '); } catch (x) { return '–'; } })()}</p></div>`;
 }
 /* Lists & sorting → Momentum's market switch (your account's exit rules, = Portfolio → Exit rules) */
 function msRow() {
@@ -2222,6 +2239,12 @@ function msRow() {
 }
 swLoad().then(() => { try { paintSel(); } catch (e) {} });
 $('#sel').addEventListener('change', async e => {
+  const ek = e.target.dataset && e.target.dataset.ep;
+  if (ek) {                                                       // the ETF pair switch: saved to your exit rules, Today + the backtests follow
+    ADJ.ep = epNorm(Object.assign({}, ADJ.ep, {[ek]: ek === 'pos' ? e.target.checked : +e.target.value}));
+    adjSave(); paintSel(); if (DATA) paint();
+    return;
+  }
   const mk = e.target.dataset && e.target.dataset.ms;
   if (mk) {                                                       // the market switch: saved to your exit rules, the backtest worked out again
     const v = Object.assign({}, ADJ.ms, {[mk]: mk === 'on' ? e.target.checked : mk === 'to' ? e.target.value : +e.target.value});
