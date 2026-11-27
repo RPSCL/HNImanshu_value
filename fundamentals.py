@@ -4174,7 +4174,14 @@ const pfActsHtml = () => `<div class="pf-top"><div class="pf-acts">
    0.5 × 6M + 0.5 × 12M momentum, builder_etf.json). Anything held that is no longer on its list = "no longer on the list";
    anything on the list of a part you hold that you don't hold = "new on the list"; an ETF pair whose slot now picks the
    other ETF shows both. The button turns red with the count. Information only: what to do with it is yours to decide. */
-const PB_FAST_K = 0.8;                                         // = builder.html FAST_K: 0.8 × challenger must beat Gold
+const PB_FAST_K = 0.8;                                         // = builder.html FAST_K: 0.8 × challenger must beat Gold (the default of EP_DEF.k)
+/* ETF pair switch (your exit rules, FF.sb.ep; = builder.html EP_*): a pair slot holds the challenger when
+   [k × its score beats Gold's, and (pos) its score is above 0]  OR  [it leads Gold's score by gap points or more (gap 0 = off)] */
+const EP_DEF = {k: 0.8, pos: true, gap: 4};
+function epNorm(v) { v = v && typeof v === 'object' ? v : {}; const k = +v.k, g = +v.gap;
+  return {k: Number.isFinite(k) && k > 0 && k <= 2 ? k : EP_DEF.k, pos: v.pos === undefined ? EP_DEF.pos : !!v.pos, gap: Number.isFinite(g) && g >= 0 && g <= 50 ? g : EP_DEF.gap}; }
+const epWins = (mc, md, e) => ok(mc) && (!ok(md) || ((!e.pos || mc > 0) && e.k * mc > md) || (e.gap > 0 && mc - md >= e.gap));
+const epTxt = e => `${e.k} × its score beats Gold's${e.pos ? ' and its score is above 0' : ''}${e.gap > 0 ? `, or it leads Gold by ${e.gap} points or more` : ''}`;
 const PB_PAIRS = [['ITBEES', 'GOLDBEES'], ['ALPHA', 'GOLDBEES']], PB_ALWAYS = ['JUNIORBEES', 'MON100', 'HNGSNGBEES', 'FMCGIETF', 'ALPHA'];
 const PB_SEL_DEF = {value: {uni: 'all', key: 'score', dir: 'desc', n: 0}, mom: {uni: 'all', key: 'mom', dir: 'desc', n: 15}};
 const PB_KEYS = {score: 'Value score', mom: 'Momentum score', pe: 'PE', pb: 'PB', mcap: 'Market cap', cagr: 'EPS CAGR', vs52: 'Vs 52-week high'};
@@ -4225,7 +4232,8 @@ function pbChoose(pool, c, k) {                               // = PF Builder's 
   return c.n > 0 ? a.slice(0, c.n) : a;
 }
 function pbEtfPick(sc) {                                      // = PF Builder's etfPick(): which ETFs the index part holds today
-  const notes = PB_PAIRS.map(([c, d]) => { const mc = sc[c], md = sc[d]; return {c, d, mc, md, win: ok(mc) && mc > 0 && (!ok(md) || PB_FAST_K * mc > md) ? c : d}; });   // = PF Builder's FAST_K rule
+  const ep = epNorm(SB().ep);
+  const notes = PB_PAIRS.map(([c, d]) => { const mc = sc[c], md = sc[d]; return {c, d, mc, md, win: epWins(mc, md, ep) ? c : d}; });   // = PF Builder's etfPick (your pair switch rule)
   return {notes, list: [...new Set([...notes.map(n => n.win), ...PB_ALWAYS])]};
 }
 /* PF Builder's Value and Momentum lists use YOUR screens: the Value screen's and the Momentum screen's saved filters and your PSU /
@@ -4293,12 +4301,13 @@ function exPlain(B) {
     repick: `Momentum ${pbEvery(cd.m)} · Value ${pbEvery(cd.v)} · Index ETFs ${pbEvery(cd.e)}. Between re-picks nothing is sold or bought.`,
     sold: `off its list at a re-pick: fails a screen limit${B.buf ? ` even loosened ${B.buf}%` : ''}, a hard limit (circuit days, value trap …), or ranks below the top N${B.band > 1 ? ' × ' + B.band : ''}.`,
     never: [B.mk ? `momentum ≥ ${B.mk}` : '', B.win ? `in profit${B.trl ? ` (until ${B.trl}% below its high since bought)` : ' (never cut)'}` : ''].filter(Boolean).join(' · ') || 'nothing: every holding off its list is sold',
-    etf: 'Index ETFs: a pair slot switches to the other ETF when it leads; the always-held ETFs go only if they leave the index part.',
+    etf: `Index ETFs: a pair slot holds the challenger when ${epTxt(epNorm(B.ep))}, else Gold; the always-held ETFs go only if they leave the index part.`,
     ms: msTxt(msNorm(B.ms))};
 }
 /* Exit rules window (Portfolio page): change them here or in PF Builder → 1Y adj; both read the same account copy */
 async function pfExitOpen() {
-  const B = SB(), cd = exCad(B), wk = D.asOf, MS0 = msNorm(B.ms);
+  const B = SB(), cd = exCad(B), wk = D.asOf, MS0 = msNorm(B.ms), EP0 = epNorm(B.ep);
+  try { PB_ETF = await fetch('builder_etf.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null) || PB_ETF; } catch (e) {}
   try { PB_SW = PB_SW || await fetch('builder_switch.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null); } catch (e) { PB_SW = null; }
   const opts = (vals, cur, lab) => { const L = vals.slice(); if (!L.some(v => String(v) === String(cur))) L.push(cur);
     return L.map(v => `<option value="${v}"${String(v) === String(cur) ? ' selected' : ''}>${esc(lab(v))}</option>`).join(''); };
@@ -4316,6 +4325,11 @@ async function pfExitOpen() {
       ${sel('mk', EX_MK, B.mk, v => +v ? `Momentum ≥ ${v}` : 'Off', 'Strong momentum')}
       ${sel('win', [1, 0], B.win ? 1 : 0, v => +v ? 'Yes, while in profit' : 'No', 'A winner')}
       <label class="ex-tr"${B.win ? '' : ' hidden'}><span>Unless it falls</span><select name="trl">${opts(EX_TR, B.trl, v => +v ? `${v}% off its high` : 'Never cut')}</select></label></div></div>
+    <div class="exg"><h4>ETF pairs <small>${PB_PAIRS.map(p => p[0] + ' vs ' + p[1]).join(', ')}</small></h4><div class="exrow ms">
+      <span>A pair slot holds the challenger when</span><input type="number" name="epk" value="${EP0.k}" min="0.1" max="2" step="0.05"><span>× its score beats Gold's</span>
+      <label class="ex-ck"><input type="checkbox" name="eppos"${EP0.pos ? ' checked' : ''}> and its score is above 0</label>
+      <span>— or when it leads Gold by</span><input type="number" name="epgap" value="${EP0.gap}" min="0" max="50" step="0.5"><span>points or more (0 = off), whatever the sign.</span></div>
+      <p class="ex-msnow ex-epnow"></p></div>
     <div class="exg"><h4>Market switch <small>Momentum only · checked every week</small></h4><div class="exrow ms">
       <label class="ex-ck"><input type="checkbox" name="mson"${MS0.on ? ' checked' : ''}> On</label>
       <span>When the weekly close of the Smallcap 250 index falls</span><input type="number" name="msdn" value="${MS0.dn}" min="0" max="30" step="0.5"><span>% below its</span>
@@ -4328,11 +4342,14 @@ async function pfExitOpen() {
   const f = $('form', w);
   const read = () => ({m: f.m.value === 'W' ? 'W' : +f.m.value, v: f.v.value === 'W' ? 'W' : +f.v.value, e: f.e.value === 'W' ? 'W' : +f.e.value,
     buf: +f.buf.value, band: +f.band.value, mk: +f.mk.value, win: f.win.value === '1', trl: +f.trl.value,
-    ms: msNorm({on: f.mson.checked, dn: f.msdn.value, wk: f.mswk.value, to: f.msto.value, up: f.msup.value})});
+    ms: msNorm({on: f.mson.checked, dn: f.msdn.value, wk: f.mswk.value, to: f.msto.value, up: f.msup.value}),
+    ep: epNorm({k: f.epk.value, pos: f.eppos.checked, gap: f.epgap.value})});
   const show = () => { const x = read(), P = exPlain({buf: x.buf, band: x.band, mk: x.mk, win: x.win, trl: x.trl, cad: {m: x.m, v: x.v, e: x.e}, ms: x.ms});
-    w.querySelector('.exrow.ms').classList.toggle('off', !x.ms.on);
+    f.mson.closest('.exrow').classList.toggle('off', !x.ms.on);
+    { const E = (PB_ETF && PB_ETF.etf) || {}, sc = {}; Object.keys(E).forEach(k => { const m = E[k].mom || []; sc[k] = ok(m[1]) && ok(m[2]) ? 0.5 * m[1] + 0.5 * m[2] : null; });
+      w.querySelector('.ex-epnow').innerHTML = Object.keys(E).length ? `Scores of ${esc(PB_ETF.asOf || '–')} (0.5 × 6M + 0.5 × 12-1M): ` + PB_PAIRS.map(([c, d]) => `${c} ${ok(sc[c]) ? fmt(sc[c], 1) : '–'} vs ${d} ${ok(sc[d]) ? fmt(sc[d], 1) : '–'} → <b class="i">${epWins(sc[c], sc[d], x.ep) ? c : d}</b>`).join(' · ') : 'ETF scores are not in yet.'; }
     const C = msCalc(PB_SW, x.ms), mi = C ? C.n - 1 : -1;
-    w.querySelector('.ex-msnow').innerHTML = !C ? 'Smallcap 250 weekly closes are not in yet (they come with the weekly price update).'
+    w.querySelector('.ex-msnow:not(.ex-epnow)').innerHTML = !C ? 'Smallcap 250 weekly closes are not in yet (they come with the weekly price update).'
       : `Week of ${esc(PB_SW.dates[mi])}: Smallcap 250 ${fmt(C.cl[mi], 0)} · ${x.ms.wk}-week avg ${C.ma[mi] ? fmt(C.ma[mi], 0) : '–'} (${C.gap[mi] == null ? '–' : (C.gap[mi] > 0 ? '+' : '') + fmt(C.gap[mi], 1) + '%'}) → `
         + (C.out[mi] ? `<b class="o">OUT: Momentum waits in ${esc(C.to(mi))}</b>` : '<b class="i">IN: Momentum stocks</b>') + (x.ms.on ? '' : ' <i>(switch is off)</i>');
     $('.ex-tr', w).hidden = !x.win;
@@ -4342,9 +4359,10 @@ async function pfExitOpen() {
   f.addEventListener('change', show); show();
   $('[data-def]', w).addEventListener('click', () => { f.m.value = String(EX_CAD.m); f.v.value = String(EX_CAD.v); f.e.value = EX_CAD.e;
     f.buf.value = '20'; f.band.value = '2'; f.mk.value = '80'; f.win.value = '1'; f.trl.value = '0';
+    f.epk.value = EP_DEF.k; f.eppos.checked = EP_DEF.pos; f.epgap.value = EP_DEF.gap;
     f.mson.checked = false; f.msdn.value = MS_DEF.dn; f.mswk.value = MS_DEF.wk; f.msto.value = MS_DEF.to; f.msup.value = MS_DEF.up; show(); });
   f.addEventListener('submit', async e => { e.preventDefault(); const x = read();
-    FF.sb = Object.assign({}, SB(), {buf: x.buf, band: x.band, mk: x.mk, win: x.win, trl: x.trl, cad: {m: x.m, v: x.v, e: x.e}, ms: x.ms, sync: true,
+    FF.sb = Object.assign({}, SB(), {buf: x.buf, band: x.band, mk: x.mk, win: x.win, trl: x.trl, cad: {m: x.m, v: x.v, e: x.e}, ms: x.ms, ep: x.ep, sync: true,
       syncAt: new Date(Date.now() + 19800000).toISOString().slice(0, 10)});
     ffSave(); w._close(); toast('Exit rules saved: PF Builder → 1Y adj uses them too');
     await pfChkRefresh(); });
@@ -4489,7 +4507,7 @@ async function pfChkCalc() {
   if (parts.includes('Value')) diff('Value', L.value, vN + ' · ' + pbSelTxt(L.C.value));
   if (parts.includes('Momentum')) diff('Momentum', L.mom, mN + ' · ' + pbSelTxt(L.C.mom));
   if (parts.includes('ETF') || parts.includes('ETF pair')) {
-    try { PB_ETF = PB_ETF || await fetch('builder_etf.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null); } catch (e) { PB_ETF = null; }
+    try { PB_ETF = await fetch('builder_etf.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null) || PB_ETF; } catch (e) {}   // fetched every check: the weekly scores, never an old copy
     const E = (PB_ETF && PB_ETF.etf) || {}, sc = {};
     Object.keys(E).forEach(k => { const m = E[k].mom || []; sc[k] = ok(m[1]) && ok(m[2]) ? 0.5 * m[1] + 0.5 * m[2] : null; });
     if (Object.keys(E).length) {
@@ -4686,7 +4704,7 @@ async function pfChkOpen() {
     : !c.ok ? `<p class="na">This check works only when every holding came from PF Builder. ${c.other.length} came from elsewhere: ${c.other.map(esc).join(', ')}.</p>`
     : `<p class="chk-sub">Only the parts you added are checked (<b>${esc(checked)}</b>), against today's PF Builder lists worked out with the settings you added them with.</p>
        ${c.adds.length ? addHtml(c.adds[0]) + (c.adds.length > 1 ? `<details class="chk-more"><summary>${c.adds.length - 1} earlier add${c.adds.length > 2 ? 's' : ''}</summary>${c.adds.slice(1, 4).map(addHtml).join('')}</details>` : '') : `<div class="chk-set">${c.C ? `<div><span>Value</span><b>${esc(pbSelTxt(c.C.value))}</b></div><div><span>Momentum</span><b>${esc(pbSelTxt(c.C.mom))}</b></div>` : ''}</div>`}
-       ${c.pairs.length ? `<p class="chk-sub">${c.pairs.map(n => `${esc(n.c)} vs ${esc(n.d)}: ${esc(n.c)} ${ok(n.mc) ? fmt(n.mc, 1) : '–'} · ${esc(n.d)} ${ok(n.md) ? fmt(n.md, 1) : '–'} → slot holds <b>${esc(n.win)}</b>`).join('<br>')}</p>` : ''}
+       ${c.pairs.length ? `<p class="chk-sub">${c.pairs.map(n => `${esc(n.c)} vs ${esc(n.d)}: ${esc(n.c)} ${ok(n.mc) ? fmt(n.mc, 1) : '–'} · ${esc(n.d)} ${ok(n.md) ? fmt(n.md, 1) : '–'} → slot holds <b>${esc(n.win)}</b>`).join('<br>')}<br><small>Scores of ${esc((PB_ETF && PB_ETF.asOf) || '–')} · switches when ${esc(epTxt(epNorm(SB().ep)))} (Exit rules)</small></p>` : ''}
        ${c.ms ? (() => { const m = c.ms, C = m.C, i = m.i;
          return `<div class="chk-ms${m.out ? ' o' : ''}"><b>Market switch (Momentum)</b> · week of ${esc(m.date)}: Smallcap 250 ${fmt(C.cl[i], 0)} · ${m.cfg.wk}-week avg ${C.ma[i] ? fmt(C.ma[i], 0) : '–'} (${m.gap == null ? '–' : (m.gap > 0 ? '+' : '') + fmt(m.gap, 1) + '%'})
            → ${m.out ? `<b class="o">OUT: sell every Momentum stock, the money waits in ${esc(m.to)}</b>` : '<b class="i">IN: Momentum stocks</b>'} · out below −${m.cfg.dn}%, back above +${m.cfg.up}%${m.cfg.to === 'BEST' ? '<br>Waiting places (0.5 × 6M + 0.5 × 12M): ' + MS_ALT.map(k => `${k} ${C.sc[k][i] == null ? '–' : fmt(C.sc[k][i], 1)}`).join(' · ') : ''}</div>`; })() : ''}
